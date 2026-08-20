@@ -1,0 +1,38 @@
+{
+ "prvnbeTypeList": [
+  {
+   "code": "",
+   "name": "전체"
+  },
+  {
+   "code": "006",
+   "name": "병해"
+  },
+  {
+   "code": "005",
+   "name": "해충"
+  }
+ ],
+ "prvnbeList": [
+  {
+   "prvnbeTypeCode": "006",
+   "prvnbeCode": "002006011",
+   "prvnbeNm": "잎곰팡이병"
+  },
+  {
+   "prvnbeTypeCode": "006",
+   "prvnbeCode": "002006012",
+   "prvnbeNm": "잿빛곰팡이병"
+  },
+  {
+   "prvnbeTypeCode": "005",
+   "prvnbeCode": "002005011",
+   "prvnbeNm": "담배가루이"
+  },
+  {
+   "prvnbeTypeCode": "005",
+   "prvnbeCode": "002005012",
+   "prvnbeNm": "온실가루이"
+  }
+ ]
+}

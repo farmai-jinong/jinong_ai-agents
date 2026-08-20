@@ -1,0 +1,79 @@
+[
+ {
+  "userFarmworkId": 1,
+  "userFarmworkNm": "관수",
+  "userAdded": false,
+  "use": true,
+  "checked": false
+ },
+ {
+  "userFarmworkId": 2,
+  "userFarmworkNm": "적엽",
+  "userAdded": false,
+  "use": true,
+  "checked": false
+ },
+ {
+  "userFarmworkId": 3,
+  "userFarmworkNm": "적화",
+  "userAdded": false,
+  "use": true,
+  "checked": false
+ },
+ {
+  "userFarmworkId": 4,
+  "userFarmworkNm": "적과",
+  "userAdded": false,
+  "use": true,
+  "checked": false
+ },
+ {
+  "userFarmworkId": 5,
+  "userFarmworkNm": "수확",
+  "userAdded": false,
+  "use": true,
+  "checked": false
+ },
+ {
+  "userFarmworkId": 6,
+  "userFarmworkNm": "선별",
+  "userAdded": false,
+  "use": true,
+  "checked": false
+ },
+ {
+  "userFarmworkId": 7,
+  "userFarmworkNm": "약제살포",
+  "userAdded": false,
+  "use": true,
+  "checked": false
+ },
+ {
+  "userFarmworkId": 8,
+  "userFarmworkNm": "런너제거",
+  "userAdded": false,
+  "use": true,
+  "checked": false
+ },
+ {
+  "userFarmworkId": 9,
+  "userFarmworkNm": "환기",
+  "userAdded": false,
+  "use": true,
+  "checked": false
+ },
+ {
+  "userFarmworkId": 10,
+  "userFarmworkNm": "시비",
+  "userAdded": false,
+  "use": true,
+  "checked": false
+ },
+ {
+  "userFarmworkId": 11,
+  "userFarmworkNm": "꿀벌관리",
+  "userAdded": false,
+  "use": true,
+  "checked": false
+ }
+]

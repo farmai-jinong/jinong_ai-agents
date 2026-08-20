@@ -1,0 +1,66 @@
+[
+ {
+  "dbyhsCode": "002006001",
+  "dbyhsNm": "잿빛곰팡이병",
+  "occrrncStepNm": "미발생|2%미만|5%미만|10%미만|30%미만|30%이상",
+  "occrrncStepCode": "0|1|2|3|4|5",
+  "occrrncStepDesc": "안심|주의|주의|경고|경고|경고",
+  "occrrncStepDescCode": "0|1|1|2|2|2"
+ },
+ {
+  "dbyhsCode": "002006002",
+  "dbyhsNm": "흰가루병",
+  "occrrncStepNm": "미발생|2%미만|5%미만|10%미만|30%미만|30%이상",
+  "occrrncStepCode": "0|1|2|3|4|5",
+  "occrrncStepDesc": "안심|주의|주의|경고|경고|경고",
+  "occrrncStepDescCode": "0|1|1|2|2|2"
+ },
+ {
+  "dbyhsCode": "002006003",
+  "dbyhsNm": "탄저병",
+  "occrrncStepNm": "미발생|2%미만|5%미만|10%미만|30%미만|30%이상",
+  "occrrncStepCode": "0|1|2|3|4|5",
+  "occrrncStepDesc": "안심|주의|주의|경고|경고|경고",
+  "occrrncStepDescCode": "0|1|1|2|2|2"
+ },
+ {
+  "dbyhsCode": "002006004",
+  "dbyhsNm": "시들음병",
+  "occrrncStepNm": "미발생|2%미만|5%미만|10%미만|30%미만|30%이상",
+  "occrrncStepCode": "0|1|2|3|4|5",
+  "occrrncStepDesc": "안심|주의|주의|경고|경고|경고",
+  "occrrncStepDescCode": "0|1|1|2|2|2"
+ },
+ {
+  "dbyhsCode": "002005001",
+  "dbyhsNm": "점박이응애",
+  "occrrncStepNm": "미발생|2%미만|5%미만|10%미만|30%미만|30%이상",
+  "occrrncStepCode": "0|1|2|3|4|5",
+  "occrrncStepDesc": "안심|주의|주의|경고|경고|경고",
+  "occrrncStepDescCode": "0|1|1|2|2|2"
+ },
+ {
+  "dbyhsCode": "002005002",
+  "dbyhsNm": "총채벌레",
+  "occrrncStepNm": "미발생|2%미만|5%미만|10%미만|30%미만|30%이상",
+  "occrrncStepCode": "0|1|2|3|4|5",
+  "occrrncStepDesc": "안심|주의|주의|경고|경고|경고",
+  "occrrncStepDescCode": "0|1|1|2|2|2"
+ },
+ {
+  "dbyhsCode": "002005003",
+  "dbyhsNm": "진딧물",
+  "occrrncStepNm": "미발생|2%미만|5%미만|10%미만|30%미만|30%이상",
+  "occrrncStepCode": "0|1|2|3|4|5",
+  "occrrncStepDesc": "안심|주의|주의|경고|경고|경고",
+  "occrrncStepDescCode": "0|1|1|2|2|2"
+ },
+ {
+  "dbyhsCode": "002005004",
+  "dbyhsNm": "목화진딧물",
+  "occrrncStepNm": "미발생|2%미만|5%미만|10%미만|30%미만|30%이상",
+  "occrrncStepCode": "0|1|2|3|4|5",
+  "occrrncStepDesc": "안심|주의|주의|경고|경고|경고",
+  "occrrncStepDescCode": "0|1|1|2|2|2"
+ }
+]

@@ -1,0 +1,37 @@
+[
+ {
+  "pestiCode": "8760",
+  "pestiNm": "사파이어 액상수화제",
+  "pestiKind": "살균제"
+ },
+ {
+  "pestiCode": "1201",
+  "pestiNm": "스위치 입상수화제",
+  "pestiKind": "살균제"
+ },
+ {
+  "pestiCode": "3311",
+  "pestiNm": "칸투스 입상수화제",
+  "pestiKind": "살균제"
+ },
+ {
+  "pestiCode": "4410",
+  "pestiNm": "파단 수용제",
+  "pestiKind": "살충제"
+ },
+ {
+  "pestiCode": "5520",
+  "pestiNm": "코니도 액상수화제",
+  "pestiKind": "살충제"
+ },
+ {
+  "pestiCode": "6630",
+  "pestiNm": "밀베노크 유제",
+  "pestiKind": "살충제"
+ },
+ {
+  "pestiCode": "7740",
+  "pestiNm": "벨리스플러스 입상수화제",
+  "pestiKind": "살균제"
+ }
+]

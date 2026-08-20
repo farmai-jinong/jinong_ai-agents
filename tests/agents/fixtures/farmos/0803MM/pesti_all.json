@@ -1,0 +1,22 @@
+[
+ {
+  "pestiCode": "8760",
+  "pestiNm": "사파이어 액상수화제",
+  "pestiKind": "살균제"
+ },
+ {
+  "pestiCode": "9101",
+  "pestiNm": "모벤토 액상수화제",
+  "pestiKind": "살충제"
+ },
+ {
+  "pestiCode": "9102",
+  "pestiNm": "코니도 액상수화제",
+  "pestiKind": "살충제"
+ },
+ {
+  "pestiCode": "9103",
+  "pestiNm": "델리게이트 입상수화제",
+  "pestiKind": "살충제"
+ }
+]

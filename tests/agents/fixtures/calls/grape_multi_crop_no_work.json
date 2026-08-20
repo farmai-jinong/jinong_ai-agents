@@ -1,0 +1,110 @@
+{
+ "transcript": {
+  "call_id": "call-grape-003",
+  "files": [
+   {
+    "file_index": 0,
+    "audio_id": 1,
+    "bucket": "jinong-agri-stt",
+    "key": "voicetalk/call-grape-003/0.ogg",
+    "seq": 1,
+    "offset_sec": 0.0,
+    "duration_sec": 27.5,
+    "status": "TRANSCRIBED",
+    "stt_raw_key": "agents/voicecall/call-grape-003/stt/00.json"
+   }
+  ],
+  "segments": [
+   {
+    "file_index": 0,
+    "audio_id": 1,
+    "seg_id": "seg_0",
+    "speaker": "A",
+    "speaker_key": "f0:A",
+    "start": 0.0,
+    "end": 3.83,
+    "abs_start": 0.0,
+    "abs_end": 3.83,
+    "text": "선생님, 포도 출하 시기 좀 여쭤보려고요."
+   },
+   {
+    "file_index": 0,
+    "audio_id": 1,
+    "seg_id": "seg_1",
+    "speaker": "B",
+    "speaker_key": "f0:B",
+    "start": 4.33,
+    "end": 11.17,
+    "abs_start": 4.33,
+    "abs_end": 11.17,
+    "text": "네 사장님. 샤인머스켓이면 당도 18브릭스 넘으면 출하 시작하셔도 됩니다."
+   },
+   {
+    "file_index": 0,
+    "audio_id": 1,
+    "seg_id": "seg_2",
+    "speaker": "A",
+    "speaker_key": "f0:A",
+    "start": 11.67,
+    "end": 16.33,
+    "abs_start": 11.67,
+    "abs_end": 16.33,
+    "text": "요즘 시세가 어때요? 작년보다 좀 낮은 것 같던데."
+   },
+   {
+    "file_index": 0,
+    "audio_id": 1,
+    "seg_id": "seg_3",
+    "speaker": "B",
+    "speaker_key": "f0:B",
+    "start": 16.83,
+    "end": 24.33,
+    "abs_start": 16.83,
+    "abs_end": 24.33,
+    "text": "경매가는 지난주 대비 조금 내렸어요. 공선회 통해서 나가시는 게 나을 수 있어요."
+   },
+   {
+    "file_index": 0,
+    "audio_id": 1,
+    "seg_id": "seg_4",
+    "speaker": "A",
+    "speaker_key": "f0:A",
+    "start": 24.83,
+    "end": 27.0,
+    "abs_start": 24.83,
+    "abs_end": 27.0,
+    "text": "알겠습니다. 감사합니다."
+   }
+  ],
+  "speakers": [
+   "f0:A",
+   "f0:B"
+  ],
+  "total_duration_sec": 27.5,
+  "text": "[f0:A] 선생님, 포도 출하 시기 좀 여쭤보려고요.\n[f0:B] 네 사장님. 샤인머스켓이면 당도 18브릭스 넘으면 출하 시작하셔도 됩니다.\n[f0:A] 요즘 시세가 어때요? 작년보다 좀 낮은 것 같던데.\n[f0:B] 경매가는 지난주 대비 조금 내렸어요. 공선회 통해서 나가시는 게 나을 수 있어요.\n[f0:A] 알겠습니다. 감사합니다."
+ },
+ "ctx": {
+  "call_id": "call-grape-003",
+  "started_at": "2026-08-19T16:30:00+09:00",
+  "ended_at": "2026-08-19T16:33:00+09:00",
+  "participants": [
+   {
+    "role": "farmer",
+    "user_id": "f001",
+    "name": "김철수"
+   },
+   {
+    "role": "consultant",
+    "user_id": "c001",
+    "name": "이영희"
+   }
+  ],
+  "farm": {
+   "farm_nm": "테스트농장"
+  },
+  "farm_access_token": "tok-fake",
+  "language": "ko",
+  "generation_run": 1,
+  "hints": {}
+ }
+}

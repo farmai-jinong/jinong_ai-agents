@@ -1,0 +1,28 @@
+{
+ "prvnbeTypeList": [
+  {
+   "code": "",
+   "name": "전체"
+  },
+  {
+   "code": "006",
+   "name": "병해"
+  },
+  {
+   "code": "005",
+   "name": "해충"
+  }
+ ],
+ "prvnbeList": [
+  {
+   "prvnbeTypeCode": "006",
+   "prvnbeCode": "002006021",
+   "prvnbeNm": "노균병"
+  },
+  {
+   "prvnbeTypeCode": "006",
+   "prvnbeCode": "002006022",
+   "prvnbeNm": "탄저병"
+  }
+ ]
+}

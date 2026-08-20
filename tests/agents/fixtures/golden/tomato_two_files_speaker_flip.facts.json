@@ -1,0 +1,151 @@
+{
+ "one_line_summary": "방울토마토 담배가루이 다발생과 배액 EC 상승에 대해 방제·급액 조정을 권고함.",
+ "keywords": [
+  "토마토",
+  "담배가루이",
+  "모벤토",
+  "배액 EC",
+  "유인",
+  "칼슘"
+ ],
+ "crops_mentioned": [
+  {
+   "name_raw": "방울토마토",
+   "matched_name": "토마토",
+   "evidence": [
+    1
+   ]
+  }
+ ],
+ "farm_status": [],
+ "farmworks": [
+  {
+   "name": "유인",
+   "crop": "토마토",
+   "when": "today",
+   "date_hint": null,
+   "detail": "유인줄 감기",
+   "evidence": [
+    3
+   ]
+  },
+  {
+   "name": "곁순 제거",
+   "crop": "토마토",
+   "when": "today",
+   "date_hint": null,
+   "detail": null,
+   "evidence": [
+    3
+   ]
+  },
+  {
+   "name": "추비",
+   "crop": "토마토",
+   "when": "today",
+   "date_hint": null,
+   "detail": "칼슘 비료 웃거름",
+   "evidence": [
+    7
+   ]
+  }
+ ],
+ "observations": [
+  {
+   "topic": "토양·양액",
+   "text": "배액 EC 4.5로 높음",
+   "crop": "토마토",
+   "evidence": [
+    5
+   ]
+  }
+ ],
+ "pests": [
+  {
+   "name": "담배가루이",
+   "kind": "해충",
+   "status": "발생",
+   "severity": "심함",
+   "severity_raw": "너무 많아졌어요",
+   "location": "잎 뒷면",
+   "crop": "토마토",
+   "evidence": [
+    1,
+    2
+   ]
+  }
+ ],
+ "products": [
+  {
+   "name": "모벤토",
+   "category": "농약",
+   "target": "담배가루이",
+   "dose": null,
+   "when": "recommended",
+   "crop": "토마토",
+   "evidence": [
+    2
+   ]
+  },
+  {
+   "name": "칼슘 비료",
+   "category": "비료",
+   "target": null,
+   "dose": "조금",
+   "when": "applied",
+   "crop": "토마토",
+   "evidence": [
+    7
+   ]
+  }
+ ],
+ "questions": [],
+ "advice": [
+  {
+   "text": "황색 끈끈이 트랩 개수 확대 및 모벤토 등 약제로 방제(희석배수 라벨 준수)",
+   "category": "병해충관리",
+   "evidence": [
+    2
+   ]
+  },
+  {
+   "text": "급액 EC 0.3 낮추고 배액률 30% 이상으로 조정",
+   "category": "근권관리",
+   "evidence": [
+    6
+   ]
+  }
+ ],
+ "actions": [
+  {
+   "text": "이번 주 안에 가루이 방제",
+   "actor": "farmer",
+   "status": "agreed",
+   "due_hint": "이번 주",
+   "evidence": [
+    8
+   ]
+  },
+  {
+   "text": "다음 상담 때 트랩 사진 전송",
+   "actor": "farmer",
+   "status": "agreed",
+   "due_hint": "다음 상담",
+   "evidence": [
+    8,
+    9
+   ]
+  }
+ ],
+ "follow_ups": [
+  {
+   "text": "다음 상담 시 트랩 사진 확인",
+   "when_hint": "다음 상담",
+   "evidence": [
+    8
+   ]
+  }
+ ],
+ "has_farmwork_content": true,
+ "stt_uncertainties": []
+}

@@ -1,0 +1,74 @@
+{
+ "strawberry": {
+  "files": [
+   {
+    "file_index": 0,
+    "confidence": 0.95,
+    "rationale": "A가 자기 하우스 상황을 설명하고 질문함",
+    "roles": [
+     {
+      "letter": "A",
+      "role": "farmer"
+     },
+     {
+      "letter": "B",
+      "role": "consultant"
+     }
+    ]
+   }
+  ]
+ },
+ "tomato": {
+  "files": [
+   {
+    "file_index": 0,
+    "confidence": 0.9,
+    "rationale": "B가 자기 토마토 상황 설명",
+    "roles": [
+     {
+      "letter": "A",
+      "role": "consultant"
+     },
+     {
+      "letter": "B",
+      "role": "farmer"
+     }
+    ]
+   },
+   {
+    "file_index": 1,
+    "confidence": 0.85,
+    "rationale": "A가 권고",
+    "roles": [
+     {
+      "letter": "A",
+      "role": "consultant"
+     },
+     {
+      "letter": "B",
+      "role": "farmer"
+     }
+    ]
+   }
+  ]
+ },
+ "grape": {
+  "files": [
+   {
+    "file_index": 0,
+    "confidence": 0.9,
+    "rationale": "A가 질문",
+    "roles": [
+     {
+      "letter": "A",
+      "role": "farmer"
+     },
+     {
+      "letter": "B",
+      "role": "consultant"
+     }
+    ]
+   }
+  ]
+ }
+}

@@ -1,0 +1,209 @@
+{
+ "transcript": {
+  "call_id": "call-straw-004",
+  "files": [
+   {
+    "file_index": 0,
+    "audio_id": 1,
+    "bucket": "jinong-agri-stt",
+    "key": "voicetalk/call-straw-004/0.ogg",
+    "seq": 1,
+    "offset_sec": 0.0,
+    "duration_sec": 93.33,
+    "status": "TRANSCRIBED",
+    "stt_raw_key": "agents/voicecall/call-straw-004/stt/00.json"
+   }
+  ],
+  "segments": [
+   {
+    "file_index": 0,
+    "audio_id": 1,
+    "seg_id": "seg_0",
+    "speaker": "A",
+    "speaker_key": "f0:A",
+    "start": 0.0,
+    "end": 2.83,
+    "abs_start": 0.0,
+    "abs_end": 2.83,
+    "text": "여보세요 선생님, 김철수입니다."
+   },
+   {
+    "file_index": 0,
+    "audio_id": 1,
+    "seg_id": "seg_1",
+    "speaker": "B",
+    "speaker_key": "f0:B",
+    "start": 3.33,
+    "end": 7.83,
+    "abs_start": 3.33,
+    "abs_end": 7.83,
+    "text": "네 사장님 안녕하세요. 딸기는 요즘 좀 어떠세요?"
+   },
+   {
+    "file_index": 0,
+    "audio_id": 1,
+    "seg_id": "seg_2",
+    "speaker": "A",
+    "speaker_key": "f0:A",
+    "start": 8.33,
+    "end": 18.33,
+    "abs_start": 8.33,
+    "abs_end": 18.33,
+    "text": "저희 딸기 하우스 2동에 잿빛곰팡이가 조금 보이는 것 같아요. 꽃이랑 열매 몇 개에 회색 곰팡이가 피었어요."
+   },
+   {
+    "file_index": 0,
+    "audio_id": 1,
+    "seg_id": "seg_3",
+    "speaker": "B",
+    "speaker_key": "f0:B",
+    "start": 18.83,
+    "end": 30.0,
+    "abs_start": 18.83,
+    "abs_end": 30.0,
+    "text": "아 잿빛곰팡이병이면 지금 습도가 문제일 가능성이 커요. 아침에 환기를 좀 더 일찍 하시고 하우스 안 습도를 낮춰 주세요."
+   },
+   {
+    "file_index": 0,
+    "audio_id": 1,
+    "seg_id": "seg_4",
+    "speaker": "A",
+    "speaker_key": "f0:A",
+    "start": 30.5,
+    "end": 36.83,
+    "abs_start": 30.5,
+    "abs_end": 36.83,
+    "text": "네 알겠습니다. 오늘 아침에 물은 줬고요, 묵은 잎도 좀 따 줬어요."
+   },
+   {
+    "file_index": 0,
+    "audio_id": 1,
+    "seg_id": "seg_5",
+    "speaker": "B",
+    "speaker_key": "f0:B",
+    "start": 37.33,
+    "end": 46.67,
+    "abs_start": 37.33,
+    "abs_end": 46.67,
+    "text": "잘하셨어요. 적엽하시면 통풍이 좋아지니까 도움이 됩니다. 병든 과실은 바로 제거해서 밖으로 내가세요."
+   },
+   {
+    "file_index": 0,
+    "audio_id": 1,
+    "seg_id": "seg_6",
+    "speaker": "A",
+    "speaker_key": "f0:A",
+    "start": 47.17,
+    "end": 53.33,
+    "abs_start": 47.17,
+    "abs_end": 53.33,
+    "text": "약은 뭘 치면 될까요? 지난번에 사파이어 쓰라고 하셨던 것 같은데."
+   },
+   {
+    "file_index": 0,
+    "audio_id": 1,
+    "seg_id": "seg_7",
+    "speaker": "B",
+    "speaker_key": "f0:B",
+    "start": 53.83,
+    "end": 65.0,
+    "abs_start": 53.83,
+    "abs_end": 65.0,
+    "text": "네, 사파이어 액상수화제 2000배로 잿빛곰팡이 대상으로 살포하시면 됩니다. 수확 전 안전사용기준은 라벨 꼭 확인하세요."
+   },
+   {
+    "file_index": 0,
+    "audio_id": 1,
+    "seg_id": "seg_8",
+    "speaker": "A",
+    "speaker_key": "f0:A",
+    "start": 65.5,
+    "end": 70.17,
+    "abs_start": 65.5,
+    "abs_end": 70.17,
+    "text": "알겠습니다. 그럼 내일 아침에 사파이어 치겠습니다."
+   },
+   {
+    "file_index": 0,
+    "audio_id": 1,
+    "seg_id": "seg_9",
+    "speaker": "B",
+    "speaker_key": "f0:B",
+    "start": 70.67,
+    "end": 72.67,
+    "abs_start": 70.67,
+    "abs_end": 72.67,
+    "text": "그리고 응애는 없나요?"
+   },
+   {
+    "file_index": 0,
+    "audio_id": 1,
+    "seg_id": "seg_10",
+    "speaker": "A",
+    "speaker_key": "f0:A",
+    "start": 73.17,
+    "end": 80.17,
+    "abs_start": 73.17,
+    "abs_end": 80.17,
+    "text": "응애는 아직 안 보여요. 근데 하우스가 좀 덥긴 해요, 낮에 30도 넘어요."
+   },
+   {
+    "file_index": 0,
+    "audio_id": 1,
+    "seg_id": "seg_11",
+    "speaker": "B",
+    "speaker_key": "f0:B",
+    "start": 80.67,
+    "end": 89.0,
+    "abs_start": 80.67,
+    "abs_end": 89.0,
+    "text": "측창 개방 온도를 25도로 낮추시고요. 다음 주 화요일에 제가 한번 방문해서 다시 볼게요."
+   },
+   {
+    "file_index": 0,
+    "audio_id": 1,
+    "seg_id": "seg_12",
+    "speaker": "A",
+    "speaker_key": "f0:A",
+    "start": 89.5,
+    "end": 92.83,
+    "abs_start": 89.5,
+    "abs_end": 92.83,
+    "text": "네 감사합니다. 화요일에 뵙겠습니다."
+   }
+  ],
+  "speakers": [
+   "f0:A",
+   "f0:B"
+  ],
+  "total_duration_sec": 93.33,
+  "text": "[f0:A] 여보세요 선생님, 김철수입니다.\n[f0:B] 네 사장님 안녕하세요. 딸기는 요즘 좀 어떠세요?\n[f0:A] 저희 딸기 하우스 2동에 잿빛곰팡이가 조금 보이는 것 같아요. 꽃이랑 열매 몇 개에 회색 곰팡이가 피었어요.\n[f0:B] 아 잿빛곰팡이병이면 지금 습도가 문제일 가능성이 커요. 아침에 환기를 좀 더 일찍 하시고 하우스 안 습도를 낮춰 주세요.\n[f0:A] 네 알겠습니다. 오늘 아침에 물은 줬고요, 묵은 잎도 좀 따 줬어요.\n[f0:B] 잘하셨어요. 적엽하시면 통풍이 좋아지니까 도움이 됩니다. 병든 과실은 바로 제거해서 밖으로 내가세요.\n[f0:A] 약은 뭘 치면 될까요? 지난번에 사파이어 쓰라고 하셨던 것 같은데.\n[f0:B] 네, 사파이어 액상수화제 2000배로 잿빛곰팡이 대상으로 살포하시면 됩니다. 수확 전 안전사용기준은 라벨 꼭 확인하세요.\n[f0:A] 알겠습니다. 그럼 내일 아침에 사파이어 치겠습니다.\n[f0:B] 그리고 응애는 없나요?\n[f0:A] 응애는 아직 안 보여요. 근데 하우스가 좀 덥긴 해요, 낮에 30도 넘어요.\n[f0:B] 측창 개방 온도를 25도로 낮추시고요. 다음 주 화요일에 제가 한번 방문해서 다시 볼게요.\n[f0:A] 네 감사합니다. 화요일에 뵙겠습니다."
+ },
+ "ctx": {
+  "call_id": "call-straw-004",
+  "started_at": "2026-08-19T10:12:00+09:00",
+  "ended_at": "2026-08-19T10:18:30+09:00",
+  "participants": [
+   {
+    "role": "farmer",
+    "user_id": "f001",
+    "name": "김철수"
+   },
+   {
+    "role": "consultant",
+    "user_id": "c001",
+    "name": "이영희"
+   }
+  ],
+  "farm": {
+   "farm_nm": "테스트농장"
+  },
+  "farm_access_token": null,
+  "language": "ko",
+  "generation_run": 1,
+  "hints": {
+   "prdlst_code": "0804MM",
+   "prdlst_nm": "딸기"
+  }
+ }
+}

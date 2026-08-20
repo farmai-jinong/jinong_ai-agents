@@ -1,0 +1,178 @@
+{
+ "one_line_summary": "딸기 2동 잿빛곰팡이 초기 발생에 대해 환기·적엽·사파이어 살포를 권고하고 다음 주 화요일 방문을 약속함.",
+ "keywords": [
+  "딸기",
+  "잿빛곰팡이병",
+  "환기",
+  "사파이어",
+  "적엽",
+  "방문"
+ ],
+ "crops_mentioned": [
+  {
+   "name_raw": "딸기",
+   "matched_name": "딸기",
+   "evidence": [
+    1,
+    2
+   ]
+  }
+ ],
+ "farm_status": [
+  {
+   "topic": "시설·장비",
+   "text": "딸기 하우스 2동 운영",
+   "crop": "딸기",
+   "evidence": [
+    2
+   ]
+  }
+ ],
+ "farmworks": [
+  {
+   "name": "관수",
+   "crop": "딸기",
+   "when": "today",
+   "date_hint": null,
+   "detail": "오늘 아침 물 줌",
+   "evidence": [
+    4
+   ]
+  },
+  {
+   "name": "적엽",
+   "crop": "딸기",
+   "when": "today",
+   "date_hint": null,
+   "detail": "묵은 잎 제거",
+   "evidence": [
+    4
+   ]
+  },
+  {
+   "name": "약제살포",
+   "crop": "딸기",
+   "when": "planned",
+   "date_hint": "내일 아침",
+   "detail": "사파이어 살포 예정",
+   "evidence": [
+    8
+   ]
+  }
+ ],
+ "observations": [
+  {
+   "topic": "환경",
+   "text": "낮 하우스 온도 30도 이상으로 더움",
+   "crop": "딸기",
+   "evidence": [
+    10
+   ]
+  }
+ ],
+ "pests": [
+  {
+   "name": "잿빛곰팡이",
+   "kind": "병",
+   "status": "발생",
+   "severity": "경미",
+   "severity_raw": "조금 보이는 것 같아요",
+   "location": "하우스 2동 꽃·열매",
+   "crop": "딸기",
+   "evidence": [
+    2,
+    3
+   ]
+  },
+  {
+   "name": "응애",
+   "kind": "해충",
+   "status": "예방언급",
+   "severity": "불명",
+   "severity_raw": null,
+   "location": null,
+   "crop": "딸기",
+   "evidence": [
+    9,
+    10
+   ]
+  }
+ ],
+ "products": [
+  {
+   "name": "사파이어 액상수화제",
+   "category": "농약",
+   "target": "잿빛곰팡이",
+   "dose": "2000배",
+   "when": "planned",
+   "crop": "딸기",
+   "evidence": [
+    6,
+    7,
+    8
+   ]
+  }
+ ],
+ "questions": [
+  {
+   "text": "잿빛곰팡이에 어떤 약을 쳐야 하는지",
+   "asked_by": "farmer",
+   "evidence": [
+    6
+   ]
+  }
+ ],
+ "advice": [
+  {
+   "text": "아침 환기를 앞당기고 하우스 습도를 낮출 것",
+   "category": "환경관리",
+   "evidence": [
+    3
+   ]
+  },
+  {
+   "text": "병든 과실은 즉시 제거하여 하우스 밖으로 반출",
+   "category": "병해충관리",
+   "evidence": [
+    5
+   ]
+  },
+  {
+   "text": "사파이어 액상수화제 2000배 잿빛곰팡이 대상 살포, 안전사용기준 라벨 확인",
+   "category": "병해충관리",
+   "evidence": [
+    7
+   ]
+  },
+  {
+   "text": "측창 개방 온도를 25도로 낮출 것",
+   "category": "환경관리",
+   "evidence": [
+    11
+   ]
+  }
+ ],
+ "actions": [
+  {
+   "text": "내일 아침 사파이어 살포",
+   "actor": "farmer",
+   "status": "agreed",
+   "due_hint": "내일 아침",
+   "evidence": [
+    8
+   ]
+  }
+ ],
+ "follow_ups": [
+  {
+   "text": "다음 주 화요일 컨설턴트 방문 재확인",
+   "when_hint": "다음 주 화요일",
+   "evidence": [
+    11,
+    12
+   ]
+  }
+ ],
+ "has_farmwork_content": true,
+ "stt_uncertainties": []
+}

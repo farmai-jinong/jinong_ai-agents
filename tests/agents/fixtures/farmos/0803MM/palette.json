@@ -1,0 +1,79 @@
+[
+ {
+  "userFarmworkId": 21,
+  "userFarmworkNm": "관수",
+  "userAdded": false,
+  "use": true,
+  "checked": false
+ },
+ {
+  "userFarmworkId": 22,
+  "userFarmworkNm": "유인",
+  "userAdded": false,
+  "use": true,
+  "checked": false
+ },
+ {
+  "userFarmworkId": 23,
+  "userFarmworkNm": "측지제거",
+  "userAdded": false,
+  "use": true,
+  "checked": false
+ },
+ {
+  "userFarmworkId": 24,
+  "userFarmworkNm": "적심",
+  "userAdded": false,
+  "use": true,
+  "checked": false
+ },
+ {
+  "userFarmworkId": 25,
+  "userFarmworkNm": "적엽",
+  "userAdded": false,
+  "use": true,
+  "checked": false
+ },
+ {
+  "userFarmworkId": 26,
+  "userFarmworkNm": "적과",
+  "userAdded": false,
+  "use": true,
+  "checked": false
+ },
+ {
+  "userFarmworkId": 27,
+  "userFarmworkNm": "수확",
+  "userAdded": false,
+  "use": true,
+  "checked": false
+ },
+ {
+  "userFarmworkId": 28,
+  "userFarmworkNm": "약제살포",
+  "userAdded": false,
+  "use": true,
+  "checked": false
+ },
+ {
+  "userFarmworkId": 29,
+  "userFarmworkNm": "환기",
+  "userAdded": false,
+  "use": true,
+  "checked": false
+ },
+ {
+  "userFarmworkId": 30,
+  "userFarmworkNm": "시비",
+  "userAdded": false,
+  "use": true,
+  "checked": false
+ },
+ {
+  "userFarmworkId": 31,
+  "userFarmworkNm": "수분",
+  "userAdded": false,
+  "use": true,
+  "checked": false
+ }
+]

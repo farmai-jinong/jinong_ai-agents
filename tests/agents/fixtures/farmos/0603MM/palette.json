@@ -1,0 +1,51 @@
+[
+ {
+  "userFarmworkId": 41,
+  "userFarmworkNm": "관수",
+  "userAdded": false,
+  "use": true,
+  "checked": false
+ },
+ {
+  "userFarmworkId": 42,
+  "userFarmworkNm": "적심",
+  "userAdded": false,
+  "use": true,
+  "checked": false
+ },
+ {
+  "userFarmworkId": 43,
+  "userFarmworkNm": "적엽",
+  "userAdded": false,
+  "use": true,
+  "checked": false
+ },
+ {
+  "userFarmworkId": 44,
+  "userFarmworkNm": "봉지씌우기",
+  "userAdded": false,
+  "use": true,
+  "checked": false
+ },
+ {
+  "userFarmworkId": 45,
+  "userFarmworkNm": "수확",
+  "userAdded": false,
+  "use": true,
+  "checked": false
+ },
+ {
+  "userFarmworkId": 46,
+  "userFarmworkNm": "약제살포",
+  "userAdded": false,
+  "use": true,
+  "checked": false
+ },
+ {
+  "userFarmworkId": 47,
+  "userFarmworkNm": "송이솎기",
+  "userAdded": false,
+  "use": true,
+  "checked": false
+ }
+]

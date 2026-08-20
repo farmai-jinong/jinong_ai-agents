@@ -1,0 +1,48 @@
+{
+ "prvnbeTypeList": [
+  {
+   "code": "",
+   "name": "전체"
+  },
+  {
+   "code": "006",
+   "name": "병해"
+  },
+  {
+   "code": "005",
+   "name": "해충"
+  }
+ ],
+ "prvnbeList": [
+  {
+   "prvnbeTypeCode": "006",
+   "prvnbeCode": "002006001",
+   "prvnbeNm": "잿빛곰팡이병"
+  },
+  {
+   "prvnbeTypeCode": "006",
+   "prvnbeCode": "002006002",
+   "prvnbeNm": "흰가루병"
+  },
+  {
+   "prvnbeTypeCode": "006",
+   "prvnbeCode": "002006003",
+   "prvnbeNm": "탄저병"
+  },
+  {
+   "prvnbeTypeCode": "005",
+   "prvnbeCode": "002005001",
+   "prvnbeNm": "점박이응애"
+  },
+  {
+   "prvnbeTypeCode": "005",
+   "prvnbeCode": "002005002",
+   "prvnbeNm": "총채벌레"
+  },
+  {
+   "prvnbeTypeCode": "005",
+   "prvnbeCode": "002005003",
+   "prvnbeNm": "진딧물"
+  }
+ ]
+}

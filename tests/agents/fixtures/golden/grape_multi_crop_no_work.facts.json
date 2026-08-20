@@ -1,0 +1,69 @@
+{
+ "one_line_summary": "포도 출하 시기와 시세에 대한 문의에 당도 기준과 공선회 출하를 안내함.",
+ "keywords": [
+  "포도",
+  "샤인머스켓",
+  "출하",
+  "당도",
+  "시세"
+ ],
+ "crops_mentioned": [
+  {
+   "name_raw": "포도",
+   "matched_name": "포도",
+   "evidence": [
+    0
+   ]
+  }
+ ],
+ "farm_status": [
+  {
+   "topic": "기타",
+   "text": "샤인머스켓 재배",
+   "crop": "포도",
+   "evidence": [
+    1
+   ]
+  }
+ ],
+ "farmworks": [],
+ "observations": [],
+ "pests": [],
+ "products": [],
+ "questions": [
+  {
+   "text": "포도 출하 시기",
+   "asked_by": "farmer",
+   "evidence": [
+    0
+   ]
+  },
+  {
+   "text": "요즘 시세",
+   "asked_by": "farmer",
+   "evidence": [
+    2
+   ]
+  }
+ ],
+ "advice": [
+  {
+   "text": "당도 18브릭스 이상이면 출하 시작",
+   "category": "경영·기타",
+   "evidence": [
+    1
+   ]
+  },
+  {
+   "text": "공선회를 통한 출하 권장",
+   "category": "경영·기타",
+   "evidence": [
+    3
+   ]
+  }
+ ],
+ "actions": [],
+ "follow_ups": [],
+ "has_farmwork_content": false,
+ "stt_uncertainties": []
+}

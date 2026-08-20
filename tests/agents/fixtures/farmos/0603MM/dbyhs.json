@@ -1,0 +1,26 @@
+[
+ {
+  "dbyhsCode": "002006021",
+  "dbyhsNm": "노균병",
+  "occrrncStepNm": "미발생|2%미만|5%미만|10%미만|30%미만|30%이상",
+  "occrrncStepCode": "0|1|2|3|4|5",
+  "occrrncStepDesc": "안심|주의|주의|경고|경고|경고",
+  "occrrncStepDescCode": "0|1|1|2|2|2"
+ },
+ {
+  "dbyhsCode": "002006022",
+  "dbyhsNm": "탄저병",
+  "occrrncStepNm": "미발생|2%미만|5%미만|10%미만|30%미만|30%이상",
+  "occrrncStepCode": "0|1|2|3|4|5",
+  "occrrncStepDesc": "안심|주의|주의|경고|경고|경고",
+  "occrrncStepDescCode": "0|1|1|2|2|2"
+ },
+ {
+  "dbyhsCode": "002006023",
+  "dbyhsNm": "갈색무늬병",
+  "occrrncStepNm": "미발생|2%미만|5%미만|10%미만|30%미만|30%이상",
+  "occrrncStepCode": "0|1|2|3|4|5",
+  "occrrncStepDesc": "안심|주의|주의|경고|경고|경고",
+  "occrrncStepDescCode": "0|1|1|2|2|2"
+ }
+]

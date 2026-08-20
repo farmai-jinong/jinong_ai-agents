@@ -1,0 +1,183 @@
+{
+ "transcript": {
+  "call_id": "call-tom-002",
+  "files": [
+   {
+    "file_index": 0,
+    "audio_id": 1,
+    "bucket": "jinong-agri-stt",
+    "key": "voicetalk/call-tom-002/0.ogg",
+    "seq": 1,
+    "offset_sec": 0.0,
+    "duration_sec": 39.5,
+    "status": "TRANSCRIBED",
+    "stt_raw_key": "agents/voicecall/call-tom-002/stt/00.json"
+   },
+   {
+    "file_index": 1,
+    "audio_id": 2,
+    "bucket": "jinong-agri-stt",
+    "key": "voicetalk/call-tom-002/1.ogg",
+    "seq": 2,
+    "offset_sec": 39.5,
+    "duration_sec": 30.67,
+    "status": "TRANSCRIBED",
+    "stt_raw_key": "agents/voicecall/call-tom-002/stt/01.json"
+   }
+  ],
+  "segments": [
+   {
+    "file_index": 0,
+    "audio_id": 1,
+    "seg_id": "seg_0",
+    "speaker": "A",
+    "speaker_key": "f0:A",
+    "start": 0.0,
+    "end": 4.0,
+    "abs_start": 0.0,
+    "abs_end": 4.0,
+    "text": "네 이영희입니다. 사장님 토마토는 어떠세요?"
+   },
+   {
+    "file_index": 0,
+    "audio_id": 1,
+    "seg_id": "seg_1",
+    "speaker": "B",
+    "speaker_key": "f0:B",
+    "start": 4.5,
+    "end": 12.67,
+    "abs_start": 4.5,
+    "abs_end": 12.67,
+    "text": "선생님, 방울토마토에 담배가루이가 너무 많아졌어요. 잎 뒤에 하얀 게 엄청 붙어 있어요."
+   },
+   {
+    "file_index": 0,
+    "audio_id": 1,
+    "seg_id": "seg_2",
+    "speaker": "A",
+    "speaker_key": "f0:A",
+    "start": 13.17,
+    "end": 24.83,
+    "abs_start": 13.17,
+    "abs_end": 24.83,
+    "text": "담배가루이가 많이 발생했군요. 황색 끈끈이 트랩 개수 늘리시고, 모벤토 같은 약제로 방제하셔야 합니다. 희석배수는 라벨대로요."
+   },
+   {
+    "file_index": 0,
+    "audio_id": 1,
+    "seg_id": "seg_3",
+    "speaker": "B",
+    "speaker_key": "f0:B",
+    "start": 25.33,
+    "end": 30.33,
+    "abs_start": 25.33,
+    "abs_end": 30.33,
+    "text": "네. 그리고 오늘 유인줄 감고 곁순 제거는 다 했어요."
+   },
+   {
+    "file_index": 0,
+    "audio_id": 1,
+    "seg_id": "seg_4",
+    "speaker": "A",
+    "speaker_key": "f0:A",
+    "start": 30.83,
+    "end": 34.5,
+    "abs_start": 30.83,
+    "abs_end": 34.5,
+    "text": "좋습니다. 배액 EC 는 얼마나 나와요?"
+   },
+   {
+    "file_index": 0,
+    "audio_id": 1,
+    "seg_id": "seg_5",
+    "speaker": "B",
+    "speaker_key": "f0:B",
+    "start": 35.0,
+    "end": 39.0,
+    "abs_start": 35.0,
+    "abs_end": 39.0,
+    "text": "배액 EC가 4.5 정도로 좀 높게 나와요."
+   },
+   {
+    "file_index": 1,
+    "audio_id": 2,
+    "seg_id": "seg_0",
+    "speaker": "A",
+    "speaker_key": "f1:A",
+    "start": 0.0,
+    "end": 11.17,
+    "abs_start": 39.5,
+    "abs_end": 50.67,
+    "text": "아까 끊겨서 다시 걸었어요. 배액 EC 4.5 면 급액 EC 를 0.3 정도 낮추시고 배액률을 30% 이상으로 올리세요."
+   },
+   {
+    "file_index": 1,
+    "audio_id": 2,
+    "seg_id": "seg_1",
+    "speaker": "B",
+    "speaker_key": "f1:B",
+    "start": 11.67,
+    "end": 17.17,
+    "abs_start": 51.17,
+    "abs_end": 56.67,
+    "text": "네 알겠습니다. 그리고 웃거름으로 칼슘 비료를 조금 줬어요."
+   },
+   {
+    "file_index": 1,
+    "audio_id": 2,
+    "seg_id": "seg_2",
+    "speaker": "A",
+    "speaker_key": "f1:A",
+    "start": 17.67,
+    "end": 26.5,
+    "abs_start": 57.17,
+    "abs_end": 66.0,
+    "text": "칼슘 추비는 괜찮습니다. 이번 주 안에 가루이 방제하시고 다음 상담 때 트랩 사진 보내 주세요."
+   },
+   {
+    "file_index": 1,
+    "audio_id": 2,
+    "seg_id": "seg_3",
+    "speaker": "B",
+    "speaker_key": "f1:B",
+    "start": 27.0,
+    "end": 30.17,
+    "abs_start": 66.5,
+    "abs_end": 69.67,
+    "text": "네 사진 보내드릴게요. 감사합니다."
+   }
+  ],
+  "speakers": [
+   "f0:A",
+   "f0:B",
+   "f1:A",
+   "f1:B"
+  ],
+  "total_duration_sec": 70.17,
+  "text": "[f0:A] 네 이영희입니다. 사장님 토마토는 어떠세요?\n[f0:B] 선생님, 방울토마토에 담배가루이가 너무 많아졌어요. 잎 뒤에 하얀 게 엄청 붙어 있어요.\n[f0:A] 담배가루이가 많이 발생했군요. 황색 끈끈이 트랩 개수 늘리시고, 모벤토 같은 약제로 방제하셔야 합니다. 희석배수는 라벨대로요.\n[f0:B] 네. 그리고 오늘 유인줄 감고 곁순 제거는 다 했어요.\n[f0:A] 좋습니다. 배액 EC 는 얼마나 나와요?\n[f0:B] 배액 EC가 4.5 정도로 좀 높게 나와요.\n[f1:A] 아까 끊겨서 다시 걸었어요. 배액 EC 4.5 면 급액 EC 를 0.3 정도 낮추시고 배액률을 30% 이상으로 올리세요.\n[f1:B] 네 알겠습니다. 그리고 웃거름으로 칼슘 비료를 조금 줬어요.\n[f1:A] 칼슘 추비는 괜찮습니다. 이번 주 안에 가루이 방제하시고 다음 상담 때 트랩 사진 보내 주세요.\n[f1:B] 네 사진 보내드릴게요. 감사합니다."
+ },
+ "ctx": {
+  "call_id": "call-tom-002",
+  "started_at": "2026-08-19T14:00:00+09:00",
+  "ended_at": "2026-08-19T14:11:00+09:00",
+  "participants": [
+   {
+    "role": "farmer",
+    "user_id": "f001",
+    "name": "김철수"
+   },
+   {
+    "role": "consultant",
+    "user_id": "c001",
+    "name": "이영희"
+   }
+  ],
+  "farm": {
+   "farm_nm": "테스트농장"
+  },
+  "farm_access_token": "tok-fake",
+  "language": "ko",
+  "generation_run": 1,
+  "hints": {}
+ }
+}
