@@ -1,0 +1,6 @@
+-r requirements.txt
+pytest>=8
+pytest-asyncio>=0.23
+respx>=0.21
+moto[s3]>=5
+ruff>=0.5

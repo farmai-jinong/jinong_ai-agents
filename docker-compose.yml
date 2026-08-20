@@ -1,0 +1,32 @@
+# 지농 AI Agent — 지농서버(AWS, `ssh jinong_aws_office`) 배포용.
+#
+# STT/LLM 은 ⑥ 게이트웨이(https://jinong-stt.jinongservice.co.kr) 를 공개 HTTPS 로 호출한다(같은 호스트의
+# 7002 는 loopback 바인드라 host.docker.internal 로 못 간다). 대안(docker network 공유)은 docs/ops.md.
+
+services:
+  agent:
+    build: .
+    image: jinong-ai-agents:latest
+    container_name: jinong-ai-agents
+    restart: unless-stopped
+    ports:
+      # host 127.0.0.1:7003 -> container 8080. 외부 노출은 호스트 nginx(jinong-agent.jinongservice.co.kr, TLS)만.
+      # 7001=hatchery-serving, 7002=jinong-ai-gateway, 7003=이 서비스.
+      - "${AGENT_BIND:-127.0.0.1:7003}:8080"
+    env_file:
+      - .env
+    volumes:
+      - agent_data:/data           # SQLite (calls/call_audio/artifacts)
+      # Vertex AI 서비스 계정 키 (LLM_PROVIDER=gemini). 호스트 경로는 GOOGLE_SA_KEY_HOST 로 덮어쓸 수 있다(로컬 실행 시).
+      - ${GOOGLE_SA_KEY_HOST:-/home/ubuntu/dev/deploy_setting_files/jinong_vertexai_service_key.json}:/app/auth/jinong_vertexai_service_key.json:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/healthz',timeout=3).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  agent_data:
