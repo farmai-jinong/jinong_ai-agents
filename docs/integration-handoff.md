@@ -7,7 +7,7 @@
 
 | 항목 | 값 |
 |---|---|
-| Base URL | `https://jinong-agent.jinongservice.co.kr` |
+| Base URL | `https://jinong-stt-report-generation.jinongservice.co.kr` |
 | 인증 | 모든 요청에 `Authorization: Bearer <AGENT_API_KEY>` 또는 `X-API-Key: <AGENT_API_KEY>` (`GET /healthz`만 무인증) |
 | API 키 | 저희가 발급해 전달 (클라이언트별 발급/폐기 가능) |
 | Content-Type | `application/json` — 요청 본문 최대 4MB |
@@ -251,7 +251,7 @@ terminal 사유 (`status` + `error.code`):
   "call_id": "...",
   "status": "COMPLETED",
   "error": null,
-  "result_url": "https://jinong-agent.jinongservice.co.kr/v1/calls/<call_id>",
+  "result_url": "https://jinong-stt-report-generation.jinongservice.co.kr/v1/calls/<call_id>",
   "generation_run": 1
 }
 ```
@@ -317,7 +317,7 @@ agents/voicecall/{call_id}/artifacts/result.json            전체 스냅샷 (ge
 ## 9. cURL 예시
 
 ```bash
-K=<AGENT_API_KEY>; B=https://jinong-agent.jinongservice.co.kr
+K=<AGENT_API_KEY>; B=https://jinong-stt-report-generation.jinongservice.co.kr
 
 # 1) 통화 시작
 curl -X POST $B/v1/calls -H "Authorization: Bearer $K" -H 'Content-Type: application/json' -d '{

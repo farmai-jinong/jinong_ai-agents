@@ -7,16 +7,16 @@
 
 - 컨테이너 `jinong-ai-agents` 배포 완료(`127.0.0.1:7003`, `.env` 채움, `/v1/upstream/health` stt/llm/s3/farmos 모두 ok). 서버 내부 스모크(`scripts/curl_flow.sh`, 실제 raw 녹음 1건) COMPLETED 확인.
 - 게이트웨이 0.2.0 배포: `/v1/chat/completions` 프록시 + 이 서비스 전용 STT 키 발급(`GATEWAY_API_KEY` 2번째 키). vLLM 터널은 호스트 **8200**(8000 은 nginx 점유) — GPU 박스에서 `serve/llm-up.sh` 전까지 `llm_ok:false`/502 가 정상.
-- nginx vhost `/etc/nginx/sites.d/jinong-agent.jinongservice.co.kr.conf` 는 **HTTP 블록만** 설치됨(내부 `Host:` 헤더 테스트 200). **남은 일: DNS A 레코드 → `cert.sh` → HTTPS 블록 주석 해제 → reload** (아래 1-①·④).
+- nginx vhost 는 **구 도메인** `/etc/nginx/sites.d/jinong-agent.jinongservice.co.kr.conf` 로 **HTTP 블록만** 설치됨(내부 `Host:` 헤더 테스트 200). 2026-08-20 도메인을 `jinong-stt-report-generation.jinongservice.co.kr` 로 변경 — **남은 일: 구 vhost 파일 삭제 후 새 conf 설치 → DNS A 레코드 → `cert.sh` → HTTPS 블록 주석 해제 → reload** (아래 1-①·③·④).
 - LLM 기본은 Gemini(Vertex AI, `LLM_PROVIDER=gemini / LLM_MODEL=gemini-3.5-flash / GCP_PROJECT_ID=jinong-lab-llm / GCP_LOCATION=global / GEMINI_THINKING_LEVEL=low`). 인증은 서비스 계정 키 — 서버 `/home/ubuntu/dev/deploy_setting_files/jinong_vertexai_service_key.json` 을 compose 가 `/app/auth/jinong_vertexai_service_key.json` 로 read-only 마운트(`GOOGLE_APPLICATION_CREDENTIALS`). hatchery_serving 과 같은 키·프로젝트. 이전 OpenAI(`gpt-4.1`) 는 `LLM_PROVIDER=openai` + `LLM_BASE_URL/LLM_API_KEY` 로 복귀 가능.
 - 동의서 §7 충족을 위해 vLLM 기동 후 `.env` 의 `LLM_PROVIDER=jinong / LLM_BASE_URL=https://jinong-stt.jinongservice.co.kr/v1 / LLM_API_KEY=<STT_API_KEY 와 동일 게이트웨이 키> / LLM_MODEL=exaone45` 로 전환 후 `docker compose up -d`.
 - 자격증명 메모: AWS 키는 audio-labeler 워커와 같은 IAM 사용자(정적 키)를 재사용 — 전용 IAM 사용자로 분리 권장. Vertex SA 키·프로젝트(jinong-lab-llm)는 hatchery_serving 과 공용, OpenAI 키는 briefing_serving 과 공용.
 
 ## 1. 최초 1회
 
-1. DNS A `jinong-agent.jinongservice.co.kr → 13.125.70.226` (jinong-stt 때와 같은 경로로 요청).
+1. DNS A `jinong-stt-report-generation.jinongservice.co.kr → 13.125.70.226` (jinong-stt 때와 같은 경로로 요청).
 2. 서버 디렉터리: `sudo mkdir -p /srv/jinong-agent/{logs,letsencrypt,deploy}` (deploy/letsencrypt 스크립트를 `/srv/jinong-agent/deploy/letsencrypt/` 로 복사).
-3. nginx vhost: `deploy/nginx/jinong-agent.jinongservice.co.kr.conf` → `/etc/nginx/sites.d/` (**HTTPS 블록 주석**) → `sudo nginx -t && sudo systemctl reload nginx`.
+3. nginx vhost: `deploy/nginx/jinong-stt-report-generation.jinongservice.co.kr.conf` → `/etc/nginx/sites.d/` (**HTTPS 블록 주석**) → `sudo nginx -t && sudo systemctl reload nginx`.
 4. 인증서: `/srv/jinong-agent` 에서 `bash deploy/letsencrypt/cert.sh --dry-run` → 성공 시 `bash deploy/letsencrypt/cert.sh` → vhost HTTPS 블록 주석 해제 → reload. cron: `57 4 * * * /srv/jinong-agent/deploy/letsencrypt/renew.sh >> /srv/jinong-agent/logs/letsencrypt.log 2>&1`.
 5. 원격 `.env` (`/home/ubuntu/apps/jinong_ai-agents/.env`, `.env.example` 참고): `AGENT_API_KEY`(발급해 kafka-gateway 팀 전달), `STT_API_KEY`(게이트웨이 `.env` `GATEWAY_API_KEY` 에 콤마로 추가한 이 서비스 전용 키 → 게이트웨이 `docker compose up -d`), `LLM_*`, `AWS_ACCESS_KEY_ID/SECRET`(audio_labeler 와 같은 IAM 사용자 방식), `FARMOS_BASE_URL`.
 
@@ -31,7 +31,7 @@ REMOTE=jinong_aws ./deploy/deploy.sh
 ## 3. 검증
 
 ```bash
-curl https://jinong-agent.jinongservice.co.kr/healthz
+curl https://jinong-stt-report-generation.jinongservice.co.kr/healthz
 AGENT_API_KEY=… ./scripts/smoke_remote.sh                       # + upstream health (stt/llm/s3/farmos 모두 ok)
 AGENT_API_KEY=… ./scripts/smoke_remote.sh jinong-agri-stt raw/<sample>.wav   # 전체 플로우 (FARM_TOKEN 주면 farmos 조회 포함)
 aws s3 ls s3://jinong-agri-stt/agents/voicecall/<call_id>/ --recursive

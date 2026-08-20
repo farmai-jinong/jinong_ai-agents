@@ -3,7 +3,7 @@
 #   AGENT_API_KEY=... ./scripts/smoke_remote.sh [bucket key]
 set -euo pipefail
 cd "$(dirname "$0")/.."
-export AGENT_URL="${AGENT_URL:-https://jinong-agent.jinongservice.co.kr}"
+export AGENT_URL="${AGENT_URL:-https://jinong-stt-report-generation.jinongservice.co.kr}"
 echo "==> healthz"; curl -fsS "$AGENT_URL/healthz"; echo
 if [ -n "${AGENT_API_KEY:-}" ]; then
   echo "==> upstream"; curl -fsS -H "Authorization: Bearer $AGENT_API_KEY" "$AGENT_URL/v1/upstream/health"; echo

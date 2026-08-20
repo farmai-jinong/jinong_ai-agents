@@ -10,7 +10,7 @@ services:
     container_name: jinong-ai-agents
     restart: unless-stopped
     ports:
-      # host 127.0.0.1:7003 -> container 8080. 외부 노출은 호스트 nginx(jinong-agent.jinongservice.co.kr, TLS)만.
+      # host 127.0.0.1:7003 -> container 8080. 외부 노출은 호스트 nginx(jinong-stt-report-generation.jinongservice.co.kr, TLS)만.
       # 7001=hatchery-serving, 7002=jinong-ai-gateway, 7003=이 서비스.
       - "${AGENT_BIND:-127.0.0.1:7003}:8080"
     env_file:

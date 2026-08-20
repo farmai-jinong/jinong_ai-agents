@@ -13,7 +13,7 @@ LangGraph pipeline. It holds no model and no GPU. Product spec SSOT: farmos cons
 `~/Documents/영농일지_생성과정_설명서.md` (diary screen blocks, farmos diary API, pitfalls §3.7).
 
 Deploy target: 지농서버(AWS EC2), Docker, host port **7003** (loopback) behind host nginx
-`jinong-agent.jinongservice.co.kr`. `ssh jinong_aws_office` (office, 22) / `ssh jinong_aws` (external, 7022).
+`jinong-stt-report-generation.jinongservice.co.kr`. `ssh jinong_aws_office` (office, 22) / `ssh jinong_aws` (external, 7022).
 
 ## Hard rules
 

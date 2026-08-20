@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8080
     log_level: str = "info"
-    public_base_url: str = "https://jinong-agent.jinongservice.co.kr"   # 콜백 result_url 조립용
+    public_base_url: str = "https://jinong-stt-report-generation.jinongservice.co.kr"   # 콜백 result_url 조립용
 
     # --- storage --------------------------------------------------------------
     db_path: str = "/data/agent.db"

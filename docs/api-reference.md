@@ -1,6 +1,6 @@
 # API 레퍼런스 — 지농 AI Agent (⑧)
 
-- Base URL: `https://jinong-agent.jinongservice.co.kr` (지농서버 내부: `http://127.0.0.1:7003`)
+- Base URL: `https://jinong-stt-report-generation.jinongservice.co.kr` (지농서버 내부: `http://127.0.0.1:7003`)
 - 인증: `/healthz` 를 제외한 모든 요청에 `Authorization: Bearer <AGENT_API_KEY>` (또는 `X-API-Key: <KEY>`). 실패 → `401 {"detail":"invalid or missing API key"}`
 - 오류 형식: `{"detail": {"code": "<CODE>", "message": "..."}}` (검증 오류는 FastAPI 기본 422)
 - 시각은 ISO-8601(타임존 포함). 오디오는 **바이트가 아니라 S3 참조(bucket/key)** 로 받는다.
@@ -113,7 +113,7 @@ Body(선택) `{"ended_at": "...", "duration_sec": 900}` → `202` (`state=ENDED,
 
 ```json
 {"call_id": "…", "status": "COMPLETED", "error": null,
- "result_url": "https://jinong-agent.jinongservice.co.kr/v1/calls/…", "generation_run": 1}
+ "result_url": "https://jinong-stt-report-generation.jinongservice.co.kr/v1/calls/…", "generation_run": 1}
 ```
 
 ## 타이밍·재시도
@@ -125,7 +125,7 @@ Body(선택) `{"ended_at": "...", "duration_sec": 900}` → `202` (`state=ENDED,
 ## cURL
 
 ```bash
-K=…; B=https://jinong-agent.jinongservice.co.kr
+K=…; B=https://jinong-stt-report-generation.jinongservice.co.kr
 curl -X POST $B/v1/calls -H "Authorization: Bearer $K" -H 'Content-Type: application/json' \
   -d '{"call_id":"c1","participants":[{"role":"farmer","user_id":"u1","name":"홍길동"},{"role":"consultant","user_id":"c9","name":"김상담"}],"farm_access_token":"eyJ…"}'
 curl -X POST $B/v1/calls/c1/audio -H "Authorization: Bearer $K" -H 'Content-Type: application/json' \

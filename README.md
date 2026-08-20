@@ -28,7 +28,7 @@ STORAGE_IMPL=local ./scripts/run_local.sh
 ./scripts/e2e_local.sh <audio-file>
 ```
 
-## 배포 (지농서버, 포트 7003, nginx TLS `jinong-agent.jinongservice.co.kr`)
+## 배포 (지농서버, 포트 7003, nginx TLS `jinong-stt-report-generation.jinongservice.co.kr`)
 
 ```bash
 ./deploy/deploy.sh          # rsync + 원격 docker compose up -d --build + health 확인
