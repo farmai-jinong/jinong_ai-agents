@@ -1,0 +1,12 @@
+[통화 정보]
+- 통화 ID: {{ call_id }}
+- 참여자: {% for p in participants %}{{ p.role_ko }}: {{ p.name or "(이름 없음)" }}{% if not loop.last %} / {% endif %}{% endfor %}
+
+{% for f in files %}
+[파일 {{ f.file_index + 1 }}] (file_index={{ f.file_index }}) 화자 글자: {{ f.letters | join(", ") }}
+통계 힌트: {% for l, h in f.hints.items() %}{{ l }}: 질문표현 {{ h.q }}회·조언표현 {{ h.a }}회·발화 {{ h.n }}회{% if not loop.last %}; {% endif %}{% endfor %}
+
+{{ f.excerpt }}
+
+{% endfor %}
+위 파일들 각각에 대해 화자 글자 → 역할(farmer/consultant/other) 매핑을 JSON 으로 출력하라. `file_index` 는 각 파일 머리말에 적힌 값(0부터 시작)을 그대로 쓴다.

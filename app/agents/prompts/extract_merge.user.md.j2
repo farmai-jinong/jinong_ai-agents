@@ -1,0 +1,6 @@
+[구간별 요약]
+{% for s in summaries %}
+- 구간 {{ loop.index }}: {{ s.one_line_summary }} (키워드: {{ s.keywords | join(", ") }})
+{% endfor %}
+
+위를 통합한 JSON 을 출력하라.

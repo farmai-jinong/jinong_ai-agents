@@ -1,0 +1,9 @@
+[통화 정보] {{ call_when }} / 참여자: {% for p in participants %}{{ p.role_ko }}: {{ p.name or "(이름 없음)" }}{% if not loop.last %} / {% endif %}{% endfor %}
+
+[통화 사실 JSON]
+{{ facts_json }}
+
+[근거 발화]
+{{ evidence_text }}
+
+위를 바탕으로 ReportNarrative JSON 을 출력하라.

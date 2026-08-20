@@ -1,0 +1,71 @@
+# 컨설팅 보고서 — {{ call_date }} {{ farmer_name or "농가" }} 농가
+
+## 대화 요약
+{{ n.summary_line if n.summary_line else "언급 없음" }}
+
+## 상담 개요
+| 항목 | 값 |
+|---|---|
+| 일시 | {{ call_when or "-" }} |
+| 통화 길이 | {{ duration }} (녹음 파일 {{ n_files }}개) |
+| 참여자 | 농가: {{ farmer_name or "-" }} / 컨설턴트: {{ consultant_name or "-" }} |
+| 화자 식별 | {{ speaker_summary }} |
+| 작물 | {{ crops | join(", ") if crops else "언급 없음" }} |
+| 키워드 | {{ n.keywords | join(", ") if n.keywords else "-" }} |
+| 통화 ID | {{ call.call_id }} |
+
+## 농가·농장·작물 현황
+{% for b in n.farm_status %}
+- {{ b.text }}{% if b.needs_verification %} ※ 확인 필요{% endif %}{{ b.evidence | evref }}
+{% else %}
+- 언급 없음
+{% endfor %}
+
+## 주요 문의·문제사항
+{% for b in n.issues %}
+- {{ b.text }}{% if b.needs_verification %} ※ 확인 필요{% endif %}{{ b.evidence | evref }}
+{% else %}
+- 언급 없음
+{% endfor %}
+
+## 컨설팅·권고 내용
+{% for b in n.advice %}
+- {{ b.text }}{% if b.needs_verification %} ※ 확인 필요{% endif %}{{ b.evidence | evref }}
+{% else %}
+- 언급 없음
+{% endfor %}
+
+## 농가 조치사항
+{% for b in n.farmer_actions %}
+- {{ b.text }}{% if b.needs_verification %} ※ 확인 필요{% endif %}{{ b.evidence | evref }}
+{% else %}
+- 언급 없음
+{% endfor %}
+
+## 후속 확인·상담 계획
+{% for b in n.follow_ups %}
+- {{ b.text }}{{ b.evidence | evref }}
+{% endfor %}
+{% for a in n.action_items %}
+- ({{ a.owner | owner_ko }}) {{ a.text }}{% if a.due_hint %} — {{ a.due_hint }}{% endif %}{{ a.evidence | evref }}
+{% endfor %}
+{% if not n.follow_ups and not n.action_items %}
+- 언급 없음
+{% endif %}
+{% if warnings %}
+
+## 참고
+{% for w in warnings %}
+- {{ w }}
+{% endfor %}
+{% endif %}
+
+## 근거 발화
+{% for t in cited %}
+- `#{{ t.tid }}` [{{ t.abs_start | ts }}–{{ t.abs_end | ts }}] {{ t | role_ko }}: "{{ t.text | truncate(160) }}"
+{% else %}
+- (없음)
+{% endfor %}
+
+---
+_AI 초안 — 컨설턴트 확인 후 확정. 농약·비료·안전 관련 내용은 제품 라벨·공식 정보·관계 법령을 재확인하세요(동의서 §8). 생성: {{ generated_at }}, 모델 {{ model or "-" }}, 프롬프트 v{{ prompt_version }}_

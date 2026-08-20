@@ -1,0 +1,8 @@
+[작물] {{ crop_name }}
+[항목]
+{% for it in items %}
+- item_id: {{ it.item_id }} | 종류: {{ it.family_ko }} | 원문: "{{ it.source }}" | 문맥: "{{ it.context }}"
+  후보: {% for c in it.candidates %}{{ c.code }}={{ c.name }}{% if not loop.last %}, {% endif %}{% endfor %}
+
+{% endfor %}
+각 item 의 choice 를 JSON 으로 출력하라.
