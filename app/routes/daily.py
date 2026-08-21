@@ -66,9 +66,13 @@ async def list_daily(request: Request, diary_date: str | None = None, status: st
                      limit: int = Query(default=50, ge=1, le=200), cursor: str | None = None) -> DailyDiaryListResponse:
     rt = _rt(request)
     async with rt.db.session() as s:
-        rows = await repo.list_daily(s, diary_date=diary_date, status=status, limit=limit, cursor=cursor)
+        try:
+            rows = await repo.list_daily(s, diary_date=diary_date, status=status, limit=limit, cursor=cursor)
+        except ValueError:
+            raise ApiError("INVALID_CURSOR", "malformed cursor", 422) from None
         items = [daily_list_item(d) for d in rows]
-    return DailyDiaryListResponse(items=items, next_cursor=items[-1].diary_id if len(items) == limit else None)
+    next_cursor = repo.make_list_cursor(rows[-1].created_at, rows[-1].diary_id) if len(rows) == limit else None
+    return DailyDiaryListResponse(items=items, next_cursor=next_cursor)
 
 
 @router.get("/{diary_id}", response_model=DailyDiaryDetail)

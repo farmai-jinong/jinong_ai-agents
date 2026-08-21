@@ -89,9 +89,13 @@ async def list_calls(request: Request, status: str | None = None, state: str | N
                      limit: int = Query(default=50, ge=1, le=200), cursor: str | None = None) -> CallListResponse:
     rt = _rt(request)
     async with rt.db.session() as s:
-        calls = await repo.list_calls(s, status=status, state=state, limit=limit, cursor=cursor)
+        try:
+            calls = await repo.list_calls(s, status=status, state=state, limit=limit, cursor=cursor)
+        except ValueError:
+            raise ApiError("INVALID_CURSOR", "malformed cursor", 422) from None
         items = [list_item(c) for c in calls]
-    return CallListResponse(items=items, next_cursor=items[-1].call_id if len(items) == limit else None)
+    next_cursor = repo.make_list_cursor(calls[-1].created_at, calls[-1].call_id) if len(calls) == limit else None
+    return CallListResponse(items=items, next_cursor=next_cursor)
 
 
 @router.get("/{call_id}", response_model=CallDetail)

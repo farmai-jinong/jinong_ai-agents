@@ -3,16 +3,31 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import Artifact, Call, CallAudio, DailyArtifact, DailyDiary, JobEvent, utcnow
 
 ACTIVE_AUDIO = ("PENDING", "TRANSCRIBING")
 TERMINAL_STATUSES = ("COMPLETED", "EMPTY", "FAILED")
+
+
+# --- 목록 keyset 커서 -------------------------------------------------------
+# 정렬(created_at DESC, id DESC)과 일치하는 복합 커서. 클라이언트에겐 불투명 토큰.
+
+def make_list_cursor(created_at: datetime, ident: str) -> str:
+    return f"{created_at.isoformat()}|{ident}"
+
+
+def _parse_list_cursor(cursor: str) -> tuple[datetime, str]:
+    """실패 시 ValueError — 라우트에서 422 로 변환한다."""
+    ts, _, ident = cursor.partition("|")
+    if not ident:
+        raise ValueError(f"malformed cursor: {cursor!r}")
+    return datetime.fromisoformat(ts), ident
 
 
 # --- calls -----------------------------------------------------------------
@@ -23,13 +38,14 @@ async def get_call(s: AsyncSession, call_id: str) -> Call | None:
 
 async def list_calls(s: AsyncSession, *, status: str | None = None, state: str | None = None,
                      limit: int = 50, cursor: str | None = None) -> list[Call]:
-    q = select(Call).order_by(Call.updated_at.desc(), Call.call_id.desc()).limit(limit)
+    q = select(Call).order_by(Call.created_at.desc(), Call.call_id.desc()).limit(limit)
     if status:
         q = q.where(Call.status == status)
     if state:
         q = q.where(Call.state == state)
     if cursor:
-        q = q.where(Call.call_id < cursor)
+        ts, cid = _parse_list_cursor(cursor)
+        q = q.where(or_(Call.created_at < ts, and_(Call.created_at == ts, Call.call_id < cid)))
     return list((await s.execute(q)).scalars().all())
 
 
@@ -174,13 +190,14 @@ async def get_daily(s: AsyncSession, diary_id: str) -> DailyDiary | None:
 
 async def list_daily(s: AsyncSession, *, diary_date: str | None = None, status: str | None = None,
                      limit: int = 50, cursor: str | None = None) -> list[DailyDiary]:
-    q = select(DailyDiary).order_by(DailyDiary.updated_at.desc(), DailyDiary.diary_id.desc()).limit(limit)
+    q = select(DailyDiary).order_by(DailyDiary.created_at.desc(), DailyDiary.diary_id.desc()).limit(limit)
     if diary_date:
         q = q.where(DailyDiary.diary_date == diary_date)
     if status:
         q = q.where(DailyDiary.status == status)
     if cursor:
-        q = q.where(DailyDiary.diary_id < cursor)
+        ts, did = _parse_list_cursor(cursor)
+        q = q.where(or_(DailyDiary.created_at < ts, and_(DailyDiary.created_at == ts, DailyDiary.diary_id < did)))
     return list((await s.execute(q)).scalars().all())
 
 

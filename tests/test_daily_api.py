@@ -116,3 +116,27 @@ async def test_list_and_artifact_endpoints(client, app, stt_mock):
 
     tr = (await client.get(f"/v1/daily-diaries/{DAILY['diary_id']}/transcript")).json()
     assert sorted({f["call_id"] for f in tr["files"]}) == ["c1", "c2"]
+
+
+async def test_list_cursor_pagination(client, app, stt_mock):
+    """keyset 커서: 페이지 순회 시 누락/중복 없음, 잘못된 커서는 422."""
+    await _complete_calls(client, app)
+    ids = [f"daily_pg_{i}" for i in range(1, 4)]
+    for did in ids:
+        r = await client.post("/v1/daily-diaries", json={**DAILY, "diary_id": did})
+        assert r.status_code == 201, r.text
+    await app.state.rt.worker.drain()
+
+    page1 = (await client.get("/v1/daily-diaries", params={"limit": 2})).json()
+    assert [i["diary_id"] for i in page1["items"]] == ["daily_pg_3", "daily_pg_2"]
+    assert page1["next_cursor"]
+
+    page2 = (await client.get("/v1/daily-diaries", params={"limit": 2, "cursor": page1["next_cursor"]})).json()
+    assert [i["diary_id"] for i in page2["items"]] == ["daily_pg_1"]
+    assert page2["next_cursor"] is None
+
+    seen = [i["diary_id"] for i in page1["items"] + page2["items"]]
+    assert sorted(seen) == sorted(ids) and len(seen) == len(set(seen))
+
+    r = await client.get("/v1/daily-diaries", params={"cursor": "not-a-cursor"})
+    assert r.status_code == 422 and r.json()["detail"]["code"] == "INVALID_CURSOR"
