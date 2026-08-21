@@ -16,6 +16,9 @@
 - LLM 기본은 Gemini(Vertex AI, `LLM_PROVIDER=gemini / LLM_MODEL=gemini-3.5-flash / GCP_PROJECT_ID=jinong-lab-llm / GCP_LOCATION=global / GEMINI_THINKING_LEVEL=low`). 인증은 서비스 계정 키 — 서버 `/home/ubuntu/dev/deploy_setting_files/jinong_vertexai_service_key.json` 을 compose 가 `/app/auth/jinong_vertexai_service_key.json` 로 read-only 마운트(`GOOGLE_APPLICATION_CREDENTIALS`). hatchery_serving 과 같은 키·프로젝트. 이전 OpenAI(`gpt-4.1`) 는 `LLM_PROVIDER=openai` + `LLM_BASE_URL/LLM_API_KEY` 로 복귀 가능.
 - 동의서 §7 충족을 위해 vLLM 기동 후 `.env` 의 `LLM_PROVIDER=jinong / LLM_BASE_URL=https://jinong-stt.jinongservice.co.kr/v1 / LLM_API_KEY=<STT_API_KEY 와 동일 게이트웨이 키> / LLM_MODEL=exaone45` 로 전환 후 `docker compose up -d`.
 - 자격증명 메모: AWS 키는 audio-labeler 워커와 같은 IAM 사용자(정적 키)를 재사용 — 전용 IAM 사용자로 분리 권장. Vertex SA 키·프로젝트(jinong-lab-llm)는 hatchery_serving 과 공용, OpenAI 키는 briefing_serving 과 공용.
+- 2026-08-21 날짜별(멀티콜) 영농일지 `/v1/daily-diaries` 추가(커밋 `a376d8a`) — 신규 env 없음, DB 는 기동 시
+  `create_all` 로 테이블 자동 생성. **서버에는 아직 미배포** — 다음 `./deploy/deploy.sh` 때 함께 나가고,
+  배포 후 아래 §3 의 daily 스모크로 검증할 것.
 
 ## 1. 최초 1회
 
@@ -42,6 +45,14 @@ AGENT_API_KEY=… ./scripts/smoke_remote.sh jinong-agri-stt raw/<sample>.wav   #
 aws s3 ls s3://jinong-agri-stt/agents/voicecall/<call_id>/ --recursive
 ```
 
+날짜별(멀티콜) 영농일지 스모크 — 위 플로우로 **terminal 된 call_id** 들을 넘긴다:
+
+```bash
+AGENT_URL=https://jinong-stt-report-generation.jinongservice.co.kr AGENT_API_KEY=… FARM_TOKEN=… \
+  ./scripts/daily_flow.sh <call_id_1> [call_id_2 ...]           # 트리거 → 폴링 → 작물별 일지 md 출력
+aws s3 ls s3://jinong-agri-stt/agents/voicecall/daily/<diary_id>/ --recursive
+```
+
 ## 4. 로컬
 
 ```bash
@@ -49,6 +60,7 @@ uv venv --python 3.12 .venv && source .venv/bin/activate && uv pip install -r re
 pytest -q
 ./scripts/run_local.sh                       # fake 파이프라인, 무인증, :7003
 ./scripts/curl_flow.sh jinong-agri-stt raw/<sample>.wav   # AWS 자격증명 + STT_API_KEY 필요
+./scripts/daily_flow.sh <call_id_1> <call_id_2>           # 위 플로우로 terminal 된 call 들을 날짜별 일지로 집계
 docker compose up --build                    # 컨테이너 검증(.env 필요)
 ```
 
@@ -84,3 +96,7 @@ find ./data/storage/agents/voicecall -type f
 | `status` 가 계속 `PROCESSING` | `GET /v1/calls/{id}` 의 `audio[].last_error`, `job_events`(sqlite `/data/agent.db`) — STT 429/5xx 재시도 중이거나 게이트웨이 다운. 1h 후 deadline 스윕이 부분 생성 |
 | `FAILED/GENERATION_FAILED` | LLM 키/모델/도달성(`/v1/upstream/health` llm — gemini 는 SA 키 파일·토큰 발급·publisher model 조회), `docker compose logs agent` 의 트레이스백 → `POST …/regenerate` |
 | S3 422 | 호출자 버킷 권한(IAM 사용자에 해당 버킷 read) |
+| daily 트리거 `409 CALLS_NOT_READY` | 멤버 call 이 아직 terminal 아님(또는 `FAILED` 포함) — call 들이 `COMPLETED`/`EMPTY` 될 때까지 대기, `FAILED` 는 먼저 call `/regenerate` |
+| daily 트리거 `422 NO_TRANSCRIBED_CALLS` / `FARM_MISMATCH` | `COMPLETED` call 0건 / call 들의 `farm.farm_id` 상이 — call_ids 구성 재확인 |
+| daily 재생성에 farmos 조회가 빠짐 | 토큰은 terminal 마다 purge — `/regenerate` body 에 새 `farm_access_token` 을 매번 포함해야 함 |
+| daily 산출물 확인 | `GET /v1/daily-diaries/{id}` 또는 `aws s3 ls s3://jinong-agri-stt/agents/voicecall/daily/<diary_id>/ --recursive` |

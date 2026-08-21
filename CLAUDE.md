@@ -47,8 +47,8 @@ app/agents/           LangGraph pipeline: interface.py (contract), fake.py, grap
 app/schemas/          calls (API), daily (daily-diaries API), transcript (MergedTranscript), pipeline (CallContext/PipelineResult contract)
 tests/                pytest-asyncio + respx (STT/farmos) + moto (S3), FakePipeline; tests/agents/ for the pipeline
 deploy/               deploy.sh (rsync + remote compose), nginx vhost, letsencrypt cert/renew
-docs/                 api-reference.md (contract), architecture.md, ops.md (runbook)
-scripts/              run_local.sh, curl_flow.sh, smoke_remote.sh
+docs/                 api-reference.md (contract), architecture.md, ops.md (runbook), integration-briefing.md (내부), integration-handoff.md (백엔드 전달용)
+scripts/              run_local.sh, curl_flow.sh, daily_flow.sh (날짜별 일지 스모크), smoke_remote.sh
 ```
 
 ## Run / test / deploy
@@ -65,5 +65,7 @@ python -m app.agents.run --transcript tests/agents/fixtures/calls/<fixture>.json
 ## Contract pointers
 
 - External API: `docs/api-reference.md` (start → audio(S3 ref) → end → GET; statuses NONE/PROCESSING/COMPLETED/EMPTY/FAILED).
+  날짜별 멀티콜 집계 `/v1/daily-diaries` (backend-triggered, terminal call_ids → 병합 일지, report 없음) 포함.
+  Backend-facing spec: `docs/integration-handoff.md` §3.7.
 - Gateway STT contract: `jinong_ai-gateway/docs/api-reference.md` (diarized response = array of chunks; speaker letters per request; 429/413/415/502).
 - Worker/state machine: `docs/architecture.md`.

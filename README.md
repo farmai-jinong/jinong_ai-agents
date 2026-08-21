@@ -9,6 +9,7 @@
 2. `POST /v1/calls/{call_id}/audio` — 녹음파일 수신(S3 bucket/key, 통화당 여러 개) → 즉시 게이트웨이 화자분리 STT
 3. `POST /v1/calls/{call_id}/end` — 전화 종료 → 202, 전사가 모두 모이면 백그라운드 생성
 4. `GET /v1/calls/{call_id}` — 상태(`PROCESSING|COMPLETED|EMPTY|FAILED`) 와 결과: 작물별 `{prdlst_code, prdlst_nm, markdown, structured(prefill), s3_key}` + 보고서
+5. (선택) `POST /v1/daily-diaries` — 하루 통화가 여러 건이면 terminal 된 call_id 목록으로 **날짜별 영농일지**(멀티콜 병합, 일지만·보고서 없음)를 트리거 → `GET /v1/daily-diaries/{diary_id}`
 
 자세한 계약은 `docs/api-reference.md`, 구조는 `docs/architecture.md`, 배포는 `docs/ops.md`.
 
@@ -40,3 +41,4 @@ STORAGE_IMPL=local ./scripts/run_local.sh
 - 상태 어휘는 앱(`sttStatus`)과 동일: `NONE / PROCESSING / COMPLETED / EMPTY / FAILED`. 같은 `call_id`·같은 오디오 재전송은 멱등.
 - LLM 은 env 로 provider 전환: `gemini`(Vertex AI `gemini-3.5-flash`, 서비스 계정 키 — 현재 기본) / `openai` / `jinong`(게이트웨이 vLLM, EXAONE). gemini·openai 는 외부 처리라 동의서 §7(외부 위탁 없음) 충족은 게이트웨이(jinong) 전환이 최종 목표.
 - 에이전트는 farmos 에 쓰지 않는다. 영농일지는 앱의 5개 블록(주요 농작업·기타 기록사항·병해충·방제이력·사진)에 맞춰 markdown + `PutDiaryDTO` 형태 prefill 로 돌려주고, 농가가 앱에서 확인 후 저장한다.
+- 날짜별 일지는 별도 리소스(`/v1/daily-diaries`, `diary_id` 멱등 키)로, 백엔드가 명시적으로 트리거한다. 통화 전사를 시간순으로 병합해 같은 파이프라인을 1회 실행하고 보고서 노드는 스킵한다.

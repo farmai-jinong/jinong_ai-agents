@@ -2,6 +2,8 @@
 
 > 팜스올 보이스톡 백엔드(kafka-gateway) → 지농 AI Agent(⑧) 연동 문서.
 > 통화 이벤트를 보내주시면, 통화 녹음을 전사해 **작물별 영농일지 초안 + 컨설팅 보고서 초안**을 생성해 돌려드립니다.
+> 하루에 통화가 여러 건이면, 통화들이 끝난 뒤 **날짜별 영농일지**(여러 통화를 합쳐 하나의 일지)를 별도로
+> 트리거하실 수 있습니다(§3.7).
 
 ## 1. 접속 정보 · 인증
 
@@ -32,6 +34,18 @@
 - 모든 이벤트는 즉시 응답(200/201/202)하고 처리는 백그라운드로 진행됩니다.
 - **이벤트 순서가 꼬여도 전송을 포기하지 마세요.** `audio`가 `start`보다 먼저 도착하면 통화를 자동
   생성합니다(404 아님). 다만 그 통화에는 참가자·JWT가 없으므로 `start` 이벤트도 반드시 보내주세요.
+
+**날짜별 영농일지 (선택 — 하루 통화가 여러 건일 때)**:
+
+```
+(6) 그날의 통화들이 모두 terminal(COMPLETED/EMPTY)이 된 뒤
+    POST /v1/daily-diaries              diary_id + diary_date + call_ids[] + 농가 JWT
+(7) 콜백 수신  또는  GET /v1/daily-diaries/{diary_id}?inline=false 폴링
+(8) GET /v1/daily-diaries/{diary_id} 로 작물별 일지 조회
+```
+
+- 트리거 주체는 백엔드입니다(예: 하루 마감 배치, 또는 마지막 통화 terminal 콜백 수신 시).
+- 통화별 산출물과 **별도 리소스로 공존**합니다 — 통화별 플로우(1)~(5)는 그대로 유지됩니다.
 
 ## 3. 엔드포인트 명세
 
@@ -211,6 +225,70 @@ Body 선택: `{"retranscribe": false, "reason": "..."}`.
 | GET | `/v1/calls?status=&state=&limit=50&cursor=` | 운영/디버그용 목록 |
 | GET | `/healthz` | 무인증 헬스체크 `{status, version, worker: {...}}` |
 
+목록의 `next_cursor`는 **불투명 토큰**입니다(내용을 해석하지 마시고 그대로 되돌려 주세요). 정렬은 최신
+생성순이며, `next_cursor`가 `null`이면 마지막 페이지입니다.
+
+### 3.7 `POST /v1/daily-diaries` — 날짜별(멀티콜) 영농일지 트리거
+
+특정 날짜의 통화 여러 건을 합쳐 **하나의 날짜별 영농일지(작물별)** 를 생성합니다. 산출물은 일지뿐이며
+**컨설팅 보고서는 없습니다**(보고서는 통화 단위 유지).
+
+```json
+{
+  "diary_id": "daily_u123_20260819",
+  "diary_date": "2026-08-19",
+  "call_ids": ["20260819_Qmf1D0X", "20260819_Rx2kP9Y"],
+  "farm_access_token": "<농가 JWT>",
+  "callback_url": "https://<backend>/agent-callback",
+  "language": "ko",
+  "metadata": {"hints": {"prdlst_code": "0804MM"}}
+}
+```
+
+| 필드 | 타입 | 필수 | 설명 |
+|---|---|---|---|
+| `diary_id` | string | **필수** | `[A-Za-z0-9_.:-]{1,128}`. **멱등성 키** — 백엔드가 farmer/날짜에서 결정적으로 생성해 주세요(예: `daily_{farmerId}_{yyyyMMdd}`). 재전송이 안전해집니다 |
+| `diary_date` | string | **필수** | `yyyy-MM-dd`. 산출물 일지의 날짜는 이 값으로 고정됩니다 |
+| `call_ids` | array 1..50 | **필수** | 합칠 통화들. 중복 불가. **전부 terminal(`COMPLETED`/`EMPTY`)이어야 하고 1건 이상 `COMPLETED`여야 합니다.** 같은 농가의 통화만 묶는 것은 백엔드 책임입니다 |
+| `farm_access_token` | string | 선택 | **매 트리거·재생성마다 새로 보내주세요** — 통화 때 받은 JWT는 통화 terminal 시 저희 DB에서 삭제되어 재사용되지 않습니다. 생략하면 farmos 조회 없이 전사+힌트만으로 생성합니다. 이 토큰도 daily terminal 시 삭제됩니다 |
+| `callback_url` / `language` / `metadata` | – | 선택 | §3.1과 동일한 의미(`metadata.hints` 포함) |
+
+**응답**: `201`(신규 — 생성 큐잉) / `200`(같은 `diary_id` 재-POST — 진행 중이면 `note: "already
+processing"`, terminal이면 `note`에 regenerate 안내). 본문은 `DailyDiaryDetail`(§3.8). 재-POST는
+재생성을 일으키지 않습니다 — 다시 만들려면 `/regenerate`를 호출하세요.
+
+**동기 검증 실패**:
+
+| HTTP | code | 조건 |
+|---|---|---|
+| 422 | `CALLS_NOT_FOUND` | 존재하지 않는 call 포함 |
+| 409 | `CALLS_NOT_READY` | terminal이 아닌(`NONE`/`PROCESSING`) 또는 `FAILED` call 포함 — `FAILED`는 먼저 해당 통화를 `/regenerate` 하세요 |
+| 422 | `NO_TRANSCRIBED_CALLS` | `COMPLETED` call이 하나도 없음 |
+| 422 | `FARM_MISMATCH` | call들의 `farm.farm_id`가 서로 다름 |
+
+**병합 방식**: 통화를 `started_at` 순으로 이어붙입니다. 병합 전사의 시간축은 각 통화 길이의
+누적이며 **통화 사이 실제 공백은 표현되지 않습니다.** 전사의 `files[].call_id`로 원본 통화를 식별할 수
+있습니다.
+
+### 3.8 날짜별 일지 — 조회 · 산출물 · 재생성
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| GET | `/v1/daily-diaries/{diary_id}?inline=false` | 상태/결과 폴링 (§3.5와 같은 요령) |
+| GET | `/v1/daily-diaries/{diary_id}/transcript` | 병합 전사 JSON. 미준비 시 `404 NOT_READY` |
+| GET | `/v1/daily-diaries/{diary_id}/artifacts/diary/{prdlst_code}?format=md\|json` | 작물별 일지 (미확정 작물은 `unresolved`) |
+| GET | `/v1/daily-diaries?diary_date=&status=&limit=50&cursor=` | 목록 (커서 규칙은 §3.6과 동일) |
+| POST | `/v1/daily-diaries/{diary_id}/regenerate` | `{"farm_access_token": "<새 JWT>", "reason": "..."}` → `202` |
+
+- 응답 `DailyDiaryDetail`은 `CallDetail`(§3.5)과 유사하되 `call_ids`/`diary_date`가 추가되고,
+  `result`에 **`report`가 없습니다**(`diaries`만). `status`/`generation` 어휘는 통화와 동일합니다.
+- 미존재: `404 DAILY_NOT_FOUND`.
+- **재생성**: 진행 중이면 `409 ALREADY_PROCESSING`. farmos 조회를 포함하려면 body에 새
+  `farm_access_token`을 함께 보내주세요(통화의 §3.4와 달리 **한 번의 호출**로 됩니다). 산출물은 같은
+  S3 키에 덮어쓰기되고 `generation.run`이 +1 됩니다.
+- 멤버 통화가 나중에 재생성되어 내용이 바뀌었어도 daily가 자동 갱신되지는 않습니다 — daily
+  `/regenerate`를 호출하시면 그 시점의 전사로 다시 병합·생성합니다.
+
 ## 4. 상태 라이프사이클
 
 | 필드 | 값 | 의미 |
@@ -235,6 +313,16 @@ terminal 사유 (`status` + `error.code`):
   이때 개별 오디오의 `last_error`에 `STT_TIMEOUT` 등이 기록될 수 있습니다.
 - `/end` 후 1시간이 지나도 안 끝난 STT는 해당 오디오만 `FAILED(STT_TIMEOUT)` 처리하고 부분 생성합니다.
 - 저희 서버가 재시작되어도 진행 중이던 작업은 자동 복구됩니다 — 백엔드 측 조치 불필요.
+
+**날짜별 일지(`/v1/daily-diaries`)의 라이프사이클**은 통화와 같은 어휘를 씁니다. `state`는 없고
+(`/end`가 없으므로), `status`는 트리거 즉시 `PROCESSING`으로 시작해 terminal로 갑니다:
+
+| status | error.code | 조건 |
+|---|---|---|
+| `EMPTY` | `NO_TRANSCRIPT` | 멤버 통화들에 전사된 오디오가 하나도 없음 |
+| `EMPTY` | `NO_CONTENT` | 병합 전사에서 추출할 내용 없음 |
+| `FAILED` | `GENERATION_FAILED` | 생성 재시도 소진 |
+| `COMPLETED` | `null` | 성공 |
 
 ## 5. 콜백 (terminal 알림, 선택)
 
@@ -262,6 +350,23 @@ terminal 사유 (`status` + `error.code`):
   콜백 유실 대비로 폴링을 안전망으로 두는 것을 권장합니다. 콜백 성공/실패는 `CallDetail.callback_status`
   (`SENT`/`FAILED`)로 확인할 수 있으며, 콜백 실패가 통화 상태에 영향을 주지는 않습니다.
 
+**날짜별 일지 콜백**: 전송 규칙(재시도·헤더·at-least-once)은 동일하고, `callback_url`은
+`POST /v1/daily-diaries` body로 등록합니다. 페이로드는 `call_id` 대신 아래 형태입니다 — 수신 라우팅 시
+`daily_diary_id` 필드의 존재로 통화 콜백과 구분하시고, 중복 제거는 `(daily_diary_id, generation_run)`
+기준으로 해주세요:
+
+```json
+{
+  "daily_diary_id": "daily_u123_20260819",
+  "diary_date": "2026-08-19",
+  "status": "COMPLETED",
+  "error": null,
+  "call_ids": ["20260819_Qmf1D0X", "20260819_Rx2kP9Y"],
+  "result_url": "https://jinong-stt-report-generation.jinongservice.co.kr/v1/daily-diaries/daily_u123_20260819",
+  "generation_run": 1
+}
+```
+
 ## 6. S3 규약 (백엔드 준비 사항)
 
 **입력(녹음)** — 백엔드 버킷:
@@ -280,6 +385,11 @@ agents/voicecall/{call_id}/transcript/merged.json | .md     병합 전사
 agents/voicecall/{call_id}/artifacts/diary/{prdlst_code}.md | .json   (미확정: unresolved.*)
 agents/voicecall/{call_id}/artifacts/report.md | .json
 agents/voicecall/{call_id}/artifacts/result.json            전체 스냅샷 (generation_run 포함)
+
+agents/voicecall/daily/{diary_id}/daily.json                트리거 스냅샷
+agents/voicecall/daily/{diary_id}/transcript/merged.json | .md        멀티콜 병합 전사
+agents/voicecall/daily/{diary_id}/artifacts/diary/{prdlst_code}.md | .json
+agents/voicecall/daily/{diary_id}/artifacts/result.json     (report 없음)
 ```
 
 - API 응답의 `s3_key_md` / `s3_key_json` / `transcript_key` / `result_key`는 **이 버킷
@@ -305,9 +415,15 @@ agents/voicecall/{call_id}/artifacts/result.json            전체 스냅샷 (ge
 |---|---|---|
 | 401 | – (`detail` 문자열) | API 키 없음/불일치 |
 | 404 | `CALL_NOT_FOUND` | 미존재 통화 |
+| 404 | `DAILY_NOT_FOUND` | 미존재 날짜별 일지 |
 | 404 | `NOT_READY` | 전사/산출물 아직 미생성 |
 | 409 | `CALL_NOT_ENDED` | `/end` 전에 `/regenerate` 호출 |
-| 409 | `ALREADY_PROCESSING` | 생성/전사 진행 중 `/regenerate` 호출 |
+| 409 | `ALREADY_PROCESSING` | 생성/전사 진행 중 `/regenerate` 또는 daily 트리거 |
+| 409 | `CALLS_NOT_READY` | daily 트리거의 `call_ids`에 terminal 아닌/`FAILED` 통화 포함 (§3.7) |
+| 422 | `CALLS_NOT_FOUND` | daily 트리거의 `call_ids`에 미존재 통화 포함 |
+| 422 | `NO_TRANSCRIBED_CALLS` | daily 트리거에 `COMPLETED` 통화가 하나도 없음 |
+| 422 | `FARM_MISMATCH` | daily 트리거의 통화들이 서로 다른 농장 소속 |
+| 422 | `INVALID_CURSOR` | 목록 `cursor` 형식 오류 (§3.6 — `next_cursor`를 그대로 사용하세요) |
 | 422 | `S3_OBJECT_NOT_FOUND` | 녹음 객체 없음 |
 | 422 | `S3_ACCESS_DENIED` | 녹음 읽기 권한 없음 (§6) |
 | 422 | `AUDIO_TOO_LARGE` | 200MB 초과 |
@@ -340,6 +456,16 @@ curl "$B/v1/calls/c1?inline=false" -H "Authorization: Bearer $K"
 # 5) 결과
 curl "$B/v1/calls/c1" -H "Authorization: Bearer $K"
 curl "$B/v1/calls/c1/artifacts/report" -H "Authorization: Bearer $K"
+
+# 6) 날짜별 일지 트리거 (그날 통화 c1, c2 가 모두 terminal 이 된 뒤)
+curl -X POST $B/v1/daily-diaries -H "Authorization: Bearer $K" -H 'Content-Type: application/json' -d '{
+  "diary_id": "daily_u1_20260819", "diary_date": "2026-08-19",
+  "call_ids": ["c1", "c2"], "farm_access_token": "<새 JWT>",
+  "callback_url": "https://<backend>/agent-callback"}'
+
+# 7) 폴링 → 결과
+curl "$B/v1/daily-diaries/daily_u1_20260819?inline=false" -H "Authorization: Bearer $K"
+curl "$B/v1/daily-diaries/daily_u1_20260819" -H "Authorization: Bearer $K"
 ```
 
 ## 10. 연동 전 체크리스트
@@ -351,3 +477,11 @@ curl "$B/v1/calls/c1/artifacts/report" -H "Authorization: Bearer $K"
 - [ ] 콜백 수신 시 `(call_id, generation_run)` 기준 중복 제거 구현
 - [ ] 에러 파서: `detail` 문자열(401) / 객체(도메인) / 리스트(422 검증) 모두 처리
 - [ ] terminal 후 추가 오디오 발생 시 `/regenerate` 호출 로직 (JWT 재전송 순서 §3.4 준수)
+
+날짜별 일지(§3.7)를 쓰시는 경우 추가로:
+
+- [ ] `diary_id` 결정론적 생성 규칙 확정 (권장: `daily_{farmerId}_{yyyyMMdd}`)
+- [ ] 트리거 시점 결정: 하루 마감 배치 또는 마지막 통화 terminal 콜백 수신 시
+- [ ] **트리거·재생성마다 새 농가 JWT 첨부** (통화 때 보낸 토큰은 재사용되지 않음)
+- [ ] 멤버 통화 전부 terminal 확인 후 트리거 (`CALLS_NOT_READY` 시 재시도/지연 처리)
+- [ ] daily 콜백 수신 라우팅: `daily_diary_id` 필드로 구분, `(daily_diary_id, generation_run)` 중복 제거

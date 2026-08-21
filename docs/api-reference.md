@@ -104,8 +104,12 @@ Body(선택) `{"ended_at": "...", "duration_sec": 900}` → `202` (`state=ENDED,
 | GET | `/v1/calls/{id}/artifacts/diary/{prdlst_code}[?format=json]` | 작물별 영농일지 md / JSON (`unresolved` 가능) |
 | GET | `/v1/calls?status=&state=&limit=50&cursor=` | 운영용 목록 `{items:[{call_id,state,status,updated_at,stt_progress}], next_cursor}` |
 | POST | `/v1/calls/{id}/regenerate` | `{"retranscribe": false, "reason": "…"}` → `202`. `409 CALL_NOT_ENDED` / `409 ALREADY_PROCESSING`. 산출물 같은 S3 키에 덮어쓰기, `generation.run` +1 |
-| GET | `/healthz` | 무인증 `{status, version, worker:{running,pending_stt,pending_gen}}` |
+| GET | `/healthz` | 무인증 `{status, version, worker:{running,pending_stt,pending_gen,pending_daily}}` |
 | GET | `/v1/upstream/health` | STT / LLM(openai·jinong: `/models`, gemini: Vertex publisher model 조회) / S3(head_bucket) / farmos 도달성 |
+
+목록 커서(`/v1/calls` · `/v1/daily-diaries` 공통): 최신 생성순(`created_at DESC, id DESC`) keyset.
+`next_cursor` 는 **불투명 토큰** — 그대로 `cursor=` 로 되돌리면 다음 페이지, `null` 이면 마지막.
+형식이 깨진 커서는 `422 INVALID_CURSOR`.
 
 ## 날짜별 영농일지 `/v1/daily-diaries` (멀티콜 집계)
 
