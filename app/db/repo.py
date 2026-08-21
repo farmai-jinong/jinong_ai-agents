@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import Artifact, Call, CallAudio, JobEvent, utcnow
+from .models import Artifact, Call, CallAudio, DailyArtifact, DailyDiary, JobEvent, utcnow
 
 ACTIVE_AUDIO = ("PENDING", "TRANSCRIBING")
 TERMINAL_STATUSES = ("COMPLETED", "EMPTY", "FAILED")
@@ -77,7 +77,14 @@ async def count_pending(s: AsyncSession) -> dict[str, int]:
                            .where(CallAudio.status.in_(ACTIVE_AUDIO)))).scalar_one()
     gen = (await s.execute(select(func.count()).select_from(Call)
                            .where(Call.gen_state.in_(("QUEUED", "RUNNING"))))).scalar_one()
-    return {"pending_stt": int(stt), "pending_gen": int(gen)}
+    daily = (await s.execute(select(func.count()).select_from(DailyDiary)
+                             .where(DailyDiary.gen_state.in_(("QUEUED", "RUNNING"))))).scalar_one()
+    return {"pending_stt": int(stt), "pending_gen": int(gen), "pending_daily": int(daily)}
+
+
+async def get_calls_by_ids(s: AsyncSession, call_ids: Sequence[str]) -> list[Call]:
+    q = select(Call).where(Call.call_id.in_(list(call_ids)))
+    return list((await s.execute(q)).scalars().all())
 
 
 # --- audio -----------------------------------------------------------------
@@ -159,6 +166,63 @@ async def get_artifact(s: AsyncSession, call_id: str, kind: str, prdlst_code: st
     return (await s.execute(q)).scalar_one_or_none()
 
 
+# --- daily diaries ---------------------------------------------------------
+
+async def get_daily(s: AsyncSession, diary_id: str) -> DailyDiary | None:
+    return await s.get(DailyDiary, diary_id)
+
+
+async def list_daily(s: AsyncSession, *, diary_date: str | None = None, status: str | None = None,
+                     limit: int = 50, cursor: str | None = None) -> list[DailyDiary]:
+    q = select(DailyDiary).order_by(DailyDiary.updated_at.desc(), DailyDiary.diary_id.desc()).limit(limit)
+    if diary_date:
+        q = q.where(DailyDiary.diary_date == diary_date)
+    if status:
+        q = q.where(DailyDiary.status == status)
+    if cursor:
+        q = q.where(DailyDiary.diary_id < cursor)
+    return list((await s.execute(q)).scalars().all())
+
+
+async def claim_daily_generation(s: AsyncSession, limit: int) -> list[str]:
+    """claim_generation 미러 — daily_diaries.gen_state QUEUED → RUNNING."""
+    now = utcnow()
+    q = (
+        select(DailyDiary.diary_id)
+        .where(DailyDiary.gen_state == "QUEUED",
+               or_(DailyDiary.gen_next_attempt_at.is_(None), DailyDiary.gen_next_attempt_at <= now))
+        .order_by(DailyDiary.updated_at.asc())
+        .limit(limit)
+    )
+    ids = list((await s.execute(q)).scalars().all())
+    claimed: list[str] = []
+    for did in ids:
+        res = await s.execute(
+            update(DailyDiary).where(DailyDiary.diary_id == did, DailyDiary.gen_state == "QUEUED")
+            .values(gen_state="RUNNING", generation_started_at=now, updated_at=now)
+        )
+        if res.rowcount:
+            claimed.append(did)
+    return claimed
+
+
+async def replace_daily_artifacts(s: AsyncSession, diary_id: str, items: list[DailyArtifact]) -> None:
+    await s.execute(delete(DailyArtifact).where(DailyArtifact.diary_id == diary_id))
+    for a in items:
+        s.add(a)
+
+
+async def list_daily_artifacts(s: AsyncSession, diary_id: str) -> list[DailyArtifact]:
+    q = select(DailyArtifact).where(DailyArtifact.diary_id == diary_id).order_by(DailyArtifact.id)
+    return list((await s.execute(q)).scalars().all())
+
+
+async def get_daily_artifact(s: AsyncSession, diary_id: str, kind: str, prdlst_code: str = "") -> DailyArtifact | None:
+    q = select(DailyArtifact).where(DailyArtifact.diary_id == diary_id, DailyArtifact.kind == kind,
+                                    DailyArtifact.prdlst_code == prdlst_code)
+    return (await s.execute(q)).scalar_one_or_none()
+
+
 # --- recovery / sweeps -----------------------------------------------------
 
 async def recover_inflight(s: AsyncSession) -> dict[str, int]:
@@ -167,7 +231,9 @@ async def recover_inflight(s: AsyncSession) -> dict[str, int]:
                          .values(status="PENDING", next_attempt_at=now, claimed_at=None, updated_at=now))
     r2 = await s.execute(update(Call).where(Call.gen_state == "RUNNING")
                          .values(gen_state="QUEUED", gen_next_attempt_at=None, updated_at=now))
-    return {"audio_reset": r1.rowcount or 0, "gen_reset": r2.rowcount or 0}
+    r3 = await s.execute(update(DailyDiary).where(DailyDiary.gen_state == "RUNNING")
+                         .values(gen_state="QUEUED", gen_next_attempt_at=None, updated_at=now))
+    return {"audio_reset": r1.rowcount or 0, "gen_reset": r2.rowcount or 0, "daily_reset": r3.rowcount or 0}
 
 
 async def ended_call_ids(s: AsyncSession) -> list[str]:

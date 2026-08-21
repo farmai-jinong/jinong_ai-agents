@@ -71,6 +71,28 @@ class Keys:
     def result_json(self, call_id: str) -> str:
         return f"{self.base(call_id)}/artifacts/result.json"
 
+    # --- 날짜별(멀티콜) 영농일지 — `daily/` 하위로 분리해 call_id 네임스페이스와 충돌 차단 ----
+    def daily_base(self, diary_id: str) -> str:
+        return f"{self.prefix}/daily/{diary_id}"
+
+    def daily_meta_json(self, diary_id: str) -> str:
+        return f"{self.daily_base(diary_id)}/daily.json"
+
+    def daily_transcript_json(self, diary_id: str) -> str:
+        return f"{self.daily_base(diary_id)}/transcript/merged.json"
+
+    def daily_transcript_md(self, diary_id: str) -> str:
+        return f"{self.daily_base(diary_id)}/transcript/merged.md"
+
+    def daily_diary_md(self, diary_id: str, prdlst_code: str) -> str:
+        return f"{self.daily_base(diary_id)}/artifacts/diary/{prdlst_code}.md"
+
+    def daily_diary_json(self, diary_id: str, prdlst_code: str) -> str:
+        return f"{self.daily_base(diary_id)}/artifacts/diary/{prdlst_code}.json"
+
+    def daily_result_json(self, diary_id: str) -> str:
+        return f"{self.daily_base(diary_id)}/artifacts/result.json"
+
 
 class S3Client:
     def __init__(self, settings: Settings) -> None:

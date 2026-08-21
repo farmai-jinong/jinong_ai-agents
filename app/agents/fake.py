@@ -12,7 +12,7 @@ class FakePipeline:
         if transcript.is_empty:
             raise PipelineEmpty("no speech")
         date = (ctx.started_at or ctx.ended_at)
-        diary_date = date.date().isoformat() if date else "1970-01-01"
+        diary_date = ctx.hints.diary_date or (date.date().isoformat() if date else "1970-01-01")
         code = ctx.hints.prdlst_code or "0000MM"
         name = ctx.hints.prdlst_nm or "미확정작물"
         lines = "\n".join(f"- [{s.speaker_key}] {s.text}" for s in transcript.segments[:20])

@@ -45,3 +45,50 @@ def test_recorded_at_ordering_and_failed_file():
 def test_empty():
     t = merge_transcripts("c", [_audio(1, segs=[{"speaker": "A", "start": 0, "end": 1, "text": "   "}])])
     assert t.is_empty
+
+
+# --- merge_calls (날짜별 멀티콜 병합) ---------------------------------------
+
+from app.db.models import Call  # noqa: E402
+from app.services.transcripts import merge_calls  # noqa: E402
+
+
+def _call(cid, started_at=None):
+    return Call(call_id=cid, s3_prefix=f"agents/voicecall/{cid}", started_at=started_at)
+
+
+def test_merge_calls_rebase_and_order():
+    c1 = _call("c1", datetime(2026, 8, 20, 1, 0, tzinfo=UTC))
+    c2 = _call("c2", datetime(2026, 8, 20, 3, 0, tzinfo=UTC))
+    a1 = _audio(1, seq=1, stt_seconds=60)
+    a2 = _audio(2, seq=1, stt_seconds=30)
+    a3 = _audio(3, seq=2, stt_seconds=30)
+    t = merge_calls("d1", [(c2, [a2, a3]), (c1, [a1])])   # 입력 순서 무관 — started_at 정렬
+    assert t.call_id == "d1"
+    assert [f.call_id for f in t.files] == ["c1", "c2", "c2"]
+    assert [f.file_index for f in t.files] == [0, 1, 2]            # 전역 리베이스
+    assert [f.offset_sec for f in t.files] == [0.0, 60.0, 90.0]
+    assert t.total_duration_sec == 120.0
+    # speaker_key 도 전역 file_index 네임스페이스 → 통화 간 충돌 없음
+    assert t.speakers == ["f0:A", "f0:B", "f1:A", "f1:B", "f2:A", "f2:B"]
+    # c2 첫 세그먼트의 abs 시간은 c1 길이(60s)만큼 밀림
+    seg_c2 = next(s for s in t.segments if s.file_index == 1)
+    assert seg_c2.abs_start == 60.0 and seg_c2.speaker_key == "f1:A"
+    assert "[00:01:00] [f1:A] 안녕" in t.text
+
+
+def test_merge_calls_null_started_at_last():
+    c1 = _call("c1", datetime(2026, 8, 20, 1, 0, tzinfo=UTC))
+    c0 = _call("c0", None)                                          # started_at 없음 → 뒤로
+    t = merge_calls("d2", [(c0, [_audio(1, stt_seconds=5)]), (c1, [_audio(2, stt_seconds=5)])])
+    assert [f.call_id for f in t.files] == ["c1", "c0"]
+
+
+def test_merge_calls_single_call_equals_merge_transcripts():
+    c1 = _call("c1", datetime(2026, 8, 20, 1, 0, tzinfo=UTC))
+    audios = [_audio(1, seq=1, stt_seconds=60), _audio(2, seq=2, stt_seconds=30)]
+    single = merge_transcripts("c1", audios)
+    combined = merge_calls("d3", [(c1, audios)])
+    assert [s.model_dump(exclude={"seg_id"}) for s in combined.segments] == \
+           [s.model_dump(exclude={"seg_id"}) for s in single.segments]
+    assert combined.total_duration_sec == single.total_duration_sec

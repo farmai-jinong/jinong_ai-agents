@@ -15,7 +15,7 @@ from fastapi import FastAPI
 from . import __version__
 from .config import Settings, get_settings
 from .errors import install_error_handlers
-from .routes import calls, health
+from .routes import calls, daily, health
 from .runtime import Runtime
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -47,6 +47,7 @@ def create_app(settings: Settings | None = None, *, pipeline: "DiaryReportPipeli
     install_error_handlers(app)
     app.include_router(health.router)
     app.include_router(calls.router)
+    app.include_router(daily.router)
     return app
 
 

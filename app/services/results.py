@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import repo
-from ..db.models import Call, CallAudio
+from ..db.models import Call, CallAudio, DailyDiary
 from ..schemas.calls import (
     AudioAck,
     AudioView,
@@ -17,8 +17,9 @@ from ..schemas.calls import (
     GenerationView,
     SttProgress,
 )
+from ..schemas.daily import DailyDiaryDetail, DailyDiaryListItem
 from ..schemas.pipeline import Participant
-from .artifacts import build_result_view
+from .artifacts import build_daily_result_view, build_result_view
 
 
 def utc(dt: datetime | None) -> datetime | None:
@@ -76,3 +77,26 @@ async def audio_ack(s: AsyncSession, call: Call, a: CallAudio, note: str | None)
 def list_item(call: Call) -> CallListItem:
     return CallListItem(call_id=call.call_id, state=call.state, status=call.status, updated_at=utc(call.updated_at),
                         stt_progress=progress_of(list(call.audio)))
+
+
+async def daily_detail(s: AsyncSession, dd: DailyDiary, *, inline: bool = True,
+                       note: str | None = None) -> DailyDiaryDetail:
+    artifacts = await repo.list_daily_artifacts(s, dd.diary_id)
+    return DailyDiaryDetail(
+        diary_id=dd.diary_id, diary_date=dd.diary_date, status=dd.status,
+        call_ids=list(dd.call_ids_json or []),
+        created_at=utc(dd.created_at), updated_at=utc(dd.updated_at),
+        metadata=dd.metadata_json, note=note,
+        generation=GenerationView(run=dd.generation_run, attempts=dd.generation_attempts, state=dd.gen_state,
+                                  started_at=utc(dd.generation_started_at), finished_at=utc(dd.generation_finished_at),
+                                  model=dd.generation_model, warnings=list(dd.generation_warnings_json or []),
+                                  usage=dd.usage_json),
+        error=ErrorView(code=dd.error_code, message=dd.error_message) if dd.error_code else None,
+        result=build_daily_result_view(dd, artifacts, inline=inline),
+        callback_status=dd.callback_status,
+    )
+
+
+def daily_list_item(dd: DailyDiary) -> DailyDiaryListItem:
+    return DailyDiaryListItem(diary_id=dd.diary_id, diary_date=dd.diary_date, status=dd.status,
+                              updated_at=utc(dd.updated_at))

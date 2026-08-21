@@ -162,3 +162,77 @@ class JobEvent(Base):
     ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     event: Mapped[str] = mapped_column(String(64), nullable=False)
     detail_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+
+
+class DailyDiary(Base):
+    """날짜별(멀티콜) 영농일지 — 백엔드가 call_id 목록을 지정해 명시적으로 트리거하는 집계 단위.
+
+    기존 calls 플로우와 별도 리소스로 공존한다. 산출물은 작물별 영농일지만(보고서 없음).
+    gen_* 필드는 Call 의 생성 상태 머신을 미러링해 같은 워커 패턴으로 클레임한다.
+    """
+
+    __tablename__ = "daily_diaries"
+
+    diary_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    diary_date: Mapped[str] = mapped_column(String(10), nullable=False)      # yyyy-MM-dd
+    call_ids_json: Mapped[list[Any]] = mapped_column(JSON, nullable=False)   # 요청 순서 보존
+
+    status: Mapped[str] = mapped_column(String(16), default="NONE", nullable=False)   # CALL_STATUSES 재사용
+    gen_state: Mapped[str] = mapped_column(String(16), default="IDLE", nullable=False)
+    gen_next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    generation_run: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    generation_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    generation_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    generation_finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    generation_model: Mapped[str | None] = mapped_column(String(128))
+    generation_warnings_json: Mapped[list[Any] | None] = mapped_column(JSON)
+    usage_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+
+    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    farm_access_token: Mapped[str | None] = mapped_column(Text)   # 응답/로그 제외, terminal 시 purge
+    language: Mapped[str] = mapped_column(String(8), default="ko", nullable=False)
+
+    callback_url: Mapped[str | None] = mapped_column(Text)
+    callback_status: Mapped[str | None] = mapped_column(String(32))
+    callback_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    speaker_map_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    error_code: Mapped[str | None] = mapped_column(String(64))
+    error_message: Mapped[str | None] = mapped_column(Text)
+    s3_prefix: Mapped[str] = mapped_column(String(256), nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    artifacts: Mapped[list["DailyArtifact"]] = relationship(back_populates="daily", cascade="all, delete-orphan",
+                                                            lazy="selectin")
+
+    __table_args__ = (
+        Index("ix_daily_gen", "gen_state"),
+        Index("ix_daily_date", "diary_date"),
+        Index("ix_daily_status", "status"),
+    )
+
+
+class DailyArtifact(Base):
+    __tablename__ = "daily_artifacts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    diary_id: Mapped[str] = mapped_column(ForeignKey("daily_diaries.diary_id", ondelete="CASCADE"), nullable=False)
+    generation_run: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)             # transcript|diary_md|diary_json|result_json
+    prdlst_code: Mapped[str] = mapped_column(String(32), default="", nullable=False)
+    prdlst_nm: Mapped[str | None] = mapped_column(String(128))
+    diary_date: Mapped[str | None] = mapped_column(String(10))
+    diary_status: Mapped[str | None] = mapped_column(String(32))
+    s3_key: Mapped[str] = mapped_column(String(1024), nullable=False)
+    content: Mapped[str | None] = mapped_column(Text)
+    sha256: Mapped[str | None] = mapped_column(String(64))
+    bytes: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    daily: Mapped[DailyDiary] = relationship(back_populates="artifacts")
+
+    __table_args__ = (
+        UniqueConstraint("diary_id", "kind", "prdlst_code", name="uq_daily_artifact"),
+    )

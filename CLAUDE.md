@@ -38,13 +38,13 @@ app/main.py           create_app(): fail-closed auth, lifespan (db init, clients
 app/config.py         pydantic-settings Settings (all env knobs; .env.example documents each)
 app/auth.py           Bearer/X-API-Key, comma-separated multi-key
 app/runtime.py        Runtime(settings, db, s3, stt, pipeline, worker) on app.state.rt
-app/db/               SQLAlchemy 2 async + aiosqlite: models (calls/call_audio/artifacts/job_events), repo (all SQL)
+app/db/               SQLAlchemy 2 async + aiosqlite: models (calls/call_audio/artifacts/daily_diaries/daily_artifacts/job_events), repo (all SQL)
 app/clients/          s3 (boto3 via to_thread + Keys), storage (Protocol + build_storage: STORAGE_IMPL=s3|local), local_storage (로컬 개발용 파일시스템), stt (gateway diarize + retry classifier), farmos (read-only), llm (factory: ChatOpenAI for openai/jinong, ChatGoogleGenerativeAI(vertexai) for gemini; probe), callback
-app/services/         calls (start/audio/end/regenerate transitions, idempotency), transcripts (merge), artifacts (persist), results (views)
-app/worker/           runner (poll+wake, semaphores), stt_job, generate_job, recovery (startup reset, deadline sweep)
-app/routes/           health, calls (/v1/calls/*)
+app/services/         calls (start/audio/end/regenerate transitions, idempotency), daily (날짜별 멀티콜 트리거/재생성), transcripts (merge + merge_calls), artifacts (persist), results (views)
+app/worker/           runner (poll+wake, semaphores), stt_job, generate_job, daily_job (날짜별 집계 생성), recovery (startup reset, deadline sweep)
+app/routes/           health, calls (/v1/calls/*), daily (/v1/daily-diaries/* — 백엔드 트리거 날짜별 영농일지)
 app/agents/           LangGraph pipeline: interface.py (contract), fake.py, graph.py + nodes/mapping/prompts/render, run.py (dry-run CLI)
-app/schemas/          calls (API), transcript (MergedTranscript), pipeline (CallContext/PipelineResult contract)
+app/schemas/          calls (API), daily (daily-diaries API), transcript (MergedTranscript), pipeline (CallContext/PipelineResult contract)
 tests/                pytest-asyncio + respx (STT/farmos) + moto (S3), FakePipeline; tests/agents/ for the pipeline
 deploy/               deploy.sh (rsync + remote compose), nginx vhost, letsencrypt cert/renew
 docs/                 api-reference.md (contract), architecture.md, ops.md (runbook)

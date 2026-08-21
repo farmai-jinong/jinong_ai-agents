@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from ..db.models import CallAudio
+from ..db.models import Call, CallAudio
 from ..db.repo import order_audio
 from ..schemas.transcript import MergedTranscript, TranscriptFile, TranscriptSegment
 
@@ -80,6 +80,49 @@ def merge_transcripts(call_id: str, audios: Sequence[CallAudio],
 
     text = "\n".join(f"[{_fmt_ts(s.abs_start)}] [{s.speaker_key}] {s.text}" for s in segments)
     return MergedTranscript(call_id=call_id, files=files, segments=segments, speakers=speakers,
+                            total_duration_sec=offset, text=text)
+
+
+def merge_calls(diary_id: str, per_call: Sequence[tuple["Call", Sequence[CallAudio]]]) -> MergedTranscript:
+    """여러 통화의 전사를 하나로 병합 (날짜별 영농일지용, 순수 함수).
+
+    - 통화 정렬: (started_at NULLS LAST, call_id)
+    - 통화마다 `merge_transcripts` 로 병합한 뒤 file_index/offset/abs/speaker_key 를 글로벌 베이스로 리베이스.
+      speaker_key = f"f{전역 file_index}:{speaker}" 라 통화 간에도 충돌하지 않는다 (화자 글자는 요청마다 재배정).
+    - abs 시간은 원래부터 duration 누적 합성값 → 통화 간 실제 공백은 표현하지 않는다 (문서 명시).
+    """
+    def order_key(item: tuple["Call", Sequence[CallAudio]]):  # type: ignore[no-untyped-def]
+        call, _ = item
+        return (call.started_at is None,
+                call.started_at.timestamp() if call.started_at else 0.0,
+                call.call_id)
+
+    files: list[TranscriptFile] = []
+    segments: list[TranscriptSegment] = []
+    speakers: list[str] = []
+    offset = 0.0
+    base_idx = 0
+    for call, audios in sorted(per_call, key=order_key):
+        part = merge_transcripts(call.call_id, audios)
+        remap = {f.file_index: base_idx + f.file_index for f in part.files}
+        for f in part.files:
+            files.append(f.model_copy(update={
+                "file_index": remap[f.file_index], "offset_sec": offset + f.offset_sec, "call_id": call.call_id,
+            }))
+        for seg in part.segments:
+            new_idx = remap[seg.file_index]
+            key = f"f{new_idx}:{seg.speaker}"
+            if key not in speakers:
+                speakers.append(key)
+            segments.append(seg.model_copy(update={
+                "file_index": new_idx, "speaker_key": key,
+                "abs_start": offset + seg.abs_start, "abs_end": offset + seg.abs_end,
+            }))
+        base_idx += len(part.files)
+        offset += part.total_duration_sec
+
+    text = "\n".join(f"[{_fmt_ts(s.abs_start)}] [{s.speaker_key}] {s.text}" for s in segments)
+    return MergedTranscript(call_id=diary_id, files=files, segments=segments, speakers=speakers,
                             total_duration_sec=offset, text=text)
 
 

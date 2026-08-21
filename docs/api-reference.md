@@ -107,6 +107,64 @@ Body(선택) `{"ended_at": "...", "duration_sec": 900}` → `202` (`state=ENDED,
 | GET | `/healthz` | 무인증 `{status, version, worker:{running,pending_stt,pending_gen}}` |
 | GET | `/v1/upstream/health` | STT / LLM(openai·jinong: `/models`, gemini: Vertex publisher model 조회) / S3(head_bucket) / farmos 도달성 |
 
+## 날짜별 영농일지 `/v1/daily-diaries` (멀티콜 집계)
+
+특정 날짜에 통화가 여러 건일 때, **백엔드가 call_id 목록을 지정해 명시적으로 트리거**하면 그 통화들의
+전사를 합쳐 **하나의 날짜별 영농일지(작물별)** 를 생성한다. 기존 통화별 산출물과 **별도 리소스로 공존**하며
+(통화별 플로우는 그대로), 산출물은 작물별 일지뿐이다(컨설팅 보고서 없음 — 보고서는 통화 단위 유지).
+
+### `POST /v1/daily-diaries` — 트리거
+
+```json
+{"diary_id": "daily_u1_20260820", "diary_date": "2026-08-20",
+ "call_ids": ["c1", "c2", "c3"],
+ "farm_access_token": "eyJ…",          // 선택 — 매 트리거마다 새로 보내야 함(아래 참고)
+ "callback_url": "https://…", "language": "ko",
+ "metadata": {"hints": {"prdlst_code": "…"}}}
+```
+
+- **멱등성**: `diary_id` 가 멱등성 키다(형식은 call_id 와 동일 `[A-Za-z0-9_.:-]{1,128}`). 백엔드가
+  farmer/날짜에서 결정적으로 만들어 보내면(예: `daily_{farmerId}_{yyyyMMdd}`) 재전송이 안전하다.
+  신규 → `201` + 생성 큐잉. 재-POST: 진행 중 → `200 "already processing"`, terminal →
+  `200 "… use regenerate"` (재생성은 `/regenerate` 로만).
+- **`farm_access_token` 은 매 트리거·재생성마다 새로 보내야 한다**: 멤버 call 들의 토큰은 terminal 시
+  purge 되므로 재사용할 수 없다. 생략하면 farmos 조회 없이(기존 일지 참조 없이) 전사·힌트만으로 생성한다.
+  이 토큰도 daily terminal 시 purge 된다.
+- **검증(동기)**: 멤버 call 은 전부 terminal `COMPLETED`/`EMPTY` 여야 한다(같은 farmer 인지는 백엔드 책임).
+  | 코드 | HTTP | 조건 |
+  |---|---|---|
+  | `CALLS_NOT_FOUND` | 422 | 존재하지 않는 call 포함 |
+  | `CALLS_NOT_READY` | 409 | `NONE`/`PROCESSING`/`FAILED` call 포함 (FAILED 는 먼저 call regenerate) |
+  | `NO_TRANSCRIBED_CALLS` | 422 | `COMPLETED` call 이 하나도 없음 |
+  | `FARM_MISMATCH` | 422 | call 들의 `farm.farm_id` 가 2개 이상 서로 다름 (둘 다 있을 때만 검사) |
+- 병합 전사: 통화를 `started_at` 순으로 이어붙인다. 시간축은 각 통화 길이의 누적(통화 사이 실제 공백은
+  표현하지 않음). `transcript.files[].call_id` 로 원본 통화를 식별한다.
+- 산출물 날짜는 요청의 `diary_date` 로 고정된다.
+
+### 조회·산출물·재생성
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| GET | `/v1/daily-diaries/{diary_id}[?inline=false]` | 상태/결과 (`DailyDiaryDetail` — `result.diaries` 만, report 없음) |
+| GET | `/v1/daily-diaries/{diary_id}/transcript` | 병합 전사 JSON. 미준비 `404 NOT_READY` |
+| GET | `/v1/daily-diaries/{diary_id}/artifacts/diary/{prdlst_code}[?format=json]` | 작물별 일지 md / JSON |
+| GET | `/v1/daily-diaries?diary_date=&status=&limit=50&cursor=` | 목록 |
+| POST | `/v1/daily-diaries/{diary_id}/regenerate` | `{"farm_access_token": "…", "reason": "…"}` → `202`. `409 ALREADY_PROCESSING` / `404 DAILY_NOT_FOUND`. 같은 S3 키 덮어쓰기, `generation.run` +1 |
+
+상태 어휘·재시도 정책은 통화와 동일(`NONE/PROCESSING/COMPLETED/EMPTY/FAILED`, 생성 실패 60s 후 재시도).
+S3 산출물은 `{S3_PREFIX}/daily/{diary_id}/…` 아래에 저장된다.
+
+### 콜백
+
+terminal 시 (형식은 통화 콜백과 동일한 전송 규칙):
+
+```json
+{"daily_diary_id": "daily_u1_20260820", "diary_date": "2026-08-20", "status": "COMPLETED", "error": null,
+ "call_ids": ["c1", "c2", "c3"],
+ "result_url": "https://jinong-stt-report-generation.jinongservice.co.kr/v1/daily-diaries/daily_u1_20260820",
+ "generation_run": 1}
+```
+
 ## 콜백(선택)
 
 `callback_url` 이 있고 `CALLBACK_ENABLED=true` 면 terminal 상태에서 `POST callback_url` (헤더 `X-API-Key: CALLBACK_API_KEY`, 10s, 3회 10/30/90s):

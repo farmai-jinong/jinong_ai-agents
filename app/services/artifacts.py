@@ -9,9 +9,10 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import repo
-from ..db.models import Artifact, Call
+from ..db.models import Artifact, Call, DailyArtifact, DailyDiary
 from ..runtime import Runtime
 from ..schemas.calls import DiaryView, ReportView, ResultView
+from ..schemas.daily import DailyResultView
 from ..schemas.pipeline import PipelineResult
 
 UNRESOLVED = "unresolved"
@@ -74,6 +75,49 @@ async def persist_result(rt: Runtime, s: AsyncSession, call: Call, result: Pipel
     return items
 
 
+async def persist_daily_result(rt: Runtime, s: AsyncSession, dd: DailyDiary, result: PipelineResult,
+                               transcript_key: str) -> list[DailyArtifact]:
+    """persist_result 의 daily 버전 — diaries 만 저장 (보고서 없음), daily_* 키·daily_artifacts 사용."""
+    keys = rt.s3.keys
+    max_kb = rt.settings.result_inline_max_kb
+    run = dd.generation_run
+    items: list[DailyArtifact] = []
+
+    async def add(kind: str, key: str, text: str, *, prdlst_code: str = "", prdlst_nm: str | None = None,
+                  diary_date: str | None = None, diary_status: str | None = None,
+                  content_type: str = "text/markdown; charset=utf-8") -> None:
+        await rt.s3.put_text(key, text, content_type=content_type)
+        items.append(DailyArtifact(diary_id=dd.diary_id, generation_run=run, kind=kind, prdlst_code=prdlst_code,
+                                   prdlst_nm=prdlst_nm, diary_date=diary_date, diary_status=diary_status, s3_key=key,
+                                   content=_inline(text, max_kb), sha256=_sha(text), bytes=len(text.encode("utf-8"))))
+
+    result_snapshot: dict[str, Any] = {
+        "diary_id": dd.diary_id, "diary_date": dd.diary_date, "call_ids": list(dd.call_ids_json or []),
+        "generation_run": run, "model": result.model,
+        "prompt_version": result.prompt_version, "farmos_status": result.farmos_status,
+        "speaker_map": result.speaker_map, "warnings": result.warnings, "usage": result.usage,
+        "transcript_key": transcript_key, "diaries": [],
+    }
+    for d in result.diaries:
+        code = d.prdlst_code or UNRESOLVED
+        kmd, kjs = keys.daily_diary_md(dd.diary_id, code), keys.daily_diary_json(dd.diary_id, code)
+        payload = {"prdlst_code": d.prdlst_code, "prdlst_nm": d.prdlst_nm, "diary_date": d.diary_date,
+                   "status": d.status, **d.structured}
+        await add("diary_md", kmd, d.markdown, prdlst_code=code, prdlst_nm=d.prdlst_nm,
+                  diary_date=d.diary_date, diary_status=d.status)
+        await add("diary_json", kjs, json.dumps(payload, ensure_ascii=False, indent=2, default=str),
+                  prdlst_code=code, prdlst_nm=d.prdlst_nm, diary_date=d.diary_date, diary_status=d.status,
+                  content_type="application/json; charset=utf-8")
+        result_snapshot["diaries"].append({**payload, "markdown": d.markdown, "s3_key_md": kmd, "s3_key_json": kjs})
+    kres = keys.daily_result_json(dd.diary_id)
+    await add("result_json", kres, json.dumps(result_snapshot, ensure_ascii=False, indent=2, default=str),
+              content_type="application/json; charset=utf-8")
+    items.append(DailyArtifact(diary_id=dd.diary_id, generation_run=run, kind="transcript", prdlst_code="",
+                               s3_key=transcript_key))
+    await repo.replace_daily_artifacts(s, dd.diary_id, items)
+    return items
+
+
 def build_result_view(call: Call, artifacts: list[Artifact], *, inline: bool = True) -> ResultView | None:
     if call.status != "COMPLETED":
         return None
@@ -111,3 +155,30 @@ def build_result_view(call: Call, artifacts: list[Artifact], *, inline: bool = T
     res = by_kind.get(("result_json", ""))
     return ResultView(transcript_key=tr.s3_key if tr else None, speaker_map=call.speaker_map_json or {},
                       diaries=diaries, report=report, result_key=res.s3_key if res else None)
+
+
+def build_daily_result_view(dd: DailyDiary, artifacts: list[DailyArtifact], *, inline: bool = True) -> DailyResultView | None:
+    if dd.status != "COMPLETED":
+        return None
+    by_kind: dict[tuple[str, str], DailyArtifact] = {(a.kind, a.prdlst_code): a for a in artifacts}
+    diaries: list[DiaryView] = []
+    for a in artifacts:
+        if a.kind != "diary_md":
+            continue
+        js = by_kind.get(("diary_json", a.prdlst_code))
+        structured = None
+        if inline and js and js.content:
+            try:
+                structured = json.loads(js.content)
+            except ValueError:
+                structured = None
+        diaries.append(DiaryView(
+            prdlst_code=None if a.prdlst_code == UNRESOLVED else a.prdlst_code, prdlst_nm=a.prdlst_nm,
+            diary_date=a.diary_date, status=a.diary_status,
+            markdown=a.content if inline else None, structured=structured,
+            s3_key_md=a.s3_key, s3_key_json=js.s3_key if js else a.s3_key.replace(".md", ".json"),
+        ))
+    tr = by_kind.get(("transcript", ""))
+    res = by_kind.get(("result_json", ""))
+    return DailyResultView(transcript_key=tr.s3_key if tr else None, speaker_map=dd.speaker_map_json or {},
+                           diaries=diaries, result_key=res.s3_key if res else None)

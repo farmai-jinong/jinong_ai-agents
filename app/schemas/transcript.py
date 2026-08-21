@@ -28,6 +28,7 @@ class TranscriptSegment(BaseModel):
 class TranscriptFile(BaseModel):
     file_index: int
     audio_id: int
+    call_id: str | None = None      # 날짜별(멀티콜) 병합 시 원본 통화 (단일 통화 병합에서는 None)
     bucket: str
     key: str
     seq: int | None = None

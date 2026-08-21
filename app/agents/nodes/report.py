@@ -69,6 +69,8 @@ def _validate(n: ReportNarrative, valid: set[int]) -> tuple[ReportNarrative, lis
 
 
 async def build_report(state: PipelineState, config) -> dict:  # type: ignore[no-untyped-def]
+    if (state["ctx"].metadata or {}).get("daily"):
+        return {"report": None}   # 날짜별 집계는 작물별 일지만 — 보고서 LLM 호출 스킵
     deps = get_deps(config)
     facts: CallFacts = state["facts"]
     nt = state["transcript"]

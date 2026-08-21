@@ -10,6 +10,7 @@ import logging
 
 from ..db import repo
 from ..runtime import Runtime
+from .daily_job import run_daily_generate
 from .generate_job import run_generate
 from .recovery import recover, sweep
 from .stt_job import run_stt
@@ -74,10 +75,12 @@ class Worker:
             await sweep(self.rt)
         stt_room = self._stt_sem._value  # noqa: SLF001 — 남은 슬롯만큼만 클레임
         gen_room = self._gen_sem._value  # noqa: SLF001
-        launched = {"stt": 0, "gen": 0}
+        launched = {"stt": 0, "gen": 0, "daily": 0}
         async with self.rt.db.session() as s:
             audio_ids = await repo.claim_audio(s, stt_room) if stt_room > 0 else []
             call_ids = await repo.claim_generation(s, gen_room) if gen_room > 0 else []
+            daily_room = gen_room - len(call_ids)   # daily 도 LLM 작업 → gen 세마포어(총 동시성) 공유
+            daily_ids = await repo.claim_daily_generation(s, daily_room) if daily_room > 0 else []
             await s.commit()
         for aid in audio_ids:
             self._spawn(self._stt(aid))
@@ -85,6 +88,9 @@ class Worker:
         for cid in call_ids:
             self._spawn(self._gen(cid))
             launched["gen"] += 1
+        for did in daily_ids:
+            self._spawn(self._daily(did))
+            launched["daily"] += 1
         return launched
 
     async def drain(self, timeout: float = 60.0) -> None:
@@ -98,7 +104,7 @@ class Worker:
                 continue
             async with self.rt.db.session() as s:
                 pend = await repo.count_pending(s)
-            if pend["pending_stt"] == 0 and pend["pending_gen"] == 0:
+            if pend["pending_stt"] == 0 and pend["pending_gen"] == 0 and pend["pending_daily"] == 0:
                 return
             await asyncio.sleep(0.05)
 
@@ -124,6 +130,36 @@ class Worker:
             except Exception as e:  # noqa: BLE001 — run_generate 밖의 예외(DB 등): 재큐 또는 FAILED
                 log.exception("[%s] generate job crashed", call_id)
                 await self._requeue_or_fail(call_id, f"{type(e).__name__}: {e}")
+
+    async def _daily(self, diary_id: str) -> None:
+        async with self._gen_sem:
+            try:
+                await run_daily_generate(self.rt, diary_id)
+            except Exception as e:  # noqa: BLE001 — run_daily_generate 밖의 예외(DB 등): 재큐 또는 FAILED
+                log.exception("[%s] daily generate job crashed", diary_id)
+                await self._requeue_or_fail_daily(diary_id, f"{type(e).__name__}: {e}")
+
+    async def _requeue_or_fail_daily(self, diary_id: str, msg: str) -> None:
+        from datetime import timedelta
+
+        from ..db.models import utcnow
+
+        try:
+            async with self.rt.db.session() as s:
+                dd = await repo.get_daily(s, diary_id)
+                if dd is None or dd.gen_state != "RUNNING":
+                    return
+                if dd.generation_attempts < self.rt.settings.gen_max_attempts:
+                    dd.gen_state = "QUEUED"
+                    dd.gen_next_attempt_at = utcnow() + timedelta(seconds=60)
+                else:
+                    dd.gen_state = "IDLE"
+                    dd.status = "FAILED"
+                    dd.error_code, dd.error_message = "GENERATION_FAILED", msg[:1000]
+                    dd.generation_finished_at = utcnow()
+                await s.commit()
+        except Exception:  # noqa: BLE001
+            log.exception("[%s] requeue_or_fail_daily failed", diary_id)
 
     async def _requeue_or_fail(self, call_id: str, msg: str) -> None:
         from datetime import timedelta
