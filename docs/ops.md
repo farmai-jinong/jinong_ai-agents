@@ -3,22 +3,26 @@
 호스트: 지농서버(AWS EC2 `13.125.70.226`), `ssh jinong_aws_office`(사무실, 22) / `ssh jinong_aws`(외부, 7022), 사용자 `ubuntu`.
 포트: **7003**(loopback) — 7001 hatchery-serving, 7002 jinong-ai-gateway 와 나란히. 외부는 호스트 nginx(443) 로만.
 
-## 0. 현재 상태 (2026-08-19)
+## 0. 현재 상태 (2026-08-21)
 
 - 컨테이너 `jinong-ai-agents` 배포 완료(`127.0.0.1:7003`, `.env` 채움, `/v1/upstream/health` stt/llm/s3/farmos 모두 ok). 서버 내부 스모크(`scripts/curl_flow.sh`, 실제 raw 녹음 1건) COMPLETED 확인.
 - 게이트웨이 0.2.0 배포: `/v1/chat/completions` 프록시 + 이 서비스 전용 STT 키 발급(`GATEWAY_API_KEY` 2번째 키). vLLM 터널은 호스트 **8200**(8000 은 nginx 점유) — GPU 박스에서 `serve/llm-up.sh` 전까지 `llm_ok:false`/502 가 정상.
 - 2026-08-20 도메인 변경(`jinong-agent` → `jinong-stt-report-generation.jinongservice.co.kr`) 서버 반영 완료:
   새 vhost 설치(HTTPS 블록 주석 상태), 구 conf 는 `sites.d/jinong-agent….conf.bak-20260820-rename` 으로 백업,
   도메인 46자 때문에 `nginx.conf` http 블록에 `server_names_hash_bucket_size 128;` 추가(백업 `nginx.conf.bak-20260820`),
-  서버 `.env` `PUBLIC_BASE_URL` 갱신. DNS 전 스모크용으로 `/etc/hosts` 에 `127.0.0.1 jinong-stt-report-generation…` 임시 매핑
-  추가 — 새 도메인 경유(nginx) E2E 스모크 COMPLETED 확인(2026-08-20, `e2e-newdomain-smoke`).
-  **남은 일: DNS A 레코드(가비아) → `cert.sh` → HTTPS 블록 주석 해제 → reload → `/etc/hosts` 임시 매핑 제거** (아래 1-①·④).
+  서버 `.env` `PUBLIC_BASE_URL` 갱신. 새 도메인 경유(nginx) E2E 스모크 COMPLETED 확인(2026-08-20, `e2e-newdomain-smoke`).
+- 2026-08-21 공개 HTTPS 개통 완료: DNS A 레코드(13.125.70.226) 반영 확인 → `cert.sh` dry-run·실발급(서버
+  `/srv/jinong-agent/deploy/letsencrypt/` 의 구도메인 스크립트를 레포 최신본으로 교체 후) → vhost HTTPS 블록
+  주석 해제 설치 → `nginx -t`/reload → `/etc/hosts` 임시 매핑 제거(백업 `.bak-20260821-dnsdone`) →
+  갱신 cron 등록(root crontab `57 4 * * * /srv/jinong-agent/deploy/letsencrypt/renew.sh`). 외부에서
+  `https://…/healthz` ok, HTTP 는 301→HTTPS.
 - LLM 기본은 Gemini(Vertex AI, `LLM_PROVIDER=gemini / LLM_MODEL=gemini-3.5-flash / GCP_PROJECT_ID=jinong-lab-llm / GCP_LOCATION=global / GEMINI_THINKING_LEVEL=low`). 인증은 서비스 계정 키 — 서버 `/home/ubuntu/dev/deploy_setting_files/jinong_vertexai_service_key.json` 을 compose 가 `/app/auth/jinong_vertexai_service_key.json` 로 read-only 마운트(`GOOGLE_APPLICATION_CREDENTIALS`). hatchery_serving 과 같은 키·프로젝트. 이전 OpenAI(`gpt-4.1`) 는 `LLM_PROVIDER=openai` + `LLM_BASE_URL/LLM_API_KEY` 로 복귀 가능.
 - 동의서 §7 충족을 위해 vLLM 기동 후 `.env` 의 `LLM_PROVIDER=jinong / LLM_BASE_URL=https://jinong-stt.jinongservice.co.kr/v1 / LLM_API_KEY=<STT_API_KEY 와 동일 게이트웨이 키> / LLM_MODEL=exaone45` 로 전환 후 `docker compose up -d`.
 - 자격증명 메모: AWS 키는 audio-labeler 워커와 같은 IAM 사용자(정적 키)를 재사용 — 전용 IAM 사용자로 분리 권장. Vertex SA 키·프로젝트(jinong-lab-llm)는 hatchery_serving 과 공용, OpenAI 키는 briefing_serving 과 공용.
 - 2026-08-21 날짜별(멀티콜) 영농일지 `/v1/daily-diaries` 추가(커밋 `a376d8a`) — 신규 env 없음, DB 는 기동 시
-  `create_all` 로 테이블 자동 생성. **서버에는 아직 미배포** — 다음 `./deploy/deploy.sh` 때 함께 나가고,
-  배포 후 아래 §3 의 daily 스모크로 검증할 것.
+  `create_all` 로 테이블 자동 생성. 같은 날 배포·스모크 완료: 통화 E2E 2건(`smoke-20260821-a/b`, raw wav) COMPLETED →
+  `daily-smoke-20260821`(멀티콜) COMPLETED, keyset 커서·`INVALID_CURSOR` 422 실서버 확인. 이 과정에서 미확정 작물
+  다건 산출물 코드 충돌(`unresolved-N` 픽스, 커밋 `c9a1f19`)을 발견·수정 후 재배포함.
 
 ## 1. 최초 1회
 
