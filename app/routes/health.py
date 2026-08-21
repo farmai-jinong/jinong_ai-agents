@@ -23,7 +23,7 @@ def _rt(request: Request) -> Runtime:
 @router.get("/healthz")
 async def healthz(request: Request) -> dict:
     rt = _rt(request)
-    pend = {"pending_stt": None, "pending_gen": None}
+    pend = {"pending_stt": None, "pending_gen": None, "pending_daily": None}
     db_ok = await rt.db.ping()
     if db_ok:
         async with rt.db.session() as s:
