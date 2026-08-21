@@ -12,7 +12,7 @@
 | `state` | `OPEN` → `ENDED` | 통화 수명주기(종료 이벤트 수신 여부) |
 | `status` | `NONE` / `PROCESSING` / `COMPLETED` / `EMPTY` / `FAILED` | 결과 상태. 앱의 `sttStatus`/`aiSummaryStatus` 와 같은 어휘 |
 | `audio[].status` | `PENDING` / `TRANSCRIBING` / `TRANSCRIBED` / `FAILED` | 녹음별 STT 상태 |
-| `error.code` | `NO_AUDIO` `NO_TRANSCRIPT` `NO_CONTENT` `STT_FAILED` `STT_TIMEOUT` `GENERATION_FAILED` | terminal 사유 |
+| `error.code` | `NO_AUDIO` `NO_TRANSCRIPT` `NO_CONTENT` `STT_FAILED` `GENERATION_FAILED` | terminal 사유 (`STT_TIMEOUT` 은 call 레벨이 아니라 `audio[].last_error` 에만 나타남) |
 
 흐름: `POST /v1/calls` → `POST /v1/calls/{id}/audio` ×N (즉시 STT 큐잉) → `POST /v1/calls/{id}/end` (202, `PROCESSING`) → 모든 STT 완료 시 생성 → `GET /v1/calls/{id}` 로 `COMPLETED` 확인.
 
@@ -47,7 +47,7 @@
  "recorded_at": "2026-08-19T10:12:05+09:00", "duration_sec": 183.4, "speaker_hint": null, "force": false}
 ```
 
-- 서버가 `HEAD s3://bucket/key` 검증: 없음 → `422 S3_OBJECT_NOT_FOUND`, 권한 → `422 S3_ACCESS_DENIED`, `MAX_AUDIO_MB`(200) 초과 → `422 AUDIO_TOO_LARGE`.
+- 서버가 `HEAD s3://bucket/key` 검증: 없음 → `422 S3_OBJECT_NOT_FOUND`, 권한 → `422 S3_ACCESS_DENIED`, `MAX_AUDIO_MB`(200) 초과 → `422 AUDIO_TOO_LARGE`, 그 밖의 S3 오류 → `422 S3_ERROR`.
 - 멱등 `(call_id, bucket, key)`: 신규 `202` / 진행·완료 `200`(no-op, `note`) / FAILED 또는 `force:true` `202` 재큐.
 - 통화가 아직 없으면 자동 생성(`AUDIO_AUTOCREATE_CALL`). 종료·확정된 통화에 오면 큐잉만 하고 `stale:true` (재생성 필요).
 - 순서: `seq` → `recorded_at` → 도착순. 오프셋은 병합 시 앞 파일 길이 누적.
@@ -64,7 +64,7 @@ Body(선택) `{"ended_at": "...", "duration_sec": 900}` → `202` (`state=ENDED,
 ```json
 {
   "call_id": "…", "state": "ENDED", "status": "COMPLETED",
-  "started_at": "…", "ended_at": "…", "created_at": "…", "updated_at": "…",
+  "started_at": "…", "ended_at": "…", "duration_sec": 900.0, "created_at": "…", "updated_at": "…",
   "participants": [...], "farm": {...}, "metadata": {...}, "stale": false, "note": null,
   "stt_progress": {"total": 2, "transcribed": 2, "failed": 0, "pending": 0},
   "audio": [{"id": 17, "bucket": "…", "key": "…", "seq": 1, "status": "TRANSCRIBED", "attempts": 1,
@@ -102,9 +102,9 @@ Body(선택) `{"ended_at": "...", "duration_sec": 900}` → `202` (`state=ENDED,
 | GET | `/v1/calls/{id}/transcript` | 병합 전사 JSON(`MergedTranscript`). 미준비 `404 NOT_READY` |
 | GET | `/v1/calls/{id}/artifacts/report[?format=json]` | 보고서 `text/markdown` / JSON |
 | GET | `/v1/calls/{id}/artifacts/diary/{prdlst_code}[?format=json]` | 작물별 영농일지 md / JSON (`unresolved` 가능) |
-| GET | `/v1/calls?status=&state=&limit=50&cursor=` | 운영용 목록 `{items:[{call_id,state,status,updated_at,stt_progress}], next_cursor}` |
+| GET | `/v1/calls?status=&state=&limit=50&cursor=` | 운영용 목록 `{items:[{call_id,state,status,updated_at,stt_progress}], next_cursor}` (`limit` 1..200, 기본 50) |
 | POST | `/v1/calls/{id}/regenerate` | `{"retranscribe": false, "reason": "…"}` → `202`. `409 CALL_NOT_ENDED` / `409 ALREADY_PROCESSING`. 산출물 같은 S3 키에 덮어쓰기, `generation.run` +1 |
-| GET | `/healthz` | 무인증 `{status, version, worker:{running,pending_stt,pending_gen,pending_daily}}` |
+| GET | `/healthz` | 무인증 `{status: "ok"\|"degraded", version, worker:{running,pending_stt,pending_gen,pending_daily}}`. DB ping 실패 시 `status:"degraded"` 이고 `pending_*` 는 모두 `null` |
 | GET | `/v1/upstream/health` | STT / LLM(openai·jinong: `/models`, gemini: Vertex publisher model 조회) / S3(head_bucket) / farmos 도달성 |
 
 목록 커서(`/v1/calls` · `/v1/daily-diaries` 공통): 최신 생성순(`created_at DESC, id DESC`) keyset.
@@ -152,8 +152,28 @@ Body(선택) `{"ended_at": "...", "duration_sec": 900}` → `202` (`state=ENDED,
 | GET | `/v1/daily-diaries/{diary_id}[?inline=false]` | 상태/결과 (`DailyDiaryDetail` — `result.diaries` 만, report 없음) |
 | GET | `/v1/daily-diaries/{diary_id}/transcript` | 병합 전사 JSON. 미준비 `404 NOT_READY` |
 | GET | `/v1/daily-diaries/{diary_id}/artifacts/diary/{prdlst_code}[?format=json]` | 작물별 일지 md / JSON |
-| GET | `/v1/daily-diaries?diary_date=&status=&limit=50&cursor=` | 목록 |
+| GET | `/v1/daily-diaries?diary_date=&status=&limit=50&cursor=` | 목록 `{items:[{diary_id,diary_date,status,updated_at}], next_cursor}` (`limit` 1..200, 기본 50) |
 | POST | `/v1/daily-diaries/{diary_id}/regenerate` | `{"farm_access_token": "…", "reason": "…"}` → `202`. `409 ALREADY_PROCESSING` / `404 DAILY_NOT_FOUND`. 같은 S3 키 덮어쓰기, `generation.run` +1 |
+
+`DailyDiaryDetail` 은 `CallDetail` 보다 단순하다 — `state`/`stale`/`stt_progress`/`audio`/`participants`/`farm`/`started_at`/`duration_sec` 필드가 **없다**(STT 는 멤버 call 에서 이미 끝난 상태이므로):
+
+```json
+{
+  "diary_id": "daily_u1_20260820", "diary_date": "2026-08-20", "status": "COMPLETED",
+  "call_ids": ["c1", "c2", "c3"], "created_at": "…", "updated_at": "…",
+  "metadata": {...}, "note": null,
+  "generation": {"run": 1, "attempts": 1, "state": "IDLE", "started_at": "…", "finished_at": "…",
+                 "model": "gemini-3.5-flash", "warnings": [], "usage": {...}},
+  "error": null,
+  "result": {"transcript_key": "agents/voicecall/daily/<diary_id>/transcript/merged.json",
+             "speaker_map": {...},
+             "diaries": [{"prdlst_code": "0804MM", "...": "통화별 diaries[] 와 동일 모양"}],
+             "result_key": "…/artifacts/result.json"},
+  "callback_status": null
+}
+```
+
+목록 아이템(`items[]`)은 `{diary_id, diary_date, status, updated_at}` 뿐이다.
 
 상태 어휘·재시도 정책은 통화와 동일(`NONE/PROCESSING/COMPLETED/EMPTY/FAILED`, 생성 실패 60s 후 재시도).
 S3 산출물은 `{S3_PREFIX}/daily/{diary_id}/…` 아래에 저장된다.
@@ -171,7 +191,7 @@ terminal 시 (형식은 통화 콜백과 동일한 전송 규칙):
 
 ## 콜백(선택)
 
-`callback_url` 이 있고 `CALLBACK_ENABLED=true` 면 terminal 상태에서 `POST callback_url` (헤더 `X-API-Key: CALLBACK_API_KEY`, 10s, 3회 10/30/90s):
+`callback_url` 이 있고 `CALLBACK_ENABLED=true` 면 terminal 상태에서 `POST callback_url` (헤더 `X-API-Key: CALLBACK_API_KEY`, 타임아웃 10s, 최대 3회 시도 — 실패 시 10s·30s 뒤 재시도):
 
 ```json
 {"call_id": "…", "status": "COMPLETED", "error": null,

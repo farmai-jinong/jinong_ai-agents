@@ -17,7 +17,7 @@ RETRY_DELAYS = (10.0, 30.0, 90.0)
 
 async def send_callback(settings: Settings, url: str, payload: dict[str, Any], *,
                         delays: tuple[float, ...] = RETRY_DELAYS) -> tuple[bool, int]:
-    """(성공여부, 시도횟수). 3회 시도(10/30/90s)."""
+    """(성공여부, 시도횟수). 최대 3회 시도, 실패 시 10s·30s 대기 후 재시도(마지막 delay 는 미사용)."""
     headers = {"Content-Type": "application/json"}
     if settings.callback_api_key:
         headers["X-API-Key"] = settings.callback_api_key

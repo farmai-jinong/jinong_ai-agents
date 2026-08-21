@@ -223,7 +223,7 @@ Body 선택: `{"retranscribe": false, "reason": "..."}`.
 | GET | `/v1/calls/{id}/artifacts/report?format=md\|json` | 컨설팅 보고서 (기본 `text/markdown`) |
 | GET | `/v1/calls/{id}/artifacts/diary/{prdlst_code}?format=md\|json` | 작물별 영농일지. 미확정 작물은 `{prdlst_code}` 자리에 `unresolved` |
 | GET | `/v1/calls?status=&state=&limit=50&cursor=` | 운영/디버그용 목록 |
-| GET | `/healthz` | 무인증 헬스체크 `{status, version, worker: {...}}` |
+| GET | `/healthz` | 무인증 헬스체크 `{status: "ok"\|"degraded", version, worker: {running, pending_stt, pending_gen, pending_daily}}` — DB 이상 시 `degraded` + `pending_*` 는 `null` |
 
 목록의 `next_cursor`는 **불투명 토큰**입니다(내용을 해석하지 마시고 그대로 되돌려 주세요). 정렬은 최신
 생성순이며, `next_cursor`가 `null`이면 마지막 페이지입니다.

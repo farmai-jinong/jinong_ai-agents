@@ -66,6 +66,13 @@ kafka-gateway ──POST /v1/calls ──▶ ⑧ agent ──GET s3://bucket/key
   키 규칙은 `app/clients/s3.py:Keys` 에만 있다. daily 는 `daily/` 하위로 분리해 call_id 네임스페이스와
   충돌하지 않는다. 입력 오디오는 복사하지 않는다.
 
+## 조회 표면 (요약)
+
+- 목록(`GET /v1/calls` · `GET /v1/daily-diaries`)은 `created_at DESC, id DESC` keyset 커서 페이지네이션
+  (`next_cursor` 불투명 토큰, `repo.make_list_cursor`; 형식 불량은 `422 INVALID_CURSOR`).
+- `GET /healthz` 는 DB ping 결과로 `ok`/`degraded` 를 판정하고 `worker.pending_stt/gen/daily` 를 노출한다
+  (`degraded` 면 `pending_*` 는 `null` — `routes/health.py`).
+
 ## 파이프라인 계약
 
 `app/agents/interface.py` — `DiaryReportPipeline.run(MergedTranscript, CallContext) -> PipelineResult`

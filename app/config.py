@@ -50,7 +50,7 @@ class Settings(BaseSettings):
 
     # --- LLM (provider 전환은 env 몇 개) ---------------------------------------
     # openai | jinong : OpenAI 호환(ChatOpenAI) — LLM_BASE_URL/LLM_API_KEY/LLM_MODEL
-    # gemini          : Vertex AI(ChatVertexAI) — LLM_MODEL + GCP_PROJECT_ID/GCP_LOCATION + GOOGLE_APPLICATION_CREDENTIALS(SA 키)
+    # gemini          : Vertex AI(ChatGoogleGenerativeAI(vertexai=True)) — LLM_MODEL + GCP_PROJECT_ID/GCP_LOCATION + GOOGLE_APPLICATION_CREDENTIALS(SA 키)
     llm_provider: str = "openai"       # openai | jinong | gemini
     llm_base_url: str = "https://api.openai.com/v1"   # jinong: https://jinong-stt.jinongservice.co.kr/v1 (gemini 는 미사용)
     llm_api_key: str = ""              # gemini 는 미사용(SA 키 파일)

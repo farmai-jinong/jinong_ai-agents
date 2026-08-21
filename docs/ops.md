@@ -39,7 +39,7 @@ REMOTE=jinong_aws ./deploy/deploy.sh
 ## 3. 검증
 
 ```bash
-curl https://jinong-stt-report-generation.jinongservice.co.kr/healthz
+curl https://jinong-stt-report-generation.jinongservice.co.kr/healthz   # status:"ok" 확인 — "degraded" 면 DB ping 실패(pending_* 는 null)
 AGENT_API_KEY=… ./scripts/smoke_remote.sh                       # + upstream health (stt/llm/s3/farmos 모두 ok)
 AGENT_API_KEY=… ./scripts/smoke_remote.sh jinong-agri-stt raw/<sample>.wav   # 전체 플로우 (FARM_TOKEN 주면 farmos 조회 포함)
 aws s3 ls s3://jinong-agri-stt/agents/voicecall/<call_id>/ --recursive
@@ -93,6 +93,7 @@ find ./data/storage/agents/voicecall -type f
 | 증상 | 확인 |
 |---|---|
 | 기동 거부 `AGENT_API_KEY is empty` | `.env` 키 채움 |
+| `/healthz` 가 `status:"degraded"` | DB ping 실패 — `agent_data` 볼륨/`DB_PATH` 권한, 디스크, `docker compose logs agent` 확인 (이때 `pending_*` 는 `null`) |
 | `status` 가 계속 `PROCESSING` | `GET /v1/calls/{id}` 의 `audio[].last_error`, `job_events`(sqlite `/data/agent.db`) — STT 429/5xx 재시도 중이거나 게이트웨이 다운. 1h 후 deadline 스윕이 부분 생성 |
 | `FAILED/GENERATION_FAILED` | LLM 키/모델/도달성(`/v1/upstream/health` llm — gemini 는 SA 키 파일·토큰 발급·publisher model 조회), `docker compose logs agent` 의 트레이스백 → `POST …/regenerate` |
 | S3 422 | 호출자 버킷 권한(IAM 사용자에 해당 버킷 read) |
