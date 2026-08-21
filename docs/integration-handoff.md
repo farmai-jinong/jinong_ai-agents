@@ -169,37 +169,88 @@ Body 선택: `{"retranscribe": false, "reason": "...", "farm_access_token": "<�
 
 ```json
 {
-  "call_id": "...", "state": "ENDED", "status": "COMPLETED",
-  "started_at": "...", "ended_at": "...", "created_at": "...", "updated_at": "...",
-  "participants": [], "farm": {}, "metadata": {}, "stale": false, "note": null,
-  "stt_progress": {"total": 2, "transcribed": 2, "failed": 0, "pending": 0},
-  "audio": [{"id": 17, "bucket": "...", "key": "...", "seq": 1, "status": "TRANSCRIBED",
-             "attempts": 1, "duration_sec": 183.4, "offset_sec": 0.0,
-             "segments_count": 42, "last_error": null}],
-  "generation": {"run": 1, "attempts": 1, "state": "IDLE", "model": "...",
-                 "warnings": [], "usage": {}},
+  "call_id": "smoke-20260821-33min", "state": "ENDED", "status": "COMPLETED",
+  "started_at": "2026-08-21T07:15:18Z", "ended_at": "2026-08-21T07:15:18.836848Z",
+  "duration_sec": null, "created_at": "2026-08-21T07:15:18.534627Z", "updated_at": "2026-08-21T07:21:57.594384Z",
+  "participants": [{"role": "farmer", "user_id": "farmer1", "name": "농가"},
+                   {"role": "consultant", "user_id": "cons1", "name": "컨설턴트"}],
+  "farm": null, "metadata": {"hints": {"prdlst_code": "", "prdlst_nm": ""}},
+  "stale": false, "note": null,
+  "stt_progress": {"total": 1, "transcribed": 1, "failed": 0, "pending": 0},
+  "audio": [{"id": 7, "bucket": "jinong-agri-stt", "key": "raw/9c1024d3-….wav", "seq": 1,
+             "recorded_at": null, "status": "TRANSCRIBED", "attempts": 1,
+             "duration_sec": null, "stt_seconds": 2009.0, "offset_sec": 0.0,
+             "stt_raw_key": "agents/voicecall/smoke-20260821-33min/stt/07-18afe26c.json",
+             "segments_count": 738, "last_error": null}],
+  "generation": {"run": 1, "attempts": 1, "state": "IDLE",
+                 "started_at": "2026-08-21T07:21:38Z", "finished_at": "2026-08-21T07:21:57Z",
+                 "model": "gemini-3.5-flash",
+                 "warnings": ["farmos 미사용(토큰 없음) — 힌트/전사만으로 생성",
+                              "작물 미특정 항목이 있어 대표 작물에 배정"],
+                 "usage": {"calls": 4, "prompt_tokens": 25831, "completion_tokens": 3109,
+                           "total_tokens": 28940, "by_call": ["…speaker_roles/extract/report/diary 호출별 상세…"]}},
   "error": null,
   "result": {
-    "transcript_key": "agents/voicecall/<id>/transcript/merged.json",
-    "speaker_map": {"f0:A": "farmer", "f0:B": "consultant"},
+    "transcript_key": "agents/voicecall/smoke-20260821-33min/transcript/merged.json",
+    "speaker_map": {"f0:A": "consultant", "f0:B": "farmer"},
     "diaries": [{
-      "prdlst_code": "0804MM", "prdlst_nm": "딸기", "diary_date": "2026-08-19",
-      "status": "OK",
-      "markdown": "# 영농일지 — 딸기 (2026-08-19)...",
-      "structured": {"prefill": {"...": "앱 PUT /m/diary 의 fields 와 동일한 모양의 초안"},
-                     "prefill_ready": true, "warnings": []},
-      "s3_key_md": "agents/voicecall/<id>/artifacts/diary/0804MM.md",
-      "s3_key_json": "agents/voicecall/<id>/artifacts/diary/0804MM.json"
+      "prdlst_code": null, "prdlst_nm": "마늘", "diary_date": "2026-08-21", "status": "PARTIAL",
+      "markdown": "# 영농일지 — 마늘 (2026-08-21)\n\n| 항목 | 값 |\n…(총 1,791자)",
+      "structured": {
+        "prdlst_code": null, "prdlst_nm": "마늘", "diary_date": "2026-08-21", "status": "PARTIAL",
+        "schema_version": "1",
+        "prefill": null, "prefill_ready": false,
+        "mapping": {"farmworks": [],
+                    "pests": [{"item_id": "pest0", "family": "pest", "source": "노균병",
+                               "status": "no_refs", "code": null, "name": null,
+                               "evidence": [397], "needs_verification": false,
+                               "payload": {"step_index": 1, "kind": "병", "status": "발생"},
+                               "warnings": ["발생 정도 언급 없음 — 단계 확인 필요"]}],
+                    "products": []},
+        "gsNm": null, "growingSeasonStartDe": null, "existing_diary_id": null,
+        "content": "[AI 초안·통화 기반]\n- 비 오기 전에 살충제 및 살균제 입제 농약(확인 필요) 살포 계획임.\n…(총 215자)",
+        "warnings": ["farmos 표준 코드 매핑 없이 생성됨(prefill 불가)",
+                     "노균병: 발생 정도 언급 없음 — 단계 확인 필요"],
+        "evidence": [3, 5, 7, 9, 102, 103, 104, 234, 240, 371, 397, 399]
+      },
+      "s3_key_md": "agents/voicecall/smoke-20260821-33min/artifacts/diary/unresolved.md",
+      "s3_key_json": "agents/voicecall/smoke-20260821-33min/artifacts/diary/unresolved.json"
+    }, {
+      "prdlst_code": null, "prdlst_nm": "양파", "diary_date": "2026-08-21", "status": "EMPTY",
+      "markdown": "…(언급만 되고 기록할 내용이 없는 작물 — 빈 골격 450자)",
+      "structured": {"…": "위와 동일 모양, mapping/evidence 비어 있음"},
+      "s3_key_md": "agents/voicecall/smoke-20260821-33min/artifacts/diary/unresolved-2.md",
+      "s3_key_json": "agents/voicecall/smoke-20260821-33min/artifacts/diary/unresolved-2.json"
     }],
-    "report": {"markdown": "# 컨설팅 보고서 ...",
-               "structured": {"summary": "...", "keywords": [], "action_items": [], "sections": {}},
-               "s3_key_md": "agents/voicecall/<id>/artifacts/report.md",
-               "s3_key_json": "agents/voicecall/<id>/artifacts/report.json"},
-    "result_key": "agents/voicecall/<id>/artifacts/result.json"
+    "report": {
+      "markdown": "# 컨설팅 보고서 — 2026-08-21 …(총 4,313자)",
+      "structured": {
+        "summary": "마늘과 양파를 재배하는 대농가에서 입제 농약의 살포 시기, 칼슘제 및 미생물 제제와의 혼용에 따른 약효 저하 문제를 문의하여 원칙적인 관리 방안을 안내함",
+        "keywords": ["마늘", "양파", "입제농약", "살충제", "살균제", "칼슘제", "혼용", "관주처리"],
+        "action_items": [],
+        "sections": {
+          "farm_status": [{"text": "경남 창녕 지역에서 마늘과 양파를 재배함", "evidence": [15, 23, 24, 151], "needs_verification": false}, "…"],
+          "issues": [{"text": "입제 농약(살충제, 살균제)을 비 오기 3~4일 전에 미리 살포해도 …", "evidence": [3, 5, 7, 31, 32], "needs_verification": true}, "…"],
+          "advice": [{"text": "[병해충관리] 입제 농약은 비 오기 2~3일 전에 살포하고 비를 흠뻑 맞추면 …", "evidence": [12, 33], "needs_verification": true}, "…"],
+          "farmer_actions": [], "follow_ups": []
+        },
+        "speaker_map": [{"file_index": 0, "roles": [{"letter": "A", "role": "consultant"}, {"letter": "B", "role": "farmer"}],
+                         "confidence": 1.0, "rationale": "화자A는 농약 사용법과 원칙을 설명하고 …"}],
+        "needs_verification": ["…약효/혼용 관련 항목 7건…"]
+      },
+      "s3_key_md": "agents/voicecall/smoke-20260821-33min/artifacts/report.md",
+      "s3_key_json": "agents/voicecall/smoke-20260821-33min/artifacts/report.json"
+    },
+    "result_key": "agents/voicecall/smoke-20260821-33min/artifacts/result.json"
   },
   "callback_status": null
 }
 ```
+
+> 위는 **실제 스모크 응답**(33분 상담 통화, 2026-08-21)을 긴 본문만 축약한 것입니다. 이 통화는
+> `farm_access_token` 없이 처리한 사례라 `prefill: null`·`prdlst_code: null`(→`unresolved` 키)입니다 —
+> **토큰을 주시면** farmos 작물 목록으로 `prdlst_code`가 확정되고 `structured.prefill`(PutDiaryDTO 초안)이
+> 채워집니다. `evidence`의 숫자는 병합 전사(`transcript_key`)의 세그먼트 인덱스입니다.
 
 - `result`는 **`status=COMPLETED`일 때만** 채워집니다.
 - `diaries[]`는 통화에서 다룬 **작물별** 1건씩. `prdlst_code`는 farmos 품목코드이며, 작물을 확정하지
@@ -277,6 +328,39 @@ processing"`, terminal이면 `note`에 regenerate 안내). 본문은 `DailyDiary
 
 - 응답 `DailyDiaryDetail`은 `CallDetail`(§3.5)과 유사하되 `call_ids`/`diary_date`가 추가되고,
   `result`에 **`report`가 없습니다**(`diaries`만). `status`/`generation` 어휘는 통화와 동일합니다.
+  실제 스모크 응답 예시(통화 2건 병합, 축약):
+
+```json
+{
+  "diary_id": "daily-smoke-20260821", "diary_date": "2026-08-21", "status": "COMPLETED",
+  "call_ids": ["smoke-20260821-a", "smoke-20260821-b"],
+  "created_at": "2026-08-21T05:43:50Z", "updated_at": "2026-08-21T05:48:39Z",
+  "metadata": null, "note": null,
+  "generation": {"run": 3, "attempts": 1, "state": "IDLE", "model": "gemini-3.5-flash",
+                 "warnings": ["farmos 미사용(토큰 없음) — 힌트/전사만으로 생성"],
+                 "usage": {"calls": 5, "prompt_tokens": 28004, "completion_tokens": 3769, "total_tokens": 31773}},
+  "error": null,
+  "result": {
+    "transcript_key": "agents/voicecall/daily/daily-smoke-20260821/transcript/merged.json",
+    "speaker_map": {"f0:A": "consultant", "f0:B": "farmer", "f1:A": "consultant", "f1:B": "farmer"},
+    "diaries": [
+      {"prdlst_code": null, "prdlst_nm": "벼", "diary_date": "2026-08-21", "status": "PARTIAL",
+       "markdown": "# 영농일지 — 벼 (2026-08-21) …(총 5,592자)",
+       "structured": {"…": "통화별 diaries[].structured 와 동일 모양"},
+       "s3_key_md": "agents/voicecall/daily/daily-smoke-20260821/artifacts/diary/unresolved.md",
+       "s3_key_json": "agents/voicecall/daily/daily-smoke-20260821/artifacts/diary/unresolved.json"},
+      {"prdlst_code": null, "prdlst_nm": "콩", "diary_date": "2026-08-21", "status": "EMPTY",
+       "markdown": "…(빈 골격)", "structured": {"…": "…"},
+       "s3_key_md": "agents/voicecall/daily/daily-smoke-20260821/artifacts/diary/unresolved-2.md",
+       "s3_key_json": "agents/voicecall/daily/daily-smoke-20260821/artifacts/diary/unresolved-2.json"}
+    ],
+    "result_key": "agents/voicecall/daily/daily-smoke-20260821/artifacts/result.json"
+  },
+  "callback_status": null
+}
+```
+
+  (병합 전사의 `speaker_map`은 통화별 파일 인덱스 `f0:`/`f1:` 접두로 화자를 구분합니다.)
 - 미존재: `404 DAILY_NOT_FOUND`.
 - **재생성**: 진행 중이면 `409 ALREADY_PROCESSING`. farmos 조회를 포함하려면 body에 새
   `farm_access_token`을 함께 보내주세요(통화의 §3.4와 달리 **한 번의 호출**로 됩니다). 산출물은 같은
