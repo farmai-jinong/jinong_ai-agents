@@ -1,5 +1,6 @@
 import pytest
 
+from app.db import repo
 from tests.conftest import BUCKET, full_flow
 
 
@@ -107,3 +108,31 @@ async def test_regenerate_overwrites(client, app, stt_mock):
 async def test_healthz(client):
     r = await client.get("/healthz")
     assert r.status_code == 200 and r.json()["status"] == "ok"
+
+
+async def test_regenerate_accepts_farm_token_in_body(client, app, stt_mock):
+    """terminal 후 purge 된 농가 JWT 를 regenerate body 한 호출로 재공급 (daily 와 동일 계약).
+
+    회귀: 기존 문서의 'regenerate → POST /v1/calls 로 토큰 업서트' 2단계는 regenerate 가
+    즉시 워커를 깨워 토큰을 스냅샷하므로 경합이 있었다.
+    """
+    rt = app.state.rt
+    await full_flow(client, "c-regen-token")
+    await rt.worker.drain()
+    async with rt.db.session() as s:
+        call = await repo.get_call(s, "c-regen-token")
+        assert call.status == "COMPLETED" and call.farm_access_token is None   # terminal purge
+
+    r = await client.post("/v1/calls/c-regen-token/regenerate",
+                          json={"farm_access_token": "eyJ.new.token", "reason": "re-supply"})
+    assert r.status_code == 202
+    async with rt.db.session() as s:
+        call = await repo.get_call(s, "c-regen-token")
+        assert call.farm_access_token == "eyJ.new.token"                        # 스케줄 전에 반영
+    await rt.worker.drain()
+    body = (await client.get("/v1/calls/c-regen-token")).json()
+    assert body["status"] == "COMPLETED" and body["generation"]["run"] == 2
+    assert "farm_access_token" not in (body.get("result") or {})                # 응답 미노출
+    async with rt.db.session() as s:
+        call = await repo.get_call(s, "c-regen-token")
+        assert call.farm_access_token is None                                   # terminal 재-purge

@@ -190,6 +190,8 @@ class CallService:
             call.stale = False
             call.error_code = call.error_message = None
             call.generation_attempts = 0
+            if req.farm_access_token:      # daily 와 동일: 별도 upsert 없이 한 호출로 토큰 재공급(경합 없음)
+                call.farm_access_token = req.farm_access_token
             if req.retranscribe:
                 await s.execute(update(CallAudio).where(CallAudio.call_id == call_id)
                                 .values(status="PENDING", attempts=0, next_attempt_at=utcnow(),

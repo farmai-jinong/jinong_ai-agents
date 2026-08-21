@@ -103,7 +103,7 @@ Body(선택) `{"ended_at": "...", "duration_sec": 900}` → `202` (`state=ENDED,
 | GET | `/v1/calls/{id}/artifacts/report[?format=json]` | 보고서 `text/markdown` / JSON |
 | GET | `/v1/calls/{id}/artifacts/diary/{prdlst_code}[?format=json]` | 작물별 영농일지 md / JSON (`unresolved`, 다건이면 `unresolved-2` … 가능) |
 | GET | `/v1/calls?status=&state=&limit=50&cursor=` | 운영용 목록 `{items:[{call_id,state,status,updated_at,stt_progress}], next_cursor}` (`limit` 1..200, 기본 50) |
-| POST | `/v1/calls/{id}/regenerate` | `{"retranscribe": false, "reason": "…"}` → `202`. `409 CALL_NOT_ENDED` / `409 ALREADY_PROCESSING`. 산출물 같은 S3 키에 덮어쓰기, `generation.run` +1 |
+| POST | `/v1/calls/{id}/regenerate` | `{"retranscribe": false, "reason": "…", "farm_access_token": "…"}` → `202`. 토큰을 주면 purge 된 농가 JWT 재공급(daily 와 동일 계약). `409 CALL_NOT_ENDED` / `409 ALREADY_PROCESSING`. 산출물 같은 S3 키에 덮어쓰기, `generation.run` +1 |
 | GET | `/healthz` | 무인증 `{status: "ok"\|"degraded", version, worker:{running,pending_stt,pending_gen,pending_daily}}`. DB ping 실패 시 `status:"degraded"` 이고 `pending_*` 는 모두 `null` |
 | GET | `/v1/upstream/health` | STT / LLM(openai·jinong: `/models`, gemini: Vertex publisher model 조회) / S3(head_bucket) / farmos 도달성 |
 

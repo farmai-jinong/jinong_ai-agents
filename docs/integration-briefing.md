@@ -51,10 +51,11 @@ agents        ──(2 직후부터) 게이트웨이 STT로 전사 (통화 중�
    그전까지는 폴링만 동작한다. → 미팅에서 방식(콜백 vs 폴링) 결정할 것.
 2. **콜백은 at-least-once, 무서명.** 최대 3회 시도(시도 간 10s·30s), 2xx면 성공. regenerate마다
    다시 발사된다. 백엔드는 `(call_id, generation_run)`으로 dedupe하고, 폴링을 안전망으로 둬야 한다.
-3. **토큰 purge ↔ regenerate 순서 함정.** terminal 되면 농가 JWT를 DB에서 소거한다. 그리고 terminal
-   상태에선 `POST /v1/calls` 업서트가 short-circuit(아무것도 안 바꿈)이다. 따라서 재생성에 farmos 조회를
-   태우려면 순서가 **`/regenerate`(→PROCESSING 복귀) → `POST /v1/calls`로 새 JWT 재전송**이어야 한다.
-   순서를 지키지 않으면 hints-only(전사+힌트만)로 재생성된다.
+3. **토큰 purge ↔ regenerate 함정.** terminal 되면 농가 JWT를 DB에서 소거하고, terminal 상태에선
+   `POST /v1/calls` 업서트가 short-circuit(아무것도 안 바꿈)이다. 재생성에 farmos 조회를 태우려면
+   **`/regenerate` body에 새 JWT를 직접** 넣는다(daily 와 동일 계약, 2026-08-21부터). 생략하면
+   hints-only(전사+힌트만)로 재생성된다. (기존 '2단계 순서(regenerate 후 /v1/calls 업서트)' 안내는
+   워커 즉시 기동과 경합이 있어 폐기.)
 4. **에러 파서는 두 모양을 다 받아야 한다.** 401은 `{"detail":"invalid or missing API key"}`(문자열),
    도메인 에러는 `{"detail":{"code","message"}}`(객체), 검증 오류는 FastAPI 기본 422 리스트.
 5. **terminal 이후 늦게 도착한 오디오는 자동 재처리되지 않는다.** 큐잉만 하고 `stale:true` 표시 —
@@ -63,7 +64,7 @@ agents        ──(2 직후부터) 게이트웨이 STT로 전사 (통화 중�
    참가자·JWT가 없는 통화이므로, `start` 이벤트가 결국 도착해야 정상 생성이 된다. 이벤트 순서가 꼬여도
    전송을 포기하지 말라고 안내할 것.
 7. **daily 트리거·재생성마다 새 JWT를 첨부해야 한다.** 통화 때 보낸 토큰은 통화 terminal 시 purge되어
-   재사용되지 않는다. daily는 통화(함정 3)와 달리 트리거/`regenerate` **body에 직접** 넣으면 되고,
+   재사용되지 않는다. daily 도 통화와 같이 트리거/`regenerate` **body에 직접** 넣으면 되고,
    순서 곡예가 필요 없다. 생략하면 hints-only 생성(실패 아님).
 8. **daily는 멤버 통화가 전부 terminal이어야 트리거된다.** `NONE`/`PROCESSING`/`FAILED`가 섞이면
    `409 CALLS_NOT_READY` — `FAILED` 통화는 먼저 call `/regenerate`로 살려야 한다. 언제 묶어 쏠지는

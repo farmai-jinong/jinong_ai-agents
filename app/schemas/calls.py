@@ -50,6 +50,7 @@ class CallEndRequest(BaseModel):
 class RegenerateRequest(BaseModel):
     retranscribe: bool = False
     reason: str | None = None
+    farm_access_token: str | None = None   # terminal 시 purge 된 농가 JWT 를 한 호출로 재공급 (daily 와 동일 계약)
 
 
 # --- responses ------------------------------------------------------------

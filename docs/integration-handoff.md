@@ -149,21 +149,16 @@ Body 선택: `{"ended_at": "...", "duration_sec": 900}` — 빈 body(`{}`)도 �
 
 ### 3.4 `POST /v1/calls/{call_id}/regenerate` — 재생성
 
-Body 선택: `{"retranscribe": false, "reason": "..."}`.
+Body 선택: `{"retranscribe": false, "reason": "...", "farm_access_token": "<새 JWT>"}`.
 
 - `202` — 재생성 큐잉. 산출물은 **같은 S3 키에 덮어쓰기**되고 `generation.run`이 +1 됩니다.
 - `retranscribe: true` — 모든 오디오를 STT부터 다시 수행.
 - `409 CALL_NOT_ENDED` — 아직 `/end` 전. / `409 ALREADY_PROCESSING` — 이미 생성/전사 진행 중.
 
-**⚠️ 농가 JWT 재전송 순서**: terminal 시 JWT는 저희 DB에서 삭제되며, terminal 상태에선 `POST /v1/calls`
-업서트가 무시됩니다. 재생성에 farmos 조회를 포함하려면 반드시 다음 순서로 호출하세요:
-
-```
-1. POST /v1/calls/{id}/regenerate          → status 가 PROCESSING 으로 복귀
-2. POST /v1/calls  (call_id + 새 farm_access_token)   → 토큰 갱신 반영
-```
-
-순서를 지키지 않으면(또는 토큰 재전송이 없으면) 전사+힌트만으로 재생성됩니다(실패는 아님).
+**⚠️ 농가 JWT 재공급**: terminal 시 JWT는 저희 DB에서 삭제됩니다. 재생성에 farmos 조회를 포함하려면
+**이 body에 새 `farm_access_token`을 함께 보내주세요** (§3.7 daily 재생성과 동일한 계약). 생략하면
+전사+힌트만으로 재생성됩니다(실패는 아님). terminal 상태에선 `POST /v1/calls` 업서트가 무시되므로
+토큰 재공급은 이 방법뿐입니다.
 
 ### 3.5 `GET /v1/calls/{call_id}` — 상태/결과 조회
 
@@ -476,7 +471,7 @@ curl "$B/v1/daily-diaries/daily_u1_20260819" -H "Authorization: Bearer $K"
 - [ ] 알림 방식 결정: 콜백(→ `callback_url` 전달 + `CALLBACK_API_KEY` 합의 + 저희 쪽 활성화 요청) 또는 폴링
 - [ ] 콜백 수신 시 `(call_id, generation_run)` 기준 중복 제거 구현
 - [ ] 에러 파서: `detail` 문자열(401) / 객체(도메인) / 리스트(422 검증) 모두 처리
-- [ ] terminal 후 추가 오디오 발생 시 `/regenerate` 호출 로직 (JWT 재전송 순서 §3.4 준수)
+- [ ] terminal 후 추가 오디오 발생 시 `/regenerate` 호출 로직 (farmos 조회가 필요하면 body에 새 JWT — §3.4)
 
 날짜별 일지(§3.7)를 쓰시는 경우 추가로:
 
