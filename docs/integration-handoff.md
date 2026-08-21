@@ -208,7 +208,7 @@ Body 선택: `{"retranscribe": false, "reason": "..."}`.
 
 - `result`는 **`status=COMPLETED`일 때만** 채워집니다.
 - `diaries[]`는 통화에서 다룬 **작물별** 1건씩. `prdlst_code`는 farmos 품목코드이며, 작물을 확정하지
-  못하면 `null`(S3 키·artifact 경로는 `unresolved`). 건별 `status` ∈ `OK|PARTIAL|EMPTY|UNRESOLVED_CROP`.
+  못하면 `null`(S3 키·artifact 경로는 `unresolved`; 한 결과에 미확정 작물이 여럿이면 두 번째부터 `unresolved-2`, `unresolved-3` …). 건별 `status` ∈ `OK|PARTIAL|EMPTY|UNRESOLVED_CROP`.
 - **저희는 farmos에 저장하지 않습니다.** `structured.prefill`은 앱 `PUT /m/diary`의 `fields`와 같은
   모양의 **초안**이고, 농가가 앱에서 확인 후 저장하는 용도입니다.
 - markdown 본문이 512KB를 넘으면 인라인이 생략됩니다(`markdown: null`) — S3 키 또는 §3.6으로 조회.
@@ -221,7 +221,7 @@ Body 선택: `{"retranscribe": false, "reason": "..."}`.
 |---|---|---|
 | GET | `/v1/calls/{id}/transcript` | 병합 전사 JSON. 미준비 시 `404 NOT_READY` |
 | GET | `/v1/calls/{id}/artifacts/report?format=md\|json` | 컨설팅 보고서 (기본 `text/markdown`) |
-| GET | `/v1/calls/{id}/artifacts/diary/{prdlst_code}?format=md\|json` | 작물별 영농일지. 미확정 작물은 `{prdlst_code}` 자리에 `unresolved` |
+| GET | `/v1/calls/{id}/artifacts/diary/{prdlst_code}?format=md\|json` | 작물별 영농일지. 미확정 작물은 `{prdlst_code}` 자리에 `unresolved`(다건이면 `unresolved-2` …) |
 | GET | `/v1/calls?status=&state=&limit=50&cursor=` | 운영/디버그용 목록 |
 | GET | `/healthz` | 무인증 헬스체크 `{status: "ok"\|"degraded", version, worker: {running, pending_stt, pending_gen, pending_daily}}` — DB 이상 시 `degraded` + `pending_*` 는 `null` |
 
@@ -276,7 +276,7 @@ processing"`, terminal이면 `note`에 regenerate 안내). 본문은 `DailyDiary
 |---|---|---|
 | GET | `/v1/daily-diaries/{diary_id}?inline=false` | 상태/결과 폴링 (§3.5와 같은 요령) |
 | GET | `/v1/daily-diaries/{diary_id}/transcript` | 병합 전사 JSON. 미준비 시 `404 NOT_READY` |
-| GET | `/v1/daily-diaries/{diary_id}/artifacts/diary/{prdlst_code}?format=md\|json` | 작물별 일지 (미확정 작물은 `unresolved`) |
+| GET | `/v1/daily-diaries/{diary_id}/artifacts/diary/{prdlst_code}?format=md\|json` | 작물별 일지 (미확정 작물은 `unresolved`, 다건이면 `unresolved-2` …) |
 | GET | `/v1/daily-diaries?diary_date=&status=&limit=50&cursor=` | 목록 (커서 규칙은 §3.6과 동일) |
 | POST | `/v1/daily-diaries/{diary_id}/regenerate` | `{"farm_access_token": "<새 JWT>", "reason": "..."}` → `202` |
 

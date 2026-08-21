@@ -18,6 +18,24 @@ from ..schemas.pipeline import PipelineResult
 UNRESOLVED = "unresolved"
 
 
+def _artifact_code(prdlst_code: str | None, used: set[str]) -> str:
+    """저장용 작물코드. 미확정(None)은 UNRESOLVED — 한 결과에 미확정 일지가 여럿이면
+    unresolved-2, unresolved-3 … 으로 뒤를 붙여 UNIQUE(diary_id/call_id, kind, prdlst_code)
+    와 S3 키 충돌을 막는다(중복 실코드 방어 겸용)."""
+    base = prdlst_code or UNRESOLVED
+    code, n = base, 1
+    while code in used:
+        n += 1
+        code = f"{base}-{n}"
+    used.add(code)
+    return code
+
+
+def _view_code(stored: str) -> str | None:
+    """저장 코드 → 응답 prdlst_code (unresolved 계열은 None)."""
+    return None if stored == UNRESOLVED or stored.startswith(UNRESOLVED + "-") else stored
+
+
 def _sha(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
@@ -48,8 +66,9 @@ async def persist_result(rt: Runtime, s: AsyncSession, call: Call, result: Pipel
         "speaker_map": result.speaker_map, "warnings": result.warnings, "usage": result.usage,
         "transcript_key": transcript_key, "diaries": [], "report": None,
     }
+    used_codes: set[str] = set()
     for d in result.diaries:
-        code = d.prdlst_code or UNRESOLVED
+        code = _artifact_code(d.prdlst_code, used_codes)
         kmd, kjs = keys.diary_md(call.call_id, code), keys.diary_json(call.call_id, code)
         payload = {"prdlst_code": d.prdlst_code, "prdlst_nm": d.prdlst_nm, "diary_date": d.diary_date,
                    "status": d.status, **d.structured}
@@ -98,8 +117,9 @@ async def persist_daily_result(rt: Runtime, s: AsyncSession, dd: DailyDiary, res
         "speaker_map": result.speaker_map, "warnings": result.warnings, "usage": result.usage,
         "transcript_key": transcript_key, "diaries": [],
     }
+    used_codes: set[str] = set()
     for d in result.diaries:
-        code = d.prdlst_code or UNRESOLVED
+        code = _artifact_code(d.prdlst_code, used_codes)
         kmd, kjs = keys.daily_diary_md(dd.diary_id, code), keys.daily_diary_json(dd.diary_id, code)
         payload = {"prdlst_code": d.prdlst_code, "prdlst_nm": d.prdlst_nm, "diary_date": d.diary_date,
                    "status": d.status, **d.structured}
@@ -134,7 +154,7 @@ def build_result_view(call: Call, artifacts: list[Artifact], *, inline: bool = T
             except ValueError:
                 structured = None
         diaries.append(DiaryView(
-            prdlst_code=None if a.prdlst_code == UNRESOLVED else a.prdlst_code, prdlst_nm=a.prdlst_nm,
+            prdlst_code=_view_code(a.prdlst_code), prdlst_nm=a.prdlst_nm,
             diary_date=a.diary_date, status=a.diary_status,
             markdown=a.content if inline else None, structured=structured,
             s3_key_md=a.s3_key, s3_key_json=js.s3_key if js else a.s3_key.replace(".md", ".json"),
@@ -173,7 +193,7 @@ def build_daily_result_view(dd: DailyDiary, artifacts: list[DailyArtifact], *, i
             except ValueError:
                 structured = None
         diaries.append(DiaryView(
-            prdlst_code=None if a.prdlst_code == UNRESOLVED else a.prdlst_code, prdlst_nm=a.prdlst_nm,
+            prdlst_code=_view_code(a.prdlst_code), prdlst_nm=a.prdlst_nm,
             diary_date=a.diary_date, status=a.diary_status,
             markdown=a.content if inline else None, structured=structured,
             s3_key_md=a.s3_key, s3_key_json=js.s3_key if js else a.s3_key.replace(".md", ".json"),

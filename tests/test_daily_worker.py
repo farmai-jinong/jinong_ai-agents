@@ -120,3 +120,43 @@ async def test_daily_recovery_resets_running(client, app, stt_mock):
         assert dd.gen_state == "QUEUED"
     await rt.worker.drain()
     assert (await client.get(f"/v1/daily-diaries/{DAILY['diary_id']}")).json()["status"] == "COMPLETED"
+
+
+async def test_daily_multiple_unresolved_crops_no_collision(client, app, stt_mock, s3_env):
+    """미확정(prdlst_code=None) 작물 일지가 2건 이상이어도 UNIQUE/S3 키 충돌 없이 COMPLETED.
+
+    회귀: 멀티콜 daily 에서 통화별 작물이 모두 미확정이면 전부 'unresolved' 코드로 저장돼
+    daily_artifacts UNIQUE(diary_id, kind, prdlst_code) 위반 → GENERATION_FAILED 였다.
+    """
+    from app.schemas.pipeline import DiaryArtifact, PipelineResult
+
+    rt = app.state.rt
+    await _complete_calls(client, app)
+
+    class TwoUnresolvedPipeline:
+        async def run(self, transcript, ctx):
+            def mk(nm):
+                return DiaryArtifact(prdlst_code=None, prdlst_nm=nm, diary_date="2026-08-20",
+                                     status="PARTIAL", markdown=f"# 영농일지 — {nm}")
+            return PipelineResult(diaries=[mk("벼"), mk("콩")], report=None,
+                                  model="fake", prompt_version="0")
+
+    orig = rt.pipeline
+    rt.pipeline = TwoUnresolvedPipeline()
+    try:
+        r = await client.post("/v1/daily-diaries", json=DAILY)
+        assert r.status_code == 201
+        await rt.worker.drain()
+    finally:
+        rt.pipeline = orig
+
+    body = (await client.get(f"/v1/daily-diaries/{DAILY['diary_id']}")).json()
+    assert body["status"] == "COMPLETED", body.get("error")
+    diaries = body["result"]["diaries"]
+    assert [d["prdlst_nm"] for d in diaries] == ["벼", "콩"]
+    assert [d["prdlst_code"] for d in diaries] == [None, None]       # 응답에서는 둘 다 미확정
+    base = f"agents/voicecall/daily/{DAILY['diary_id']}/artifacts/diary"
+    assert {d["s3_key_md"] for d in diaries} == {f"{base}/unresolved.md", f"{base}/unresolved-2.md"}
+    # 두 번째 미확정 일지도 산출물 GET 으로 접근 가능
+    r = await client.get(f"/v1/daily-diaries/{DAILY['diary_id']}/artifacts/diary/unresolved-2")
+    assert r.status_code == 200 and "콩" in r.text
