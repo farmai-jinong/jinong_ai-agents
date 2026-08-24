@@ -29,7 +29,8 @@ class Settings(BaseSettings):
 
     # --- storage --------------------------------------------------------------
     db_path: str = "/data/agent.db"
-    # 버킷명 SSOT: audio_labeler-web/config.prd.yaml storage.s3 (값 복사 금지, 참조만)
+    # 산출물 버킷 — 백엔드 MinIO(S3_ENDPOINT_URL)에 동명 생성(2026-08). AWS 동명 버킷(audio_labeler SSOT:
+    # audio_labeler-web/config.prd.yaml)과는 별개 인스턴스. 입력 녹음은 호출자 참조(voice-recordings)로만 읽는다.
     s3_bucket: str = "jinong-agri-stt"
     s3_prefix: str = "agents/voicecall"
     aws_region: str = "ap-northeast-2"

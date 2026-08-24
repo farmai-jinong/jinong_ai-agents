@@ -22,9 +22,12 @@ Deploy target: 지농서버(AWS EC2), Docker, host port **7003** (loopback) behi
   `gemini-3.5-flash`, SA key via `GOOGLE_APPLICATION_CREDENTIALS`, current default) and `openai` — are temporary; the
   consent doc (§7 no external processing) requires switching to `LLM_PROVIDER=jinong` (gateway vLLM) once it is up.
 - Secrets only via env/`.env` (never committed). Bucket names / prefixes / schemas of other repos are **referenced
-  by SSOT path** in comments, never copied as truth (S3 bucket SSOT: `audio_labeler-web/config.prd.yaml`).
-- Our S3 writes stay under `S3_PREFIX` (`agents/voicecall/`); input audio is read from the caller's bucket/key and
-  never copied. Key builders live only in `app/clients/s3.py:Keys`.
+  by SSOT path** in comments, never copied as truth.
+- Storage is the backend-owned MinIO (`S3_ENDPOINT_URL=https://smart-minio.jinongservice.co.kr`, 2026-08 전환):
+  input recordings are read from `voice-recordings` (caller bucket/key, read-only, never copied); our writes go to
+  the MinIO bucket `jinong-agri-stt` under `S3_PREFIX` (`agents/voicecall/`) only — same name as, but distinct from,
+  the AWS bucket (audio_labeler SSOT: `audio_labeler-web/config.prd.yaml`, stays on AWS). Key builders live only in
+  `app/clients/s3.py:Keys`.
 - The agent **never writes to farmos** (no `PUT /m/diary`); it only reads with the farmer JWT from the call-start
   payload and returns a `prefill` (PutDiaryDTO shape) for the farmer to confirm in the app.
 - `farm_access_token` is never echoed in responses/logs; purged on terminal status.

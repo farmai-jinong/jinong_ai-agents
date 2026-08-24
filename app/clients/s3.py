@@ -98,11 +98,19 @@ class S3Client:
     def __init__(self, settings: Settings) -> None:
         self.bucket = settings.s3_bucket
         self.keys = Keys(settings.s3_prefix)
+        cfg: dict[str, Any] = dict(retries={"max_attempts": 3, "mode": "standard"},
+                                   connect_timeout=10, read_timeout=120)
+        if settings.s3_endpoint_url:
+            # MinIO 등 커스텀 엔드포인트: 가상호스트 스타일 DNS 불필요(path-style 고정),
+            # boto3>=1.36 기본 CRC 체크섬 전송을 필요 시에만(구버전 서버 호환).
+            cfg["s3"] = {"addressing_style": "path"}
+            cfg["request_checksum_calculation"] = "when_required"
+            cfg["response_checksum_validation"] = "when_required"
         self._s3 = boto3.client(
             "s3",
             region_name=settings.aws_region,
             endpoint_url=settings.s3_endpoint_url or None,
-            config=Config(retries={"max_attempts": 3, "mode": "standard"}, connect_timeout=10, read_timeout=120),
+            config=Config(**cfg),
         )
 
     # --- 읽기 -----------------------------------------------------------
