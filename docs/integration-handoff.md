@@ -406,8 +406,9 @@ terminal 사유 (`status` + `error.code`):
 ## 5. 콜백 (terminal 알림, 선택)
 
 - **등록**: 통화별로 `POST /v1/calls` body의 `callback_url`. 전역 설정이 아닙니다.
-  추가로 저희 서버 설정(`CALLBACK_ENABLED`)이 켜져 있어야 발사됩니다 — **콜백 방식으로 가시려면
-  go-live 전에 저희에게 활성화를 요청해 주세요.** 그전까지는 폴링만 동작합니다.
+  저희 서버 콜백 활성화는 **완료**됐습니다(2026-08-24, `CALLBACK_ENABLED=true` + 합의된 `X-API-Key`).
+  개발 수신 URL `https://dev.jinongservice.co.kr/voicetalk/public/agent-callback`, 운영 전환 시
+  `data.` 도메인 URL을 `callback_url`로 넘겨주시면 됩니다.
 - **발사 시점**: terminal(`COMPLETED`/`EMPTY`/`FAILED`) 전이마다 1회. `/regenerate`로 다시 terminal이
   되면 다시 발사됩니다.
 - **요청**: `POST <callback_url>`, `Content-Type: application/json`. 합의된 경우
@@ -448,14 +449,16 @@ terminal 사유 (`status` + `error.code`):
 
 ## 6. S3 규약 (백엔드 준비 사항)
 
-**입력(녹음)** — 백엔드 버킷:
-- 백엔드가 녹음을 S3에 업로드하고 참조만 전달합니다. 저희는 해당 객체를 **읽기만** 하고 복사하지 않습니다.
-- **저희 서비스의 IAM principal에 해당 버킷/prefix의 `s3:GetObject` + `s3:HeadObject` 권한을 부여해
-  주세요.** (`/audio` 호출이 `422 S3_ACCESS_DENIED`면 대부분 이 권한 누락입니다. principal ARN은 별도 전달.)
+**입력(녹음)** — 백엔드 MinIO 버킷 `voice-recordings` (2026-08-24 반영 완료):
+- 백엔드가 녹음을 MinIO(`https://smart-minio.jinongservice.co.kr`)의 `voice-recordings`에 업로드하고
+  참조(`bucket`/`key`)만 전달합니다. 저희는 해당 객체를 **읽기만** 하고 복사하지 않습니다.
+- 접근 권한은 MinIO 전용 사용자(`jinong-ai-agents`, `voice-recordings` 읽기 전용 정책)로 이미 구성됐습니다 —
+  기존 "IAM principal ARN 별도 전달" 절차는 MinIO 전환으로 폐기. (`/audio` 호출이 `422 S3_ACCESS_DENIED`면
+  MinIO 사용자/정책 변경 여부를 저희에게 알려주세요.)
 - 크기 제한 200MB. 오디오 포맷 검증은 STT 게이트웨이 소관이며(ogg/wav/m4a 사용 확인됨), 미지원 포맷은
   해당 오디오의 STT 실패로 나타납니다.
 
-**출력(산출물)** — 저희 버킷 `jinong-agri-stt`:
+**출력(산출물)** — 같은 MinIO의 저희 버킷 `jinong-agri-stt` (2026-08-24 생성, 전용 사용자만 쓰기):
 
 ```
 agents/voicecall/{call_id}/call.json                        시작/종료 스냅샷
@@ -550,9 +553,9 @@ curl "$B/v1/daily-diaries/daily_u1_20260819" -H "Authorization: Bearer $K"
 ## 10. 연동 전 체크리스트
 
 - [ ] `AGENT_API_KEY` 수령 (저희 발급)
-- [ ] 녹음 버킷/prefix에 저희 IAM principal 읽기 권한(`GetObject`+`HeadObject`) 부여
+- [x] 녹음 읽기 권한 — MinIO 전용 사용자로 구성 완료(2026-08-24, §6)
 - [ ] 통화 시작 페이로드에 `farm_access_token`(농가 JWT) 포함
-- [ ] 알림 방식 결정: 콜백(→ `callback_url` 전달 + `CALLBACK_API_KEY` 합의 + 저희 쪽 활성화 요청) 또는 폴링
+- [x] 알림 방식 — 콜백 활성화 완료(2026-08-24): `callback_url` 전달 + 합의된 `X-API-Key` (§5). 폴링은 안전망으로 유지 권장
 - [ ] 콜백 수신 시 `(call_id, generation_run)` 기준 중복 제거 구현
 - [ ] 에러 파서: `detail` 문자열(401) / 객체(도메인) / 리스트(422 검증) 모두 처리
 - [ ] terminal 후 추가 오디오 발생 시 `/regenerate` 호출 로직 (farmos 조회가 필요하면 body에 새 JWT — §3.4)
