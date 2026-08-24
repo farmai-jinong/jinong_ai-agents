@@ -474,6 +474,15 @@ agents/voicecall/daily/{diary_id}/artifacts/diary/{prdlst_code}.md | .json
 agents/voicecall/daily/{diary_id}/artifacts/result.json     (report 없음)
 ```
 
+경로 규칙:
+
+- **통화(`{call_id}`)가 최상위 디렉터리** — 한 통화의 STT 원본·병합 전사·일지·보고서가 전부 그 아래에
+  모입니다. prefix 하나(`agents/voicecall/{call_id}/`)로 통화 단위 조회·정리가 끝납니다.
+- **날짜별 집계는 `daily/{diary_id}/`로 분리** — `diary_id`가 `call_id` 네임스페이스와 충돌하지 않습니다.
+- **작물별 일지 파일명은 `{prdlst_code}`** (팜스올 작물 코드). 작물 미확정이면 `unresolved.*`,
+  미확정 작물이 여러 건이면 `unresolved-2.*`, `unresolved-3.*` … 로 늘어납니다.
+- `agents/voicecall/` prefix는 고정입니다. 이후 보이스톡 외 산출물이 생기면 같은 버킷의
+  `agents/<용도>/`로 나란히 확장하며, 기존 키는 바뀌지 않습니다.
 - API 응답의 `s3_key_md` / `s3_key_json` / `transcript_key` / `result_key`는 **이 버킷
   (`jinong-agri-stt`) 기준 키**입니다 (응답에 버킷명은 포함되지 않습니다).
 - 재생성 시 같은 키에 덮어씁니다 — 실행별 이력이 필요하면 `result.json`의 `generation_run`을 참고하세요.
