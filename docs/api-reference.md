@@ -23,7 +23,7 @@
   "call_id": "20260819_Qmf1D0X",
   "started_at": "2026-08-19T10:12:00+09:00",
   "participants": [
-    {"role": "farmer", "user_id": "u123", "name": "홍길동"},
+    {"role": "farmer", "user_id": "u123", "engn_id": "18", "name": "홍길동"},
     {"role": "consultant", "user_id": "c9", "name": "김상담"}
   ],
   "farm_access_token": "eyJ…",
@@ -36,6 +36,7 @@
 ```
 
 - `call_id`: `[A-Za-z0-9_.:-]{1,128}` — kafka-gateway 의 callId 그대로.
+- `participants[]`: `{role, user_id, engn_id, name}` — 농가 구분은 `engn_id`(영농체 ID)+`user_id` **복합 키**(user_id 단독 식별 금지). farmer 항목의 `engn_id`는 daily FARM_MISMATCH 검사에 사용.
 - `farm_access_token`: 농가 JWT. 영농일지 작성용 farmos **읽기** 조회(`/m/diary/*`)에만 사용, 응답/로그에 절대 노출하지 않고 terminal 시 삭제. 없으면 farmos 조회 없이 전사만으로 생성.
 - `metadata.hints` (선택): `prdlst_code`, `prdlst_nm`, `farmer_crops[]`, `diary_date`, `topic` — farmos 조회 실패 시 대체.
 - 응답: `201` 신규 / `200` 재전송(참가자·토큰·메타 upsert; terminal 후엔 변경 없이 `note`). 본문은 `CallDetail`.
@@ -128,7 +129,8 @@ Body(선택) `{"ended_at": "...", "duration_sec": 900}` → `202` (`state=ENDED,
 ```
 
 - **멱등성**: `diary_id` 가 멱등성 키다(형식은 call_id 와 동일 `[A-Za-z0-9_.:-]{1,128}`). 백엔드가
-  farmer/날짜에서 결정적으로 만들어 보내면(예: `daily_{farmerId}_{yyyyMMdd}`) 재전송이 안전하다.
+  농가 복합 키/날짜에서 결정적으로 만들어 보낸다 — 확정 규칙 `daily_{engnId}_{userId}_{yyyyMMdd}`
+  (예: `daily_18_u123_20260819`, 2026-08-25 백엔드 확정). 재전송이 안전하다.
   신규 → `201` + 생성 큐잉. 재-POST: 진행 중 → `200 "already processing"`, terminal →
   `200 "… use regenerate"` (재생성은 `/regenerate` 로만).
 - **`farm_access_token` 은 매 트리거·재생성마다 새로 보내야 한다**: 멤버 call 들의 토큰은 terminal 시
@@ -140,7 +142,7 @@ Body(선택) `{"ended_at": "...", "duration_sec": 900}` → `202` (`state=ENDED,
   | `CALLS_NOT_FOUND` | 422 | 존재하지 않는 call 포함 |
   | `CALLS_NOT_READY` | 409 | `NONE`/`PROCESSING`/`FAILED` call 포함 (FAILED 는 먼저 call regenerate) |
   | `NO_TRANSCRIBED_CALLS` | 422 | `COMPLETED` call 이 하나도 없음 |
-  | `FARM_MISMATCH` | 422 | call 들의 `farm.farm_id` 가 2개 이상 서로 다름 (둘 다 있을 때만 검사) |
+  | `FARM_MISMATCH` | 422 | call 들의 `farm.farm_id` 또는 farmer 복합 키 `(engn_id, user_id)` 가 2개 이상 서로 다름 (값이 있는 콜만 검사 — `engn_id` 없는 farmer 는 복합 키 검사에서 제외) |
 - 병합 전사: 통화를 `started_at` 순으로 이어붙인다. 시간축은 각 통화 길이의 누적(통화 사이 실제 공백은
   표현하지 않음). `transcript.files[].call_id` 로 원본 통화를 식별한다.
 - 산출물 날짜는 요청의 `diary_date` 로 고정된다.

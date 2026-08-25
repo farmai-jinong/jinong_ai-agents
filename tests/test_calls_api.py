@@ -19,6 +19,18 @@ async def test_start_idempotent_and_token_hidden(client):
 
 
 @pytest.mark.asyncio
+async def test_start_participant_engn_id_roundtrip(client):
+    # 농가 복합 키(engn_id + user_id) — 수신·저장·에코 확인
+    body = {"call_id": "c-engn", "participants": [
+        {"role": "farmer", "user_id": "u123", "engn_id": "18", "name": "홍길동"},
+        {"role": "consultant", "user_id": "c9", "name": "김상담"}]}
+    r = await client.post("/v1/calls", json=body)
+    assert r.status_code == 201
+    got = (await client.get("/v1/calls/c-engn")).json()["participants"]
+    assert got[0]["engn_id"] == "18" and got[1]["engn_id"] is None
+
+
+@pytest.mark.asyncio
 async def test_audio_validation_and_idempotency(client):
     await client.post("/v1/calls", json={"call_id": "c2"})
     r = await client.post("/v1/calls/c2/audio", json={"bucket": BUCKET, "key": "raw/missing.wav"})

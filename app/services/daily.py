@@ -54,6 +54,13 @@ class DailyDiaryService:
                         if isinstance(c.farm_json, dict) and c.farm_json.get("farm_id") is not None}
             if len(farm_ids) > 1:
                 raise ApiError("FARM_MISMATCH", f"call_ids span multiple farms: {sorted(farm_ids)}", 422)
+            # 농가는 (engn_id, user_id) 복합 키로 구분 — engn_id 없는 구형 콜은 위 farm_id 검사만 적용
+            farmer_keys = {(str(p.get("engn_id")), str(p.get("user_id") or ""))
+                           for c in calls for p in (c.participants_json or [])
+                           if isinstance(p, dict) and p.get("role") == "farmer" and p.get("engn_id") is not None}
+            if len(farmer_keys) > 1:
+                pretty = sorted(f"engn:{e}/user:{u}" for e, u in farmer_keys)
+                raise ApiError("FARM_MISMATCH", f"call_ids span multiple farmers: {', '.join(pretty)}", 422)
 
             dd = DailyDiary(
                 diary_id=req.diary_id, diary_date=req.diary_date, call_ids_json=list(req.call_ids),

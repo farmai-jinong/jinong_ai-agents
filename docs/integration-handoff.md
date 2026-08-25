@@ -56,7 +56,7 @@
   "call_id": "20260819_Qmf1D0X",
   "started_at": "2026-08-19T10:12:00+09:00",
   "participants": [
-    {"role": "farmer", "user_id": "u123", "name": "홍길동"},
+    {"role": "farmer", "user_id": "u123", "engn_id": "18", "name": "홍길동"},
     {"role": "consultant", "user_id": "c9", "name": "김상담"}
   ],
   "farm_access_token": "<농가 JWT>",
@@ -72,7 +72,7 @@
 |---|---|---|---|
 | `call_id` | string | **필수** | `[A-Za-z0-9_.:-]{1,128}`. kafka-gateway의 `callId` 그대로 사용 — 저희 쪽 기본키 |
 | `started_at` | datetime | 선택 | 통화 시작 시각 |
-| `participants` | array(≤4) | 선택 | `{role, user_id, name}`. `role`은 `"farmer"` 또는 `"consultant"`만 허용(그 외 422). 화자 수 추정에도 사용 |
+| `participants` | array(≤4) | 선택 | `{role, user_id, engn_id, name}`. `role`은 `"farmer"` 또는 `"consultant"`만 허용(그 외 422). 화자 수 추정에도 사용. **농가 구분은 `engn_id`(영농체 ID) + `user_id` 복합 키** — farmer 항목에는 `engn_id`를 넣어 주세요(날짜별 일지의 동일 농가 검사에 사용, §3.7) |
 | `farm_access_token` | string | 선택 | **농가 JWT.** farmos 영농일지 관련 **읽기 조회에만** 사용. 응답·로그에 절대 노출되지 않고 terminal 시 삭제. 없으면 farmos 조회 없이 전사+힌트만으로 생성 |
 | `farm` | object | 선택 | 자유 형식(`farm_id`, `farm_nm` 등). 응답에 그대로 반환 |
 | `num_speakers` | int 1..8 | 선택 | STT 화자 분리 힌트 |
@@ -281,7 +281,7 @@ Body 선택: `{"retranscribe": false, "reason": "...", "farm_access_token": "<�
 
 ```json
 {
-  "diary_id": "daily_u123_20260819",
+  "diary_id": "daily_18_u123_20260819",
   "diary_date": "2026-08-19",
   "call_ids": ["20260819_Qmf1D0X", "20260819_Rx2kP9Y"],
   "farm_access_token": "<농가 JWT>",
@@ -293,7 +293,7 @@ Body 선택: `{"retranscribe": false, "reason": "...", "farm_access_token": "<�
 
 | 필드 | 타입 | 필수 | 설명 |
 |---|---|---|---|
-| `diary_id` | string | **필수** | `[A-Za-z0-9_.:-]{1,128}`. **멱등성 키** — 백엔드가 farmer/날짜에서 결정적으로 생성해 주세요(예: `daily_{farmerId}_{yyyyMMdd}`). 재전송이 안전해집니다 |
+| `diary_id` | string | **필수** | `[A-Za-z0-9_.:-]{1,128}`. **멱등성 키** — 백엔드가 농가 복합 키/날짜에서 결정적으로 생성 (**확정 규칙**: `daily_{engnId}_{userId}_{yyyyMMdd}`, 예: `daily_18_u123_20260819`). 재전송이 안전해집니다 |
 | `diary_date` | string | **필수** | `yyyy-MM-dd`. 산출물 일지의 날짜는 이 값으로 고정됩니다 |
 | `call_ids` | array 1..50 | **필수** | 합칠 통화들. 중복 불가. **전부 terminal(`COMPLETED`/`EMPTY`)이어야 하고 1건 이상 `COMPLETED`여야 합니다.** 같은 농가의 통화만 묶는 것은 백엔드 책임입니다 |
 | `farm_access_token` | string | 선택 | **매 트리거·재생성마다 새로 보내주세요** — 통화 때 받은 JWT는 통화 terminal 시 저희 DB에서 삭제되어 재사용되지 않습니다. 생략하면 farmos 조회 없이 전사+힌트만으로 생성합니다. 이 토큰도 daily terminal 시 삭제됩니다 |
@@ -310,7 +310,7 @@ processing"`, terminal이면 `note`에 regenerate 안내). 본문은 `DailyDiary
 | 422 | `CALLS_NOT_FOUND` | 존재하지 않는 call 포함 |
 | 409 | `CALLS_NOT_READY` | terminal이 아닌(`NONE`/`PROCESSING`) 또는 `FAILED` call 포함 — `FAILED`는 먼저 해당 통화를 `/regenerate` 하세요 |
 | 422 | `NO_TRANSCRIBED_CALLS` | `COMPLETED` call이 하나도 없음 |
-| 422 | `FARM_MISMATCH` | call들의 `farm.farm_id`가 서로 다름 |
+| 422 | `FARM_MISMATCH` | call들의 `farm.farm_id` 또는 farmer 복합 키(`engn_id`+`user_id`)가 서로 다름 |
 
 **병합 방식**: 통화를 `started_at` 순으로 이어붙입니다. 병합 전사의 시간축은 각 통화 길이의
 누적이며 **통화 사이 실제 공백은 표현되지 않습니다.** 전사의 `files[].call_id`로 원본 통화를 식별할 수
@@ -437,12 +437,12 @@ terminal 사유 (`status` + `error.code`):
 
 ```json
 {
-  "daily_diary_id": "daily_u123_20260819",
+  "daily_diary_id": "daily_18_u123_20260819",
   "diary_date": "2026-08-19",
   "status": "COMPLETED",
   "error": null,
   "call_ids": ["20260819_Qmf1D0X", "20260819_Rx2kP9Y"],
-  "result_url": "https://jinong-stt-report-generation.jinongservice.co.kr/v1/daily-diaries/daily_u123_20260819",
+  "result_url": "https://jinong-stt-report-generation.jinongservice.co.kr/v1/daily-diaries/daily_18_u123_20260819",
   "generation_run": 1
 }
 ```
@@ -513,7 +513,7 @@ agents/voicecall/daily/{diary_id}/artifacts/result.json     (report 없음)
 | 409 | `CALLS_NOT_READY` | daily 트리거의 `call_ids`에 terminal 아닌/`FAILED` 통화 포함 (§3.7) |
 | 422 | `CALLS_NOT_FOUND` | daily 트리거의 `call_ids`에 미존재 통화 포함 |
 | 422 | `NO_TRANSCRIBED_CALLS` | daily 트리거에 `COMPLETED` 통화가 하나도 없음 |
-| 422 | `FARM_MISMATCH` | daily 트리거의 통화들이 서로 다른 농장 소속 |
+| 422 | `FARM_MISMATCH` | daily 트리거의 통화들이 서로 다른 농가 소속 — `farm.farm_id` 또는 farmer `(engn_id, user_id)` 복합 키 기준 |
 | 422 | `INVALID_CURSOR` | 목록 `cursor` 형식 오류 (§3.6 — `next_cursor`를 그대로 사용하세요) |
 | 422 | `S3_OBJECT_NOT_FOUND` | 녹음 객체 없음 |
 | 422 | `S3_ACCESS_DENIED` | 녹음 읽기 권한 없음 (§6) |
@@ -564,6 +564,7 @@ curl "$B/v1/daily-diaries/daily_u1_20260819" -H "Authorization: Bearer $K"
 - [ ] `AGENT_API_KEY` 수령 (저희 발급)
 - [x] 녹음 읽기 권한 — MinIO 전용 사용자로 구성 완료(2026-08-24, §6)
 - [ ] 통화 시작 페이로드에 `farm_access_token`(농가 JWT) 포함
+- [ ] 통화 시작 `participants[]`의 farmer 항목에 `engn_id` 포함 (농가 구분은 `engn_id`+`user_id` 복합 키 — §3.1)
 - [x] 알림 방식 — 콜백 활성화 완료(2026-08-24): `callback_url` 전달 + 합의된 `X-API-Key` (§5). 폴링은 안전망으로 유지 권장
 - [ ] 콜백 수신 시 `(call_id, generation_run)` 기준 중복 제거 구현
 - [ ] 에러 파서: `detail` 문자열(401) / 객체(도메인) / 리스트(422 검증) 모두 처리
@@ -571,7 +572,7 @@ curl "$B/v1/daily-diaries/daily_u1_20260819" -H "Authorization: Bearer $K"
 
 날짜별 일지(§3.7)를 쓰시는 경우 추가로:
 
-- [ ] `diary_id` 결정론적 생성 규칙 확정 (권장: `daily_{farmerId}_{yyyyMMdd}`)
+- [x] `diary_id` 결정론적 생성 규칙 확정 — `daily_{engnId}_{userId}_{yyyyMMdd}` (2026-08-25 백엔드 확정, 예: `daily_18_u123_20260819`)
 - [ ] 트리거 시점 결정: 하루 마감 배치 또는 마지막 통화 terminal 콜백 수신 시
 - [ ] **트리거·재생성마다 새 농가 JWT 첨부** (통화 때 보낸 토큰은 재사용되지 않음)
 - [ ] 멤버 통화 전부 terminal 확인 후 트리거 (`CALLS_NOT_READY` 시 재시도/지연 처리)

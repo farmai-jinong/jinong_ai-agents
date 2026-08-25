@@ -72,6 +72,28 @@ async def test_farm_mismatch(client, app, stt_mock):
     assert r.status_code == 422 and r.json()["detail"]["code"] == "FARM_MISMATCH"
 
 
+async def test_farmer_composite_key_mismatch(client, app, stt_mock):
+    # 농가 구분은 (engn_id, user_id) 복합 키 — engn_id 가 다르면 같은 user_id 여도 차단
+    await _complete_calls(client, app)
+    rt = app.state.rt
+    async with rt.db.session() as s:
+        (await repo.get_call(s, "c1")).participants_json = [
+            {"role": "farmer", "user_id": "u1", "engn_id": "18", "name": "홍길동"}]
+        (await repo.get_call(s, "c2")).participants_json = [
+            {"role": "farmer", "user_id": "u1", "engn_id": "19", "name": "홍길동"}]
+        await s.commit()
+    r = await client.post("/v1/daily-diaries", json={**DAILY, "diary_id": "d-engn-x"})
+    assert r.status_code == 422 and r.json()["detail"]["code"] == "FARM_MISMATCH"
+
+    # 복합 키가 같으면 통과
+    async with rt.db.session() as s:
+        (await repo.get_call(s, "c2")).participants_json = [
+            {"role": "farmer", "user_id": "u1", "engn_id": "18", "name": "홍길동"}]
+        await s.commit()
+    r = await client.post("/v1/daily-diaries", json={**DAILY, "diary_id": "d-engn-ok"})
+    assert r.status_code == 201, r.text
+
+
 async def test_regenerate_guards_and_token(client, app, stt_mock):
     r = await client.post("/v1/daily-diaries/none/regenerate", json={})
     assert r.status_code == 404 and r.json()["detail"]["code"] == "DAILY_NOT_FOUND"

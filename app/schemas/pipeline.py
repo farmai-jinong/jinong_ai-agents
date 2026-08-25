@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 class Participant(BaseModel):
     role: Literal["farmer", "consultant"]
     user_id: str | None = None
+    engn_id: str | None = None   # 영농체 ID — 농가 구분은 (engn_id, user_id) 복합 키 (user_id 단독 식별 금지)
     name: str | None = None
 
 
