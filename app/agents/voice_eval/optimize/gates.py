@@ -159,6 +159,7 @@ def gate_pytest(wt: Path, python: str) -> GateResult:
 
 def fixture_recall(wt: Path, python: str, out_dir: Path) -> tuple[bool, dict[str, list[int]], str]:
     """`eval.py --provider fake` 재현율 — LLM 없이 매핑·렌더 회귀를 잡는 무료 지표."""
+    out_dir = out_dir.resolve()                    # cwd 가 worktree 라 상대경로는 엉뚱한 데로 간다
     ok, out = _run([python, "-m", "app.agents.eval", "--provider", "fake", "--out", str(out_dir)], wt)
     if not ok:
         return False, {}, out

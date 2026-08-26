@@ -51,6 +51,7 @@ def run_eval(cwd: Path, out: Path, *, python: str, judge_repeat: int, force_judg
     `--stages pipeline,judge` 라도 result.json 이 있으면 파이프라인은 캐시를 쓴다 → 재채점만 할 때는
     `force_judge=True` 로 judge 만 다시 돌린다(파이프라인 토큰 0).
     """
+    out = out.resolve()                            # cwd 가 worktree 라 상대경로는 엉뚱한 데로 간다
     cmd = [python, "-m", "app.agents.voice_eval", "--stages", "pipeline,judge",
            "--out", str(out), "--judge-repeat", str(judge_repeat), "--no-gate"]
     if force_judge:

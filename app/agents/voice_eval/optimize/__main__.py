@@ -208,6 +208,9 @@ def main(argv: list[str] | None = None) -> int:
     if (err := ensure_clean_tree()):
         print(err, file=sys.stderr)
         return 2
+    # 서브프로세스를 worktree cwd 로 돌리므로 경로는 전부 절대경로여야 한다
+    args.eval_out = str(Path(args.eval_out).resolve())
+    args.work = str(Path(args.work).resolve())
     eval_out = Path(args.eval_out)
     if not (eval_out / "summary.json").exists():
         print(f"{eval_out}/summary.json 이 없다. 먼저 평가를 한 번 돌릴 것:\n"
