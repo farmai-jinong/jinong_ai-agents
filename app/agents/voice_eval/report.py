@@ -63,9 +63,11 @@ def aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "tokens": sum(int(p.get("tokens") or 0) for p in pipe) + sum(int(j.get("tokens") or 0) for j in judged),
         "cause_matrix": cause_matrix(judged),
         "cells": cells(judged),
+        "judge_dimension_mean": _mean([float(v) for j in judged for v in j.get("dimensions", {}).values()]),
+        "judge_items": sum(len(j.get("items", [])) for j in judged),
         "composite": composite(_mean([p["facts_recall"] for p in pipe]),
                                _mean([p["severity_ratio"] for p in pipe if p["severity_exact"][1]]),
-                               _mean([float(j["overall"]) for j in judged])),
+                               _mean([float(v) for j in judged for v in j.get("dimensions", {}).values()])),
     }
 
 
@@ -75,13 +77,23 @@ COMPOSITE_WEIGHTS = {"judge": 0.50, "facts_recall": 0.30, "severity": 0.20}
 
 
 def composite(facts_recall: float | None, severity_ratio: float | None,
-              judge_overall_mean: float | None) -> float | None:
-    """0~1 종합점수. 셋 중 하나라도 미측정이면 None (미실행 단계를 0점으로 오인하지 않는다)."""
-    if judge_overall_mean is None or facts_recall is None:
+              judge_dimension_mean: float | None) -> float | None:
+    """0~1 종합점수. judge 항은 **축 평균**을 쓴다(총점 `overall` 이 아니라).
+
+    `overall` 은 케이스당 1~5 정수 5개뿐이라 평균의 최소 눈금이 0.2 → 종합점수 0.02 이고, 이는 관측된
+    채점 변동폭(노이즈 밴드)과 같다. 즉 검출하려는 개선과 같은 크기로 양자화돼 있어 실제로 타깃 감점을
+    5→2 로 줄인 변경이 judge 총점 1점 하락에 상쇄돼 묻혔다(저널 #1). 6축×5케이스=30개 정수를 쓰는 축
+    평균은 눈금이 6배 미세하다. 대신 총점이 담당하던 "정직성을 코버리지와 맞바꾸지 말 것"은
+    `decide.confirm` 의 faithfulness·chatter 하드 가드로 옮겼다.
+
+    셋 중 하나라도 미측정이면 None (미실행 단계를 0점으로 오인하지 않는다).
+    """
+    if judge_dimension_mean is None or facts_recall is None:
         return None
     w = COMPOSITE_WEIGHTS
     sev = 1.0 if severity_ratio is None else severity_ratio
-    return round(w["judge"] * (judge_overall_mean / 5.0) + w["facts_recall"] * facts_recall + w["severity"] * sev, 4)
+    return round(w["judge"] * (judge_dimension_mean / 5.0) + w["facts_recall"] * facts_recall
+                 + w["severity"] * sev, 4)
 
 
 def gate(summary: dict[str, Any], thresholds: dict[str, Any]) -> list[str]:
@@ -163,8 +175,11 @@ def render(rows: list[dict[str, Any]], summary: dict[str, Any], thresholds: dict
           f" (임계 {thresholds['judge_overall_mean']})",
           f"- CER `{_fmt(summary['cer'])}` · WER `{_fmt(summary['wer'])}` (참고 — 대본 낭독이라 애드리브 포함)",
           f"- 화자 역할 정합 {summary['speaker_role_ok']}/{summary['cases']}",
+          f"- judge 축 평균 `{_fmt(summary['judge_dimension_mean'], '.3f')}`"
+          f"{_delta(summary['judge_dimension_mean'], b.get('judge_dimension_mean'))}"
+          f" · 감점 항목 {summary['judge_items']}건",
           f"- **종합점수 `{_fmt(summary['composite'], '.4f')}`**{_delta(summary['composite'], b.get('composite'))}"
-          f" (judge {COMPOSITE_WEIGHTS['judge']:.0%} + 재현율 {COMPOSITE_WEIGHTS['facts_recall']:.0%}"
+          f" (judge 축평균 {COMPOSITE_WEIGHTS['judge']:.0%} + 재현율 {COMPOSITE_WEIGHTS['facts_recall']:.0%}"
           f" + 발생단계 {COMPOSITE_WEIGHTS['severity']:.0%} — 자가 개선 루프의 목적함수)", ""]
     L += ["**judge 축별 평균**", "",
           "| " + " | ".join(DIMENSIONS) + " |", "|" + "---|" * len(DIMENSIONS)]

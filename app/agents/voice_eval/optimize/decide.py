@@ -21,10 +21,15 @@ from ..judge import cell_key
 log = logging.getLogger("optimize.decide")
 
 
+# 종합점수에서 judge 총점을 뺀 대가로, 총점이 담당하던 "정직성을 코버리지와 맞바꾸지 말 것"을
+# 여기서 하드 가드로 강제한다. 이 두 축은 떨어지면 점수가 올라도 거부다.
+PROTECTED_DIMENSIONS = ("faithfulness", "chatter")
+
+
 @dataclass
 class Measurement:
     composite: float | None
-    judge: float | None
+    judge: float | None                          # 축 평균 (총점 아님 — report.composite 주석 참조)
     facts_recall: float | None
     severity: float | None
     diary_status_all_ok: bool | None
@@ -32,6 +37,10 @@ class Measurement:
     cells: dict[str, int]
     tokens: int
     summary: dict[str, Any]
+    dimensions: dict[str, float] = None          # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        self.dimensions = self.dimensions or {}
 
     def cell(self, key: str) -> int:
         return self.cells.get(key, 0)
@@ -62,10 +71,16 @@ def run_eval(cwd: Path, out: Path, *, python: str, judge_repeat: int, force_judg
         raise RuntimeError(f"측정 실패 (summary.json 없음): {(r.stderr or r.stdout)[-500:]}")
     data = json.loads(path.read_text(encoding="utf-8"))
     s = report_mod.aggregate(data["cases"])          # 저장된 summary 를 믿지 않고 항상 재집계
+    return from_summary(s)
+
+
+def from_summary(s: dict[str, Any], tokens: int | None = None) -> Measurement:
     return Measurement(
-        composite=s["composite"], judge=s["judge_overall_mean"], facts_recall=s["facts_recall"],
+        composite=s["composite"], judge=s["judge_dimension_mean"], facts_recall=s["facts_recall"],
         severity=s["severity_exact"], diary_status_all_ok=s["diary_status_all_ok"],
-        errors=s["errors"], cells=s["cells"], tokens=int(s["tokens"] or 0), summary=s)
+        errors=s["errors"], cells=s["cells"],
+        tokens=int(s["tokens"] or 0) if tokens is None else tokens, summary=s,
+        dimensions=dict(s.get("judge_dimensions") or {}))
 
 
 def snapshot(src: Path, dest: Path) -> Path:
@@ -113,6 +128,10 @@ def confirm(cand: Measurement, base: Measurement, target: str, band: float,
         return Verdict(False, f"기대추출 재현율 하락 {base.facts_recall} → {cand.facts_recall}")
     if _drop(cand.severity, base.severity, det_tol):
         return Verdict(False, f"발생단계 정확도 하락 {base.severity} → {cand.severity}")
+    for dim in PROTECTED_DIMENSIONS:
+        if _drop(cand.dimensions.get(dim), base.dimensions.get(dim), 0.001):
+            return Verdict(False, f"{dim} 축 하락 {base.dimensions[dim]} → {cand.dimensions[dim]} "
+                                  f"— 없는 말을 지어내거나 잡담이 섞이는 대가로 얻은 점수는 받지 않는다")
     if cand.cell(target) > base.cell(target):
         return Verdict(False, f"타깃 셀이 오히려 증가 {base.cell(target)} → {cand.cell(target)}")
     if cand.composite is None or base.composite is None:

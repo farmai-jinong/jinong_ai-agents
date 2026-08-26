@@ -220,19 +220,16 @@ def main(argv: list[str] | None = None) -> int:
     ensure_branch(git("rev-parse", "HEAD"))
     journal = Journal()
     base_summary = json.loads((eval_out / "summary.json").read_text(encoding="utf-8"))
-    s = report_mod.aggregate(base_summary["cases"])
-    base_measure = decide.Measurement(
-        composite=s["composite"], judge=s["judge_overall_mean"], facts_recall=s["facts_recall"],
-        severity=s["severity_exact"], diary_status_all_ok=s["diary_status_all_ok"],
-        errors=s["errors"], cells=s["cells"], tokens=0, summary=s)
+    base_measure = decide.from_summary(report_mod.aggregate(base_summary["cases"]), tokens=0)
     ok, args.baseline_fixture_recall, err = gates.fixture_recall(
         REPO, args.python, Path(args.work) / "baseline-fake-eval")
     if not ok:
         print(f"기준 픽스처 재현율 측정 실패: {err}", file=sys.stderr)
         return 2
 
-    print(f"기준: 종합 {base_measure.composite} · judge {base_measure.judge} · "
-          f"재현율 {base_measure.facts_recall} · 발생단계 {base_measure.severity}")
+    print(f"기준: 종합 {base_measure.composite} · judge축평균 {base_measure.judge} · "
+          f"재현율 {base_measure.facts_recall} · 발생단계 {base_measure.severity} · "
+          f"감점 {base_measure.summary.get('judge_items')}건")
     print(f"브랜치 {BRANCH} @ {tip()[:9]} · 저널 {len(journal.records)}건")
 
     for _ in range(args.max_iters):
@@ -255,7 +252,8 @@ def main(argv: list[str] | None = None) -> int:
             break
 
     print(f"\n저널: docs/eval-journal.md · 수락 커밋: git log --oneline {BRANCH}")
-    print(f"최종: 종합 {base_measure.composite} · judge {base_measure.judge} · 재현율 {base_measure.facts_recall}")
+    print(f"최종: 종합 {base_measure.composite} · judge축평균 {base_measure.judge} · "
+          f"재현율 {base_measure.facts_recall}")
     return 0
 
 

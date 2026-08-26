@@ -48,8 +48,10 @@ def _journal(tmp_path) -> Journal:
     return Journal(tmp_path / "j.jsonl", tmp_path / "j.md")
 
 
-def _measure(composite, *, judge=3.0, facts=0.9, sev=0.67, cells=None, errors=None, status_ok=True):
-    return decide.Measurement(composite, judge, facts, sev, status_ok, errors or [], cells or {}, 0, {})
+def _measure(composite, *, judge=3.0, facts=0.9, sev=0.67, cells=None, errors=None, status_ok=True,
+             dims=None):
+    return decide.Measurement(composite, judge, facts, sev, status_ok, errors or [], cells or {}, 0, {},
+                              dims or dict.fromkeys(DIMS, 4.0))
 
 
 # --------------------------------------------------------------------------- 종합점수
@@ -61,6 +63,27 @@ def test_composite_weights_and_missing_stage():
     assert report_mod.composite(None, 0.6, 3.0) is None
     # 발생단계 기대가 없는 경우는 만점 취급
     assert report_mod.composite(1.0, None, 5.0) == pytest.approx(1.0)
+
+
+def test_composite_judge_term_is_finer_than_noise_band():
+    """judge 항이 노이즈 밴드와 같은 눈금으로 양자화되면 검출하려는 개선이 묻힌다(저널 #1).
+
+    총점(케이스당 1~5 정수 5개)은 평균 눈금 0.2 → 종합점수 0.02 = 노이즈 밴드 전체였다.
+    축 평균(6축×5케이스=30개)은 눈금이 1/30 이라 종합점수 기여가 밴드의 1/6 이다.
+    """
+    band = 0.02
+    overall_step = report_mod.composite(0.9, 0.7, 3.2) - report_mod.composite(0.9, 0.7, 3.0)
+    assert overall_step == pytest.approx(band)               # 총점을 쓰면 눈금 = 밴드
+    dim_step = report_mod.composite(0.9, 0.7, 3 + 1 / 30) - report_mod.composite(0.9, 0.7, 3.0)
+    assert dim_step < band / 5                                # 축 평균은 충분히 미세하다
+
+
+def test_aggregate_exposes_dimension_mean_and_item_count():
+    rows = [_case_row("a", [_item(), _item()]), _case_row("b", [_item()])]
+    s = report_mod.aggregate(rows)
+    assert s["judge_dimension_mean"] == pytest.approx(4.0)     # 모든 축 4점
+    assert s["judge_items"] == 3
+    assert s["composite"] == pytest.approx(report_mod.composite(s["facts_recall"], s["severity_exact"], 4.0))
 
 
 # --------------------------------------------------------------------------- 타깃 셀 선정
@@ -192,6 +215,31 @@ def test_screen_requires_beating_noise_band():
 def test_screen_rejects_errored_run():
     base = _measure(0.68)
     assert not decide.screen(_measure(0.9, errors=["a"]), base, "X", 0.02).accept
+
+
+def test_confirm_rejects_drop_in_protected_dimensions():
+    """종합점수가 올라도 정직성·잡담 축이 떨어지면 거부.
+
+    judge 총점을 종합점수에서 뺀 대신, 총점이 담당하던 "없는 말을 지어내거나 잡담을 섞어 코버리지를
+    사는 것"을 여기서 하드 가드로 막는다.
+    """
+    base = _measure(0.68, cells={"X": 5}, dims={**dict.fromkeys(DIMS, 4.0), "faithfulness": 4.0})
+    worse_faith = _measure(0.75, cells={"X": 2}, dims={**dict.fromkeys(DIMS, 4.0), "faithfulness": 3.0})
+    v = decide.confirm(worse_faith, base, "X", 0.02)
+    assert not v.accept and "faithfulness" in v.reason
+
+    worse_chatter = _measure(0.75, cells={"X": 2}, dims={**dict.fromkeys(DIMS, 4.0), "chatter": 3.0})
+    assert not decide.confirm(worse_chatter, base, "X", 0.02).accept
+    # 보호 대상이 아닌 축이 떨어지는 것은 종합점수로 판단한다
+    other = _measure(0.75, cells={"X": 2}, dims={**dict.fromkeys(DIMS, 4.0), "format": 3.0})
+    assert decide.confirm(other, base, "X", 0.02).accept
+
+
+def test_from_summary_maps_dimension_mean_not_overall():
+    rows = [_case_row("a", [_item()], overall=1)]              # 총점은 1점이지만 축은 전부 4점
+    m = decide.from_summary(report_mod.aggregate(rows))
+    assert m.judge == pytest.approx(4.0)
+    assert m.dimensions["faithfulness"] == pytest.approx(4.0)
 
 
 def test_confirm_rejects_deterministic_regression():
