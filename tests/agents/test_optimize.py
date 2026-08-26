@@ -375,6 +375,42 @@ def test_make_worktree_carries_env_and_stt_cache(tmp_path):
     assert not wt.exists()
 
 
+def test_ensure_branch_follows_head_until_something_is_accepted(tmp_path, monkeypatch):
+    """수락분이 없으면 브랜치를 HEAD 로 맞춘다 — 낡은 베이스에서 이미 고친 것을 또 고치지 않게."""
+    from app.agents.voice_eval.optimize import __main__ as loop
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    run = lambda *a: subprocess.run(["git", "-C", str(repo), *a], check=True, capture_output=True)  # noqa: E731
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    run("config", "user.email", "t@t")
+    run("config", "user.name", "t")
+    (repo / "a.txt").write_text("1", encoding="utf-8")
+    run("add", "-A")
+    run("commit", "-qm", "c1")
+    monkeypatch.setattr(loop, "REPO", repo)
+
+    first = loop.git("rev-parse", "HEAD", cwd=repo)
+    loop.ensure_branch(first)
+    assert loop.git("rev-parse", loop.BRANCH, cwd=repo) == first
+
+    (repo / "a.txt").write_text("2", encoding="utf-8")      # main 만 앞으로 간다
+    run("add", "-A")
+    run("commit", "-qm", "c2")
+    second = loop.git("rev-parse", "HEAD", cwd=repo)
+    loop.ensure_branch(second)
+    assert loop.git("rev-parse", loop.BRANCH, cwd=repo) == second      # 수락분 없음 → 따라간다
+
+    run("branch", "-f", loop.BRANCH, first)                 # 수락분이 있는 상황을 흉내
+    run("checkout", "-q", loop.BRANCH)
+    (repo / "b.txt").write_text("x", encoding="utf-8")
+    run("add", "-A")
+    run("commit", "-qm", "accepted")
+    accepted = loop.git("rev-parse", loop.BRANCH, cwd=repo)
+    run("checkout", "-q", "-")
+    loop.ensure_branch(second)
+    assert loop.git("rev-parse", loop.BRANCH, cwd=repo) == accepted    # 수락분은 지우지 않는다
+
+
 # --------------------------------------------------------------------------- 기타
 def test_retro_slug():
     assert _slug("structural-extraction") == "structural-extraction"

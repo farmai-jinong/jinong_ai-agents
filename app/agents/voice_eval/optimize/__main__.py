@@ -31,8 +31,9 @@ BRANCH = "eval/auto-tune"
 
 
 # --------------------------------------------------------------------------- git
-def git(*args: str, cwd: Path = REPO) -> str:
-    return subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True,
+def git(*args: str, cwd: Path | None = None) -> str:
+    """기본 대상은 REPO. 기본값을 인자에 박으면 import 시점에 고정돼 테스트에서 갈아끼울 수 없다."""
+    return subprocess.run(["git", "-C", str(cwd or REPO), *args], capture_output=True, text=True,
                           check=True).stdout.strip()
 
 
@@ -47,12 +48,28 @@ def ensure_clean_tree() -> str | None:
     return None
 
 
-def ensure_branch(base: str) -> None:
-    """`eval/auto-tune` 이 없으면 현재 커밋에서 만든다. 체크아웃은 하지 않는다."""
+def ensure_branch(head: str) -> None:
+    """`eval/auto-tune` 을 준비한다. 체크아웃은 하지 않는다.
+
+    수락분이 아직 없으면 현재 HEAD 로 맞춘다 — 그러지 않으면 그 사이 main 에 들어간 수정을 못 본 채
+    낡은 커밋에서 worktree 를 떠서, 이미 고친 것을 다시 고치려 든다.
+    수락분이 있는데 뒤처져 있으면 자동으로 옮기지 않고 경고만 한다(사람이 rebase 할 일).
+    """
     if subprocess.run(["git", "-C", str(REPO), "rev-parse", "--verify", BRANCH],
                       capture_output=True).returncode != 0:
-        git("branch", BRANCH, base)
+        git("branch", BRANCH, head)
         log.info("브랜치 생성: %s", BRANCH)
+        return
+    ahead = int(git("rev-list", "--count", f"{head}..{BRANCH}") or 0)     # 브랜치에만 있는 커밋 = 수락분
+    behind = int(git("rev-list", "--count", f"{BRANCH}..{head}") or 0)
+    if behind == 0:
+        return
+    if ahead == 0:
+        git("branch", "-f", BRANCH, head)
+        log.info("%s 를 HEAD 로 맞춤 (수락분 없음, %d 커밋 뒤처져 있었다)", BRANCH, behind)
+    else:
+        log.warning("%s 가 HEAD 보다 %d 커밋 뒤처져 있는데 수락분이 %d 건 있다 — 자동으로 옮기지 않는다. "
+                    "`git rebase %s %s` 로 정리한 뒤 다시 돌릴 것", BRANCH, behind, ahead, head, BRANCH)
 
 
 def tip() -> str:
@@ -156,7 +173,7 @@ def _propose_and_judge(args, journal, rec: Record, target: Target, brief: str, w
                               judge_repeat=args.judge_repeat_confirm, force_judge=True)
     rec.tokens["confirm"] = base_re.tokens + cand_re.tokens
     rec.confirm = cand_re.row(target.cell, base_re)
-    v = decide.confirm(cand_re, base_re, target.cell, args.noise_band)
+    v = decide.confirm(cand_re, base_re, target.cell, args.noise_band, det_tol=args.det_tolerance)
     rec.reason = v.reason
     if not v.accept:
         rec.decision = "rejected"
@@ -194,6 +211,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--max-turns", type=int, default=30)
     ap.add_argument("--judge-repeat-confirm", type=int, default=3)
     ap.add_argument("--noise-band", type=float, default=0.02, help="이만큼 넘게 올라야 개선으로 본다")
+    ap.add_argument("--det-tolerance", type=float, default=0.001,
+                    help="결정적 지표(재현율·발생단계) 허용 하락폭. 기본 무관용 — 올리면 가드가 헐거워진다")
     ap.add_argument("--cell-cooldown", type=int, default=3, help="최근 N회 거부된 셀은 건너뛴다")
     ap.add_argument("--plateau", type=int, default=3, help="연속 N회 거부되면 구조 제안서를 쓰고 멈춘다")
     ap.add_argument("--token-budget", type=int, default=0, help="0 = 무제한")

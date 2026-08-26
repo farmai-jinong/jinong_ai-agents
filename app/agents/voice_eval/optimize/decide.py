@@ -130,6 +130,12 @@ def confirm(cand: Measurement, base: Measurement, target: str, band: float,
 
     종합점수 상승만으로는 부족하다. 결정적 지표(LLM 과 무관)가 하나라도 떨어지면 거부하고,
     고치려던 셀이 늘어도 거부한다 — "무엇을 고쳤는가"에 대한 직접 증거를 요구하는 것이다.
+
+    `det_tol` 은 결정적 지표의 허용 하락폭이다. 기본값은 사실상 0(무관용) — judge 점수를 얻는 대가로
+    실제 추출 정확도를 파는 거래를 막는 것이 이 가드의 존재 이유다. 다만 `facts_recall` 자체도
+    손으로 쓴 기대 목록에 대한 부분문자열 재현율(현재 분모 40)이라 완벽한 정답은 아니다. 기대 항목
+    1건(≈0.025) 손실을 감수하고 더 큰 개선을 받고 싶으면 `--det-tolerance` 로 올릴 수 있지만,
+    그만큼 가드가 헐거워진다는 뜻이다.
     """
     if cand.errors:
         return Verdict(False, f"케이스 실행 실패: {', '.join(cand.errors)}")
