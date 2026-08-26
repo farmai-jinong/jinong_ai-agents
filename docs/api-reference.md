@@ -30,7 +30,6 @@
   "farm": {"farm_id": "f1", "farm_nm": "…"},
   "num_speakers": 2,
   "language": "ko",
-  "callback_url": "https://…/agent-callback",
   "metadata": {"hints": {"prdlst_code": "0804MM", "prdlst_nm": "딸기"}}
 }
 ```
@@ -39,6 +38,7 @@
 - `participants[]`: `{role, user_id, engn_id, name}` — 농가 구분은 `engn_id`(영농체 ID)+`user_id` **복합 키**(user_id 단독 식별 금지). farmer 항목의 `engn_id`는 daily FARM_MISMATCH 검사에 사용.
 - `farm_access_token`: 농가 JWT. 영농일지 작성용 farmos **읽기** 조회(`/m/diary/*`)에만 사용, 응답/로그에 절대 노출하지 않고 terminal 시 삭제. 없으면 farmos 조회 없이 전사만으로 생성.
 - `metadata.hints` (선택): `prdlst_code`, `prdlst_nm`, `farmer_crops[]`, `diary_date`, `topic` — farmos 조회 실패 시 대체.
+- `callback_url`: 호환용으로 계속 받지만 통화 단위 콜백에는 쓰지 않는다(날짜별 일지 전용) — 통화 결과는 전역 `SUMMARY_CALLBACK_URL` 로 발사. 콜백 절 참조.
 - 응답: `201` 신규 / `200` 재전송(참가자·토큰·메타 upsert; terminal 후엔 변경 없이 `note`). 본문은 `CallDetail`.
 
 ## `POST /v1/calls/{call_id}/audio` — 녹음파일 수신
@@ -191,13 +191,28 @@ terminal 시 (형식은 통화 콜백과 동일한 전송 규칙):
  "generation_run": 1}
 ```
 
-## 콜백(선택)
+## 콜백
 
-`callback_url` 이 있고 `CALLBACK_ENABLED=true` 면 terminal 상태에서 `POST callback_url` (헤더 `X-API-Key: CALLBACK_API_KEY`, 타임아웃 10s, 최대 3회 시도 — 실패 시 10s·30s 뒤 재시도):
+공통: 헤더 `X-API-Key: CALLBACK_API_KEY`, 타임아웃 10s, 최대 3회 시도(실패 시 10s·30s 뒤 재시도).
+**4xx(429 제외)는 재시도하지 않는다** — 요청/설정을 고치기 전에는 결과가 같기 때문. `CALLBACK_ENABLED=true` 가 공통 스위치.
+
+**통화 단위 — 통화요약 콜백**: terminal 마다 `POST SUMMARY_CALLBACK_URL`(전역 설정, 예 `…/voicetalk/public/call-summary-callback`). `content` 는 요약문이 아니라 **영농일지 마크다운 원문**이며, 작물이 여러 건이면 `\n\n---\n\n` 로 병합한다. **컨설팅 보고서는 내부 저장 전용이라 콜백에 포함하지 않는다.** 산출물 S3 저장(`persist_result`)이 끝난 뒤에만 발사한다.
 
 ```json
-{"call_id": "…", "status": "COMPLETED", "error": null,
- "result_url": "https://jinong-stt-report-generation.jinongservice.co.kr/v1/calls/…", "generation_run": 1}
+{"call_id": "…", "summary_type": "SUMMARY", "status": "COMPLETED",
+ "content": "# 영농일지 — 딸기 (2026-08-26)\n…", "engine_version": "jinong-diary-v1/gemini-3.5-flash"}
+```
+
+- `status`: `COMPLETED`(+`content` 필수) / `EMPTY`(content 없음) / `FAILED`(+`fail_reason`, 1000자 컷).
+  `COMPLETED` 인데 일지 본문이 비면 `EMPTY` 로 낮춰 보낸다.
+- 같은 `(call_id, summary_type)` 은 백엔드에서 UPSERT — 재생성 시 덮어쓰기.
+- `CallCreateRequest.callback_url` 은 스키마상 유지되지만 **통화 단위 발사에는 쓰지 않는다**(날짜별 전용).
+
+**날짜별 일지 — agent-callback**: `POST /v1/daily-diaries` body 의 `callback_url` 로, terminal 마다 마스터 ID만 알린다. 백엔드는 이 콜백을 받고 `GET /v1/daily-diaries/{id}?inline=true` 로 `diaries[]`(작물별 1건)를 가져가 저장한다.
+
+```json
+{"daily_diary_id": "daily_18_u123_20260819", "diary_date": "2026-08-19", "status": "COMPLETED",
+ "error": null, "call_ids": ["…"], "result_url": "https://…/v1/daily-diaries/…", "generation_run": 1}
 ```
 
 ## 타이밍·재시도

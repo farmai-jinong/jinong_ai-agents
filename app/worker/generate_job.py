@@ -12,7 +12,7 @@ from ..clients.callback import send_callback
 from ..db import repo
 from ..db.models import Call, utcnow
 from ..runtime import Runtime
-from ..schemas.pipeline import CallContext, CallHints, Participant, PipelineResult
+from ..schemas.pipeline import CallContext, CallHints, DiaryArtifact, Participant, PipelineResult
 from ..services.artifacts import persist_result
 from ..services.results import utc
 from ..services.transcripts import merge_transcripts, transcript_markdown
@@ -62,20 +62,40 @@ async def _finalize(rt: Runtime, call_id: str, *, status: str, error_code: str |
         return call
 
 
-async def _callback(rt: Runtime, call: Call) -> None:
-    if not (rt.settings.callback_enabled and call.callback_url):
+SUMMARY_TYPE = "SUMMARY"
+
+
+def join_diaries(diaries: list[DiaryArtifact]) -> str:
+    """작물별 일지 마크다운을 구분선으로 병합 — 콜백 content 는 통화당 1건이라 합쳐 보낸다."""
+    return "\n\n---\n\n".join(d.markdown.strip() for d in diaries if d.markdown and d.markdown.strip())
+
+
+async def _summary_callback(rt: Runtime, call: Call, result: PipelineResult | None = None) -> None:
+    """백엔드 통화요약 콜백 — 일지 마크다운 원문 동봉. 컨설팅 보고서는 내부 저장 전용이라 보내지 않는다."""
+    st = rt.settings
+    if not (st.callback_enabled and st.summary_callback_url):
         return
-    payload = {"call_id": call.call_id, "status": call.status,
-               "error": {"code": call.error_code, "message": call.error_message} if call.error_code else None,
-               "result_url": f"{rt.settings.public_base_url.rstrip('/')}/v1/calls/{call.call_id}",
-               "generation_run": call.generation_run}
-    ok, attempts = await send_callback(rt.settings, call.callback_url, payload)
+    content = join_diaries(result.diaries) if result else ""
+    status = call.status
+    if status == "COMPLETED" and not content:   # 본문 없는 COMPLETED 는 명세 위반(content 필수)
+        status = "EMPTY"
+    engine = f"{st.summary_engine_version}/{call.generation_model}" if call.generation_model \
+        else st.summary_engine_version
+    payload: dict[str, Any] = {"call_id": call.call_id, "summary_type": SUMMARY_TYPE, "status": status,
+                               "engine_version": engine[:100]}
+    if status == "COMPLETED":
+        payload["content"] = content
+    elif status == "FAILED":
+        reason = f"{call.error_code}: {call.error_message}" if call.error_message else (call.error_code or "")
+        payload["fail_reason"] = reason[:1000]
+    ok, attempts = await send_callback(rt.settings, st.summary_callback_url, payload)
     async with rt.db.session() as s:
         c = await repo.get_call(s, call.call_id)
         if c is not None:
             c.callback_status = "SENT" if ok else "FAILED"
             c.callback_attempts = (c.callback_attempts or 0) + attempts
-            await repo.add_event(s, call.call_id, "callback", {"ok": ok, "attempts": attempts})
+            await repo.add_event(s, call.call_id, "summary_callback",
+                                 {"ok": ok, "attempts": attempts, "status": status})
             await s.commit()
 
 
@@ -99,12 +119,12 @@ async def run_generate(rt: Runtime, call_id: str) -> None:
     done = [a for a in audios if a.status in ("TRANSCRIBED", "FAILED")]
     if not audios:
         c = await _finalize(rt, call_id, status="EMPTY", error_code="NO_AUDIO", error_message="no audio received")
-        await _callback(rt, c)
+        await _summary_callback(rt, c)
         return
     if not any(a.status == "TRANSCRIBED" for a in done):
         c = await _finalize(rt, call_id, status="FAILED", error_code="STT_FAILED",
                             error_message="; ".join(f"audio#{a.id}: {a.last_error}" for a in done if a.last_error)[:1000])
-        await _callback(rt, c)
+        await _summary_callback(rt, c)
         return
 
     warnings = [f"audio#{a.id} STT failed: {a.last_error}" for a in done if a.status == "FAILED"]
@@ -126,7 +146,7 @@ async def run_generate(rt: Runtime, call_id: str) -> None:
     if transcript.is_empty:
         c = await _finalize(rt, call_id, status="EMPTY", error_code="NO_TRANSCRIPT",
                             error_message="no speech recognised", warnings=warnings)
-        await _callback(rt, c)
+        await _summary_callback(rt, c)
         return
 
     try:
@@ -134,7 +154,7 @@ async def run_generate(rt: Runtime, call_id: str) -> None:
     except PipelineEmpty as e:
         c = await _finalize(rt, call_id, status="EMPTY", error_code="NO_CONTENT", error_message=str(e) or None,
                             warnings=warnings)
-        await _callback(rt, c)
+        await _summary_callback(rt, c)
         return
     except Exception as e:  # noqa: BLE001 — 타임아웃 포함
         msg = f"{type(e).__name__}: {e}"[:1000]
@@ -152,7 +172,7 @@ async def run_generate(rt: Runtime, call_id: str) -> None:
             await s.commit()
         c = await _finalize(rt, call_id, status="FAILED", error_code="GENERATION_FAILED", error_message=msg,
                             warnings=warnings)
-        await _callback(rt, c)
+        await _summary_callback(rt, c)
         return
 
     # 성공 — 산출물 저장
@@ -170,4 +190,5 @@ async def run_generate(rt: Runtime, call_id: str) -> None:
     c = await _finalize(rt, call_id, status="COMPLETED", model=result.model, warnings=all_warnings,
                         usage=result.usage or None, speaker_map=result.speaker_map)
     log.info("[%s] generation COMPLETED: %d diaries, report=%s", call_id, len(result.diaries), result.report is not None)
-    await _callback(rt, c)
+    # 산출물 S3 저장(persist_result) 이 끝난 뒤에만 콜백 — 백엔드가 조회할 때 키가 이미 존재한다.
+    await _summary_callback(rt, c, result)

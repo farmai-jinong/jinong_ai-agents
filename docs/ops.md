@@ -30,9 +30,15 @@
   미이관(개발 데이터). 이전 AWS IAM 키(`arn:aws:iam::996450911403:user/audio-labeler-s3` 재사용분)는 서버 `.env.bak.minio`
   에 백업 — 버킷 정책/principal ARN 전달(구 연동 명세 §6) 절차는 MinIO 전환으로 폐기. Vertex SA 키·프로젝트(jinong-lab-llm)는
   hatchery_serving 과 공용, OpenAI 키는 briefing_serving 과 공용.
-- 백엔드 콜백 활성화 (2026-08-24): `.env` 에 `CALLBACK_ENABLED=true` + `CALLBACK_API_KEY`(연구팀 발급 공통 키,
-  `X-API-Key` 헤더로 전송). 콜백 URL 은 요청마다 `callback_url` 로 수신 — 개발 `https://dev.jinongservice.co.kr/voicetalk/public/agent-callback`,
-  운영은 `data.` 도메인으로 변경 예정(백엔드 공지).
+- 백엔드 콜백 활성화 (2026-08-24): `.env` 에 `CALLBACK_ENABLED=true` + `CALLBACK_API_KEY`(백엔드
+  `VOICETALK_EXTERNAL_CALLBACK_API_KEY` 와 같은 값, `X-API-Key` 헤더로 전송).
+- 통화요약 콜백 전환 (2026-08-26): 통화 단위는 결과 본문(일지 마크다운 원문)을 동봉하는 백엔드
+  통화요약 콜백으로 교체 — `.env` 에 `SUMMARY_CALLBACK_URL` 필요(개발
+  `https://dev.jinongservice.co.kr/voicetalk/public/call-summary-callback`, 운영은 `data.` 도메인).
+  비어 있으면 통화 단위 콜백은 발사되지 않는다. `SUMMARY_ENGINE_VERSION` 은 기본 `jinong-diary-v1`
+  (전송 시 `/{모델명}` 이 붙음). 날짜별 일지 콜백(agent-callback)은 종전대로 요청 body 의
+  `callback_url` 로 수신하며 변경 없음. 4xx(429 제외) 수신 시에는 재시도하지 않는다(로그에 응답 본문
+  앞 200자 기록 — `X-API-Key` 값은 로깅하지 않음).
 - 2026-08-21 날짜별(멀티콜) 영농일지 `/v1/daily-diaries` 추가(커밋 `a376d8a`) — 신규 env 없음, DB 는 기동 시
   `create_all` 로 테이블 자동 생성. 같은 날 배포·스모크 완료: 통화 E2E 2건(`smoke-20260821-a/b`, raw wav) COMPLETED →
   `daily-smoke-20260821`(멀티콜) COMPLETED, keyset 커서·`INVALID_CURSOR` 422 실서버 확인. 이 과정에서 미확정 작물

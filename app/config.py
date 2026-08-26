@@ -86,6 +86,10 @@ class Settings(BaseSettings):
     callback_enabled: bool = False
     callback_api_key: str = ""
     callback_timeout: float = 10.0
+    # 통화 단위 결과 콜백 = 백엔드 통화요약 콜백 (`.../voicetalk/public/call-summary-callback`).
+    # 비어 있으면 미발사. 날짜별 일지는 요청 body 의 callback_url 을 계속 사용한다.
+    summary_callback_url: str = ""
+    summary_engine_version: str = "jinong-diary-v1"   # 콜백 engine_version (모델명이 붙어 최대 100자로 컷)
 
     # --- worker ---------------------------------------------------------------
     worker_poll_sec: float = 5.0
