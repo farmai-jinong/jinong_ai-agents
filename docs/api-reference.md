@@ -86,13 +86,18 @@ Body(선택) `{"ended_at": "...", "duration_sec": 900}` → `202` (`state=ENDED,
     "report": {"markdown": "# 컨설팅 보고서 …", "structured": {"summary": "…", "keywords": [], "action_items": [], "sections": {}},
                "s3_key_md": "agents/voicecall/<id>/artifacts/report.md",
                "s3_key_json": "agents/voicecall/<id>/artifacts/report.json"},
+    "summary": {"markdown": "- 주제: 딸기 잿빛곰팡이병 방제 상담\n- 조치: 환기 관리 권고\n- 후속: 화요일 방문 예정",
+                "structured": {"topic": "…", "actions": ["…"], "follow_ups": ["…"], "model": "…", "source": "llm"},
+                "s3_key_md": "agents/voicecall/<id>/artifacts/summary.md",
+                "s3_key_json": "agents/voicecall/<id>/artifacts/summary.json"},
     "result_key": "agents/voicecall/<id>/artifacts/result.json"
   },
   "callback_status": null
 }
 ```
 
-- `result` 는 `COMPLETED` 일 때만. `diaries[]` 는 통화에서 다룬 **작물별** 1건씩(`prdlst_code` = farmos 품목코드; 확정 불가 시 `null`, S3 키는 `unresolved` — 한 결과에 미확정이 여럿이면 두 번째부터 `unresolved-2`, `unresolved-3` …). `status` ∈ `OK|PARTIAL|EMPTY|UNRESOLVED_CROP`.
+- `result.summary` 는 통화 단순요약 — **콜백으로 보낸 `content` 와 같은 본문**이다(콜백을 놓쳤을 때 재조회용). `structured.source` ∈ `llm`|`report_fallback`|`fake`.
+- `result` 는 `COMPLETED` 일 때만. `diaries[]` 는 통화에서 다룬 **작물별** 1건씩(`prdlst_code` = farmos 품목코드; 확정 불가 시 `null`, S3 키는 `unresolved` — 한 결과에 미확정이 여럿이면 두 번째부터 `unresolved-2`, `unresolved-3` …). `status` ∈ `OK|PARTIAL|EMPTY|UNRESOLVED_CROP` (`EMPTY` 는 규칙 판정 + 검수 LLM 패스가 실질 내용 없음으로 본 경우; 판정 근거는 `structured.verify`).
 - 에이전트는 farmos 에 **저장하지 않는다**. `structured.prefill` 은 앱 `PUT /m/diary` 의 `fields` 와 같은 모양의 초안 — 농가 확인 후 저장용.
 - 마크다운 본문이 `RESULT_INLINE_MAX_KB` 를 넘으면 인라인 생략(S3 키만).
 
@@ -101,6 +106,7 @@ Body(선택) `{"ended_at": "...", "duration_sec": 900}` → `202` (`state=ENDED,
 | 메서드 | 경로 | 설명 |
 |---|---|---|
 | GET | `/v1/calls/{id}/transcript` | 병합 전사 JSON(`MergedTranscript`). 미준비 `404 NOT_READY` |
+| GET | `/v1/calls/{id}/artifacts/summary[?format=json]` | 통화 단순요약 md / JSON (콜백 `content` 와 동일) |
 | GET | `/v1/calls/{id}/artifacts/report[?format=json]` | 보고서 `text/markdown` / JSON |
 | GET | `/v1/calls/{id}/artifacts/diary/{prdlst_code}[?format=json]` | 작물별 영농일지 md / JSON (`unresolved`, 다건이면 `unresolved-2` … 가능) |
 | GET | `/v1/calls?status=&state=&limit=50&cursor=` | 운영용 목록 `{items:[{call_id,state,status,updated_at,stt_progress}], next_cursor}` (`limit` 1..200, 기본 50) |
@@ -131,8 +137,17 @@ Body(선택) `{"ended_at": "...", "duration_sec": 900}` → `202` (`state=ENDED,
 - **멱등성**: `diary_id` 가 멱등성 키다(형식은 call_id 와 동일 `[A-Za-z0-9_.:-]{1,128}`). 백엔드가
   농가 복합 키/날짜에서 결정적으로 만들어 보낸다 — 확정 규칙 `daily_{engnId}_{userId}_{yyyyMMdd}`
   (예: `daily_18_u123_20260819`, 2026-08-25 백엔드 확정). 재전송이 안전하다.
-  신규 → `201` + 생성 큐잉. 재-POST: 진행 중 → `200 "already processing"`, terminal →
-  `200 "… use regenerate"` (재생성은 `/regenerate` 로만).
+  신규 → `201` + 생성 큐잉. **재-POST 는 새 생성 회차를 돌린다**(백엔드 자동 배치가 통화별 COMPLETED
+  콜백마다 그 날짜의 전체 `call_ids` 를 재전송하는 규약):
+  - terminal(`gen_state=IDLE`) → `200 "regeneration queued"`, `call_ids` 를 요청값으로 교체하고 재큐잉
+    (`generation.run` 은 워커 클레임 시 +1).
+  - 큐 대기 중(`QUEUED`, 아직 클레임 전) → `200 "already queued — call_ids updated"`. 대기 중인 실행이
+    새 목록을 읽으므로 회차는 늘지 않는다.
+  - 실행 중(`RUNNING`) → `200 "generation in progress — re-POST after it finishes"`. 진행 중 실행이 이미
+    `call_ids` 를 읽었으므로 **목록을 바꾸지 않는다** — 다음 트리거나 보정 배치가 잡는다.
+
+  `metadata`/`callback_url`/`language` 는 재-POST 값으로 갱신하고, `farm_access_token` 은 보냈을 때만
+  갱신한다(자동 배치는 JWT 를 보내지 않는다). `diary_date` 는 `diary_id` 에 이미 박혀 있으므로 불변이다.
 - **`farm_access_token` 은 매 트리거·재생성마다 새로 보내야 한다**: 멤버 call 들의 토큰은 terminal 시
   purge 되므로 재사용할 수 없다. 생략하면 farmos 조회 없이(기존 일지 참조 없이) 전사·힌트만으로 생성한다.
   이 토큰도 daily terminal 시 purge 된다.
@@ -196,15 +211,21 @@ terminal 시 (형식은 통화 콜백과 동일한 전송 규칙):
 공통: 헤더 `X-API-Key: CALLBACK_API_KEY`, 타임아웃 10s, 최대 3회 시도(실패 시 10s·30s 뒤 재시도).
 **4xx(429 제외)는 재시도하지 않는다** — 요청/설정을 고치기 전에는 결과가 같기 때문. `CALLBACK_ENABLED=true` 가 공통 스위치.
 
-**통화 단위 — 통화요약 콜백**: terminal 마다 `POST SUMMARY_CALLBACK_URL`(전역 설정, 예 `…/voicetalk/public/call-summary-callback`). `content` 는 요약문이 아니라 **영농일지 마크다운 원문**이며, 작물이 여러 건이면 `\n\n---\n\n` 로 병합한다. **컨설팅 보고서는 내부 저장 전용이라 콜백에 포함하지 않는다.** 산출물 S3 저장(`persist_result`)이 끝난 뒤에만 발사한다.
+**통화 단위 — 통화요약 콜백**: terminal 마다 `POST SUMMARY_CALLBACK_URL`(전역 설정, 예 `…/voicetalk/public/call-summary-callback`). `content` 는 **통화 단순요약**(주제/조치/후속 불릿 3줄)이다 — 영농일지·컨설팅 보고서 마크다운은 싣지 않는다. 요약은 일지 파이프라인 산출물이 아니라 **전사에서 직접 뽑는 독립 LLM 패스**(`app/agents/summarize.py`)이고, 산출물 S3 저장(`persist_result`)이 끝난 뒤에만 발사한다. 이 콜백 도착이 곧 **일지·전사 준비 완료 신호**를 겸한다 — 본문은 `GET /v1/calls/{id}` 로 가져간다.
 
 ```json
 {"call_id": "…", "summary_type": "SUMMARY", "status": "COMPLETED",
- "content": "# 영농일지 — 딸기 (2026-08-26)\n…", "engine_version": "jinong-diary-v1/gemini-3.5-flash"}
+ "content": "- 주제: 딸기 잿빛곰팡이병 방제 상담\n- 조치: 환기 관리 권고 / 병든 과실 제거\n- 후속: 화요일 방문 예정",
+ "engine_version": "jinong-summary-v1/gemini-3.5-flash"}
 ```
 
-- `status`: `COMPLETED`(+`content` 필수) / `EMPTY`(content 없음) / `FAILED`(+`fail_reason`, 1000자 컷).
-  `COMPLETED` 인데 일지 본문이 비면 `EMPTY` 로 낮춰 보낸다.
+- `status`: `COMPLETED`(+`content` 필수) / `EMPTY`(+`empty_reason`, content 없음) / `FAILED`(+`fail_reason`, 1000자 컷).
+- `empty_reason` ∈ `NO_AUDIO` | `NO_TRANSCRIPT` | `NO_CONTENT` | `NO_DIARY_CONTENT` | `NO_SUMMARY`.
+  앞의 셋은 `Call.error_code` 그대로다. **`NO_DIARY_CONTENT` 판정은 콜백 content 가 아니라 저장되는
+  `result.diaries[]` 기준** — 통화는 `COMPLETED` 인데 남길 일지가 전부 `EMPTY`/`UNRESOLVED_CROP`(검수 강등 포함)이면
+  요약 LLM 을 호출하지 않고 이 사유로 보낸다. `NO_SUMMARY` 는 일지는 있는데 요약이 폴백까지 실패한 경우.
+- 요약 LLM 이 실패하면 이미 만들어진 보고서 요약(`report.structured.summary` + `action_items`)으로 폴백하고
+  `generation.warnings` 에 경고를 남긴다 — 통화 상태는 `COMPLETED` 를 유지한다.
 - 같은 `(call_id, summary_type)` 은 백엔드에서 UPSERT — 재생성 시 덮어쓰기.
 - `CallCreateRequest.callback_url` 은 스키마상 유지되지만 **통화 단위 발사에는 쓰지 않는다**(날짜별 전용).
 

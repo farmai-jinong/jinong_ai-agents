@@ -154,10 +154,10 @@ def _enable_summary_callback(rt):
 
 
 async def test_summary_callback_completed(client, app, stt_mock, s3_env):
-    """COMPLETED → 일지 마크다운 원문을 content 로 전송. 컨설팅 보고서는 포함하지 않는다.
+    """COMPLETED → content 는 **통화 단순요약 불릿**. 일지·보고서 마크다운은 싣지 않는다.
 
-    콜백 전송은 기존 S3 저장을 대체하지 않는다 — 산출물은 §6 경로에 그대로 올라가고,
-    call_id 로 조회(GET /v1/calls/{id}, artifact 엔드포인트)도 종전과 같이 동작한다.
+    콜백 전송은 기존 S3 저장·결과 조회를 대체하지 않는다 — 일지/보고서/전사는 §6 경로에 그대로
+    올라가고 call_id 로 조회된다(백엔드 전달 명세 §3.5/§3.6 회귀 가드).
     """
     import json
 
@@ -179,20 +179,29 @@ async def test_summary_callback_completed(client, app, stt_mock, s3_env):
     assert payload["call_id"] == "cb1"
     assert payload["summary_type"] == "SUMMARY"
     assert payload["status"] == "COMPLETED"
-    assert payload["content"].startswith("# 영농일지 —")
-    assert "컨설팅 보고서" not in payload["content"]              # 보고서는 내부 저장 전용
-    assert payload["engine_version"].startswith("jinong-diary-v1")
-    assert "fail_reason" not in payload
+    content = payload["content"]
+    assert content.startswith("- 주제:")                    # 불릿 요약
+    assert len(content.splitlines()) <= 3
+    assert "# 영농일지" not in content and "컨설팅 보고서" not in content   # 일지·보고서는 결과 API 로만
+    assert "|" not in content                              # 표·서식 없음
+    assert payload["engine_version"].startswith("jinong-summary-v1")
+    assert "fail_reason" not in payload and "empty_reason" not in payload
 
-    # (1) call_id 로 조회 — 결과·산출물 키가 그대로 노출된다
+    # (1) call_id 로 조회 — 일지·보고서·전사 키가 종전대로 노출된다
     body = (await client.get("/v1/calls/cb1")).json()
     assert body["callback_status"] == "SENT"
-    diary = body["result"]["diaries"][0]
+    res = body["result"]
+    diary = res["diaries"][0]
     assert diary["s3_key_md"] == "agents/voicecall/cb1/artifacts/diary/0804MM.md"
-    assert body["result"]["report"]["s3_key_md"] == "agents/voicecall/cb1/artifacts/report.md"
-    assert body["result"]["transcript_key"] == "agents/voicecall/cb1/transcript/merged.json"
+    assert diary["markdown"].startswith("# 영농일지 —")      # 일지는 응답으로 그대로 나간다
+    assert res["report"]["s3_key_md"] == "agents/voicecall/cb1/artifacts/report.md"
+    assert res["transcript_key"] == "agents/voicecall/cb1/transcript/merged.json"
+    # (2) 요약도 결과에 실려 id 로 다시 꺼낼 수 있다
+    assert res["summary"]["markdown"] == content
+    assert res["summary"]["s3_key_md"] == "agents/voicecall/cb1/artifacts/summary.md"
+    assert res["summary"]["structured"]["source"] == "fake"
 
-    # (2) S3 에 실제 객체가 있고, 콜백 content 는 저장된 일지 본문과 같다
+    # (3) S3 에 실제 객체가 있고, 콜백 content 는 저장된 summary.md 와 같다
     keys = {o["Key"] for o in s3_env.list_objects_v2(Bucket=BUCKET, Prefix="agents/voicecall/cb1/")["Contents"]}
     assert {"agents/voicecall/cb1/call.json",
             "agents/voicecall/cb1/transcript/merged.json",
@@ -201,19 +210,27 @@ async def test_summary_callback_completed(client, app, stt_mock, s3_env):
             "agents/voicecall/cb1/artifacts/diary/0804MM.json",
             "agents/voicecall/cb1/artifacts/report.md",
             "agents/voicecall/cb1/artifacts/report.json",
+            "agents/voicecall/cb1/artifacts/summary.md",
+            "agents/voicecall/cb1/artifacts/summary.json",
             "agents/voicecall/cb1/artifacts/result.json"} <= keys
-    stored = s3_env.get_object(Bucket=BUCKET, Key=diary["s3_key_md"])["Body"].read().decode()
-    assert stored.strip() == payload["content"]
+    stored = s3_env.get_object(Bucket=BUCKET, Key=res["summary"]["s3_key_md"])["Body"].read().decode()
+    assert stored.strip() == content
 
-    # (3) artifact 엔드포인트로도 id 조회 가능 (보고서는 여기서만 나온다)
+    # (4) artifact 엔드포인트로도 id 조회 가능
+    r = await client.get("/v1/calls/cb1/artifacts/summary")
+    assert r.status_code == 200 and r.text.strip() == content
     r = await client.get("/v1/calls/cb1/artifacts/diary/0804MM")
-    assert r.status_code == 200 and r.text.strip() == payload["content"]
+    assert r.status_code == 200 and "영농일지" in r.text
     r = await client.get("/v1/calls/cb1/artifacts/report")
     assert r.status_code == 200 and "컨설팅 보고서" in r.text
 
+    # (5) 전사본도 종전대로
+    tr = (await client.get("/v1/calls/cb1/transcript")).json()
+    assert tr["call_id"] == "cb1" and tr["segments"] and tr["speakers"]
 
-async def test_summary_callback_multi_crop_joined(client, app, stt_mock):
-    """작물 2건 → content 는 구분선으로 병합한 1건."""
+
+async def test_summary_callback_is_one_summary_regardless_of_crops(client, app, stt_mock):
+    """작물이 2건이어도 content 는 통화 요약 1건 — 일지를 이어붙이지 않는다."""
     import json
 
     from app.schemas.pipeline import DiaryArtifact, PipelineResult
@@ -241,8 +258,42 @@ async def test_summary_callback_multi_crop_joined(client, app, stt_mock):
         restore()
 
     content = json.loads(route.calls[0].request.content)["content"]
-    assert content.count("\n\n---\n\n") == 1
-    assert "딸기" in content and "파프리카" in content
+    assert "---" not in content and "# 영농일지" not in content
+    assert content.startswith("- 주제:")
+    # 작물별 일지는 응답에 2건 그대로
+    body = (await client.get("/v1/calls/cb2")).json()
+    assert [d["prdlst_nm"] for d in body["result"]["diaries"]] == ["딸기", "파프리카"]
+
+
+async def test_summary_falls_back_to_report_when_summarizer_fails(client, app, stt_mock):
+    """요약 LLM 실패 → 통화는 COMPLETED 유지, 보고서 요약으로 폴백하고 warning 을 남긴다."""
+    import json
+
+    rt = app.state.rt
+
+    class BoomSummarizer:
+        async def summarize(self, transcript, ctx):
+            raise RuntimeError("summary llm down")
+
+    restore = _enable_summary_callback(rt)
+    orig = rt.summarizer
+    rt.summarizer = BoomSummarizer()
+    try:
+        with respx.mock(assert_all_called=True) as router:
+            route = router.post(SUMMARY_HOOK).mock(return_value=httpx.Response(200))
+            await full_flow(client, "cb6")
+            await rt.worker.drain()
+    finally:
+        rt.summarizer = orig
+        restore()
+
+    payload = json.loads(route.calls[0].request.content)
+    assert payload["status"] == "COMPLETED"
+    assert payload["content"].startswith("- 주제:")          # FakePipeline 보고서 summary="fake"
+    body = (await client.get("/v1/calls/cb6")).json()
+    assert body["status"] == "COMPLETED"
+    assert any("통화 단순요약 실패" in w for w in body["generation"]["warnings"])
+    assert body["result"]["summary"]["structured"]["source"] == "report_fallback"
 
 
 async def test_summary_callback_empty_has_no_content(client, app):
@@ -262,6 +313,48 @@ async def test_summary_callback_empty_has_no_content(client, app):
 
     payload = json.loads(route.calls[0].request.content)
     assert payload["status"] == "EMPTY" and "content" not in payload
+    assert payload["empty_reason"] == "NO_AUDIO"
+
+
+async def test_summary_callback_empty_diaries_are_not_sent(client, app, stt_mock):
+    """일지가 전부 빈 템플릿(EMPTY) → 본문을 싣지 않고 EMPTY + NO_DIARY_CONTENT 로 낮춰 보낸다.
+
+    영농일지와 무관한 통화에서 백엔드가 빈 템플릿을 받던 문제(백엔드 요청)의 회귀 테스트.
+    """
+    import json
+
+    from app.schemas.pipeline import DiaryArtifact, PipelineResult
+
+    rt = app.state.rt
+
+    class EmptyDiaryPipeline:
+        """통화 자체는 COMPLETED 인데(보고서 있음) 일지에 남길 내용은 없는 경우."""
+
+        async def run(self, transcript, ctx):
+            d = DiaryArtifact(prdlst_code="0804MM", prdlst_nm="딸기", diary_date="2026-08-26",
+                              status="EMPTY", markdown="# 영농일지 — 딸기 (2026-08-26)\n\n## 주요 농작업\n- 언급 없음\n")
+            return PipelineResult(diaries=[d], report=None, model="fake", prompt_version="0")
+
+    restore = _enable_summary_callback(rt)
+    orig = rt.pipeline
+    rt.pipeline = EmptyDiaryPipeline()
+    try:
+        with respx.mock(assert_all_called=True) as router:
+            route = router.post(SUMMARY_HOOK).mock(return_value=httpx.Response(200))
+            await full_flow(client, "cb5")
+            await rt.worker.drain()
+    finally:
+        rt.pipeline = orig
+        restore()
+
+    payload = json.loads(route.calls[0].request.content)
+    assert payload["status"] == "EMPTY"
+    assert "content" not in payload                       # 빈 템플릿은 실리지 않는다
+    assert payload["empty_reason"] == "NO_DIARY_CONTENT"
+
+    body = (await client.get("/v1/calls/cb5")).json()     # 통화 자체는 COMPLETED, 산출물은 남아 있다
+    assert body["status"] == "COMPLETED"
+    assert body["result"]["diaries"][0]["status"] == "EMPTY"
 
 
 async def test_summary_callback_failed_has_reason(client, app, stt_mock):

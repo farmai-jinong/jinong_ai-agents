@@ -77,6 +77,9 @@ class Settings(BaseSettings):
     chunk_tokens: int = 8000
     chunk_overlap_turns: int = 6
     prompt_dump_dir: str = ""          # 비어있지 않으면 프롬프트/응답 덤프 (디버그)
+    # 일지 검수 패스 — 렌더된 초안을 독립 LLM 이 다시 보고 실질 내용이 없으면 EMPTY 로 강등(작물당 1콜)
+    verify_diary_enabled: bool = True
+    verify_diary_min_confidence: float = 0.6   # 확신이 이 값 미만이면 강등하지 않는다
 
     # --- farmos (kafka-gateway) 읽기 전용 -------------------------------------
     farmos_base_url: str = "https://dev.jinongservice.co.kr"
@@ -87,9 +90,10 @@ class Settings(BaseSettings):
     callback_api_key: str = ""
     callback_timeout: float = 10.0
     # 통화 단위 결과 콜백 = 백엔드 통화요약 콜백 (`.../voicetalk/public/call-summary-callback`).
-    # 비어 있으면 미발사. 날짜별 일지는 요청 body 의 callback_url 을 계속 사용한다.
+    # content 는 통화 단순요약(app/agents/summarize.py). 비어 있으면 미발사.
+    # 날짜별 일지는 요청 body 의 callback_url 을 계속 사용한다.
     summary_callback_url: str = ""
-    summary_engine_version: str = "jinong-diary-v1"   # 콜백 engine_version (모델명이 붙어 최대 100자로 컷)
+    summary_engine_version: str = "jinong-summary-v1"   # 콜백 engine_version (모델명이 붙어 최대 100자로 컷)
 
     # --- worker ---------------------------------------------------------------
     worker_poll_sec: float = 5.0

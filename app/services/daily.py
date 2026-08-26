@@ -1,13 +1,17 @@
-"""날짜별(멀티콜) 영농일지 상태 전이 — create / regenerate. 멱등 규칙은 docs/api-reference.md.
+"""날짜별(멀티콜) 영농일지 상태 전이 — create / 재-POST / regenerate. 멱등 규칙은 docs/api-reference.md.
 
 백엔드가 call_id 목록을 지정해 명시적으로 트리거한다. 멤버 call 들은 이미 terminal 이어야 하며,
 기존 call 단위 플로우/산출물과 별도 리소스로 공존한다.
+
+`diary_id` 가 멱등성 키다. 같은 `diary_id` 로 다시 POST 하면 **새 생성 회차**를 돌린다(`_retrigger`) —
+백엔드 자동 배치가 통화별 COMPLETED 콜백마다 그 날짜의 전체 `call_ids` 를 재전송하는 규약이기 때문.
 """
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from typing import Any
 
 from ..db import repo
 from ..db.models import DailyDiary
@@ -30,38 +34,74 @@ class DailyDiaryService:
     def __init__(self, rt: Runtime) -> None:
         self.rt = rt
 
+    async def _validate_calls(self, s: Any, call_ids: list[str]) -> None:
+        """멤버 call 검증 — 존재·terminal·전사 유무·같은 농가. create/재-POST 공통."""
+        calls = await repo.get_calls_by_ids(s, call_ids)
+        by_id = {c.call_id: c for c in calls}
+        missing = [cid for cid in call_ids if cid not in by_id]
+        if missing:
+            raise ApiError("CALLS_NOT_FOUND", f"calls not found: {', '.join(missing)}", 422)
+        not_ready = [f"{c.call_id}:{c.status}" for c in calls if c.status not in ("COMPLETED", "EMPTY")]
+        if not_ready:
+            raise ApiError("CALLS_NOT_READY",
+                           "all calls must be terminal COMPLETED/EMPTY (FAILED calls: regenerate them first): "
+                           + ", ".join(not_ready), 409)
+        if not any(c.status == "COMPLETED" for c in calls):
+            raise ApiError("NO_TRANSCRIBED_CALLS", "no COMPLETED call with a transcript in call_ids", 422)
+        farm_ids = {str(c.farm_json.get("farm_id")) for c in calls
+                    if isinstance(c.farm_json, dict) and c.farm_json.get("farm_id") is not None}
+        if len(farm_ids) > 1:
+            raise ApiError("FARM_MISMATCH", f"call_ids span multiple farms: {sorted(farm_ids)}", 422)
+        # 농가는 (engn_id, user_id) 복합 키로 구분 — engn_id 없는 구형 콜은 위 farm_id 검사만 적용
+        farmer_keys = {(str(p.get("engn_id")), str(p.get("user_id") or ""))
+                       for c in calls for p in (c.participants_json or [])
+                       if isinstance(p, dict) and p.get("role") == "farmer" and p.get("engn_id") is not None}
+        if len(farmer_keys) > 1:
+            pretty = sorted(f"engn:{e}/user:{u}" for e, u in farmer_keys)
+            raise ApiError("FARM_MISMATCH", f"call_ids span multiple farmers: {', '.join(pretty)}", 422)
+
+    async def _retrigger(self, s: Any, dd: DailyDiary, req: DailyDiaryCreateRequest) -> DailyTransition:
+        """같은 `diary_id` 재-POST — 백엔드 자동 배치의 재요청 규약.
+
+        백엔드는 통화별 COMPLETED 콜백마다 **그 날짜의 전체 `call_ids`** 를 같은 `diary_id` 로 다시 보낸다.
+        terminal 이면 새 생성 회차를 돌린다(`generation_run` 은 워커가 클레임할 때 +1).
+        진행 중인 실행은 이미 `call_ids` 를 읽었으므로 목록을 바꾸지 않는다 — 다음 트리거나 보정 배치가 잡는다.
+        """
+        if dd.gen_state == "RUNNING":
+            return DailyTransition(dd, 200, note="generation in progress — re-POST after it finishes")
+        await self._validate_calls(s, req.call_ids)
+        dd.call_ids_json = list(req.call_ids)
+        if req.metadata is not None:
+            dd.metadata_json = req.metadata
+        if req.callback_url is not None:
+            dd.callback_url = req.callback_url
+        if req.farm_access_token:            # 자동 배치는 JWT 를 보내지 않는다 — 있을 때만 갱신
+            dd.farm_access_token = req.farm_access_token
+        if req.language:
+            dd.language = req.language
+        if dd.gen_state == "QUEUED":         # 아직 클레임 전 — 대기 중인 실행이 새 목록을 읽는다
+            note, wake = "already queued — call_ids updated", False
+        else:                                # IDLE(terminal) — 새 생성 회차
+            dd.status = "PROCESSING"
+            dd.error_code = dd.error_message = None
+            dd.generation_attempts = 0
+            dd.gen_state = "QUEUED"
+            dd.gen_next_attempt_at = None
+            note, wake = "regeneration queued", True
+        await repo.add_event(s, dd.diary_id, "daily_retriggered",
+                             {"call_ids": list(req.call_ids), "gen_state": dd.gen_state})
+        await s.commit()
+        await s.refresh(dd)
+        await self._put_daily_json(dd)
+        return DailyTransition(dd, 200, wake=wake, note=note)
+
     async def create(self, req: DailyDiaryCreateRequest) -> DailyTransition:
         async with self.rt.db.session() as s:
             dd = await repo.get_daily(s, req.diary_id)
             if dd is not None:
-                if dd.status in repo.TERMINAL_STATUSES and dd.gen_state == "IDLE":
-                    return DailyTransition(dd, 200, note="daily diary already finalized — use regenerate")
-                return DailyTransition(dd, 200, note="already processing")
+                return await self._retrigger(s, dd, req)
 
-            calls = await repo.get_calls_by_ids(s, req.call_ids)
-            by_id = {c.call_id: c for c in calls}
-            missing = [cid for cid in req.call_ids if cid not in by_id]
-            if missing:
-                raise ApiError("CALLS_NOT_FOUND", f"calls not found: {', '.join(missing)}", 422)
-            not_ready = [f"{c.call_id}:{c.status}" for c in calls if c.status not in ("COMPLETED", "EMPTY")]
-            if not_ready:
-                raise ApiError("CALLS_NOT_READY",
-                               "all calls must be terminal COMPLETED/EMPTY (FAILED calls: regenerate them first): "
-                               + ", ".join(not_ready), 409)
-            if not any(c.status == "COMPLETED" for c in calls):
-                raise ApiError("NO_TRANSCRIBED_CALLS", "no COMPLETED call with a transcript in call_ids", 422)
-            farm_ids = {str(c.farm_json.get("farm_id")) for c in calls
-                        if isinstance(c.farm_json, dict) and c.farm_json.get("farm_id") is not None}
-            if len(farm_ids) > 1:
-                raise ApiError("FARM_MISMATCH", f"call_ids span multiple farms: {sorted(farm_ids)}", 422)
-            # 농가는 (engn_id, user_id) 복합 키로 구분 — engn_id 없는 구형 콜은 위 farm_id 검사만 적용
-            farmer_keys = {(str(p.get("engn_id")), str(p.get("user_id") or ""))
-                           for c in calls for p in (c.participants_json or [])
-                           if isinstance(p, dict) and p.get("role") == "farmer" and p.get("engn_id") is not None}
-            if len(farmer_keys) > 1:
-                pretty = sorted(f"engn:{e}/user:{u}" for e, u in farmer_keys)
-                raise ApiError("FARM_MISMATCH", f"call_ids span multiple farmers: {', '.join(pretty)}", 422)
-
+            await self._validate_calls(s, req.call_ids)
             dd = DailyDiary(
                 diary_id=req.diary_id, diary_date=req.diary_date, call_ids_json=list(req.call_ids),
                 status="PROCESSING", gen_state="QUEUED",

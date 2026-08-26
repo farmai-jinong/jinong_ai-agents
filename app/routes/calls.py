@@ -128,6 +128,18 @@ async def get_report(call_id: str, request: Request, format: str = "md") -> Resp
     return await _artifact_response(rt, art.s3_key, art.content, kind.endswith("json"))
 
 
+@router.get("/{call_id}/artifacts/summary")
+async def get_summary(call_id: str, request: Request, format: str = "md") -> Response:
+    """통화 단순요약 — 콜백으로 보낸 것과 같은 본문(백엔드가 콜백을 놓쳤을 때 재조회용)."""
+    rt = _rt(request)
+    kind = "summary_json" if format == "json" else "summary_md"
+    async with rt.db.session() as s:
+        art = await repo.get_artifact(s, call_id, kind)
+    if art is None:
+        raise ApiError("NOT_READY", "summary not available", 404)
+    return await _artifact_response(rt, art.s3_key, art.content, kind.endswith("json"))
+
+
 @router.get("/{call_id}/artifacts/diary/{prdlst_code}")
 async def get_diary(call_id: str, prdlst_code: str, request: Request, format: str = "md") -> Response:
     rt = _rt(request)

@@ -68,6 +68,12 @@ class Keys:
     def report_json(self, call_id: str) -> str:
         return f"{self.base(call_id)}/artifacts/report.json"
 
+    def summary_md(self, call_id: str) -> str:
+        return f"{self.base(call_id)}/artifacts/summary.md"
+
+    def summary_json(self, call_id: str) -> str:
+        return f"{self.base(call_id)}/artifacts/summary.json"
+
     def result_json(self, call_id: str) -> str:
         return f"{self.base(call_id)}/artifacts/result.json"
 

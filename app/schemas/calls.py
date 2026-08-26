@@ -112,11 +112,20 @@ class ReportView(BaseModel):
     s3_key_json: str
 
 
+class SummaryView(BaseModel):
+    """통화 단순요약 — 백엔드 통화요약 콜백으로 보낸 것과 같은 본문."""
+    markdown: str | None = None
+    structured: dict[str, Any] | None = None
+    s3_key_md: str
+    s3_key_json: str
+
+
 class ResultView(BaseModel):
     transcript_key: str | None = None
     speaker_map: dict[str, str] = Field(default_factory=dict)
     diaries: list[DiaryView] = Field(default_factory=list)
     report: ReportView | None = None
+    summary: SummaryView | None = None
     result_key: str | None = None
 
 

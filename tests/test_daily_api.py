@@ -28,15 +28,58 @@ async def test_create_idempotent_and_complete(client, app, stt_mock):
     assert body["status"] == "PROCESSING" and body["generation"]["state"] == "QUEUED"
     assert body["call_ids"] == ["c1", "c2"]
 
-    r = await client.post("/v1/daily-diaries", json=DAILY)          # 진행 중 재-POST
-    assert r.status_code == 200 and "already processing" in r.json()["note"]
+    r = await client.post("/v1/daily-diaries", json=DAILY)          # 클레임 전 재-POST — 대기 중 실행이 새 목록을 읽는다
+    assert r.status_code == 200 and "already queued" in r.json()["note"]
+
+    await app.state.rt.worker.drain()
+    body = (await client.get(f"/v1/daily-diaries/{DAILY['diary_id']}")).json()
+    assert body["status"] == "COMPLETED" and body["generation"]["run"] == 1
+
+    # terminal 재-POST → 새 생성 회차 (백엔드 자동 배치는 콜백마다 전체 목록을 재전송한다)
+    r = await client.post("/v1/daily-diaries", json=DAILY)
+    assert r.status_code == 200 and "regeneration queued" in r.json()["note"]
+    assert r.json()["status"] == "PROCESSING"
+    await app.state.rt.worker.drain()
+    body = (await client.get(f"/v1/daily-diaries/{DAILY['diary_id']}")).json()
+    assert body["status"] == "COMPLETED" and body["generation"]["run"] == 2
+
+
+async def test_retrigger_adds_new_call(client, app, stt_mock):
+    """통화가 추가되면 같은 diary_id 로 전체 call_ids 를 재전송 — 목록 갱신 + 새 회차."""
+    await _complete_calls(client, app)
+    assert (await client.post("/v1/daily-diaries", json=DAILY)).status_code == 201
+    await app.state.rt.worker.drain()
+
+    await _complete_calls(client, app, ids=("c3",))
+    r = await client.post("/v1/daily-diaries", json={**DAILY, "call_ids": ["c1", "c2", "c3"]})
+    assert r.status_code == 200 and "regeneration queued" in r.json()["note"]
+    assert r.json()["call_ids"] == ["c1", "c2", "c3"]
 
     await app.state.rt.worker.drain()
     body = (await client.get(f"/v1/daily-diaries/{DAILY['diary_id']}")).json()
     assert body["status"] == "COMPLETED"
+    assert body["call_ids"] == ["c1", "c2", "c3"] and body["generation"]["run"] == 2
 
-    r = await client.post("/v1/daily-diaries", json=DAILY)          # terminal 재-POST
-    assert r.status_code == 200 and "regenerate" in r.json()["note"]
+
+async def test_auto_batch_request_shape(client, app, stt_mock):
+    """AP 백엔드 자동 배치 요청 그대로 — farm_access_token 없음, hints 에 농가 복합 키."""
+    await _complete_calls(client, app)
+    r = await client.post("/v1/daily-diaries", json={
+        "diary_id": "daily_1_test7_20260826", "diary_date": "2026-08-26",
+        "call_ids": ["c1", "c2"],
+        "callback_url": "https://backend.test/voicetalk/public/agent-callback",
+        "language": "ko",
+        "metadata": {"hints": {"diary_date": "2026-08-26",
+                               "farmer_engn_id": "1", "farmer_user_id": "test7"}},
+    })
+    assert r.status_code == 201, r.text          # 토큰 없이도 접수 — farmos 조회 없이 생성
+    await app.state.rt.worker.drain()
+
+    body = (await client.get("/v1/daily-diaries/daily_1_test7_20260826?inline=true")).json()
+    assert body["status"] == "COMPLETED"
+    assert body["call_ids"] == ["c1", "c2"]
+    assert body["result"]["diaries"], "작물별 일지가 최소 1건"
+    assert body["result"]["diaries"][0]["diary_date"] == "2026-08-26"   # 요청 날짜로 고정
 
 
 async def test_validation_errors(client, app, stt_mock):

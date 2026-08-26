@@ -1,4 +1,4 @@
-"""프로세스 런타임 묶음 — settings/db/s3/stt/pipeline/worker 를 한 객체로 (app.state.rt).
+"""프로세스 런타임 묶음 — settings/db/s3/stt/pipeline/summarizer/worker 를 한 객체로 (app.state.rt).
 
 라우트·워커·테스트가 같은 진입점을 쓰도록 하고, 테스트에서는 필드를 바꿔 끼운다.
 """
@@ -14,7 +14,7 @@ from .config import Settings
 from .db.engine import Database
 
 if TYPE_CHECKING:  # pragma: no cover
-    from .agents.interface import DiaryReportPipeline
+    from .agents.interface import CallSummarizer, DiaryReportPipeline
     from .worker.runner import Worker
 
 
@@ -25,12 +25,14 @@ class Runtime:
     s3: StorageClient
     stt: SttClient
     pipeline: "DiaryReportPipeline"
+    summarizer: "CallSummarizer | None" = None   # 통화 단순요약(콜백 content) — 일지 파이프라인과 독립
     worker: "Worker | None" = None
     extra: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def build(cls, settings: Settings, *, pipeline: "DiaryReportPipeline | None" = None) -> "Runtime":
-        from .agents import build_pipeline
+    def build(cls, settings: Settings, *, pipeline: "DiaryReportPipeline | None" = None,
+              summarizer: "CallSummarizer | None" = None) -> "Runtime":
+        from .agents import build_pipeline, build_summarizer
 
         return cls(
             settings=settings,
@@ -38,6 +40,7 @@ class Runtime:
             s3=build_storage(settings),
             stt=SttClient(settings),
             pipeline=pipeline or build_pipeline(settings),
+            summarizer=summarizer or build_summarizer(settings),
         )
 
     async def startup(self, *, start_worker: bool = True) -> None:

@@ -181,6 +181,14 @@ class DiaryContentOut(_Strict):
     evidence: Ev
 
 
+class DiaryVerdictOut(_Strict):
+    """일지 검수 패스 — 렌더된 초안에 실질적인 영농일지 기록거리가 있는지 재확인."""
+    has_diary_content: bool
+    reason: str
+    confidence: float
+    evidence: Ev
+
+
 class Bullet(_Strict):
     text: str
     evidence: Ev
@@ -336,6 +344,7 @@ class DiaryResult(BaseModel):
     content: str = ""
     warnings: list[str] = Field(default_factory=list)
     evidence: Ev = Field(default_factory=list)
+    verify: DiaryVerdictOut | None = None      # 검수 패스 판정(없으면 미실행/실패)
 
 
 class ReportJSON(BaseModel):

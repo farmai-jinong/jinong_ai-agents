@@ -7,12 +7,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .interface import DiaryReportPipeline, PipelineEmpty
+from .interface import CallSummarizer, DiaryReportPipeline, PipelineEmpty
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..config import Settings
 
-__all__ = ["DiaryReportPipeline", "PipelineEmpty", "build_pipeline"]
+__all__ = ["CallSummarizer", "DiaryReportPipeline", "PipelineEmpty", "build_pipeline",
+           "build_summarizer"]
 
 
 def build_pipeline(settings: "Settings") -> DiaryReportPipeline:
@@ -25,3 +26,12 @@ def build_pipeline(settings: "Settings") -> DiaryReportPipeline:
     from .graph import LangGraphPipeline
 
     return LangGraphPipeline(settings)
+
+
+def build_summarizer(settings: "Settings") -> CallSummarizer:
+    """통화 단순요약 구현 선택 — 파이프라인과 같은 PIPELINE_IMPL 스위치를 쓴다."""
+    from .summarize import FakeSummarizer, LlmSummarizer
+
+    if (settings.pipeline_impl or "langgraph").lower() == "fake":
+        return FakeSummarizer()
+    return LlmSummarizer(settings)

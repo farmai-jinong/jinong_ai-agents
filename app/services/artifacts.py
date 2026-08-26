@@ -11,9 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import repo
 from ..db.models import Artifact, Call, DailyArtifact, DailyDiary
 from ..runtime import Runtime
-from ..schemas.calls import DiaryView, ReportView, ResultView
+from ..schemas.calls import DiaryView, ReportView, ResultView, SummaryView
 from ..schemas.daily import DailyResultView
-from ..schemas.pipeline import PipelineResult
+from ..schemas.pipeline import CallSummaryResult, PipelineResult
 
 UNRESOLVED = "unresolved"
 
@@ -45,8 +45,12 @@ def _inline(text: str, max_kb: int) -> str | None:
 
 
 async def persist_result(rt: Runtime, s: AsyncSession, call: Call, result: PipelineResult,
-                         transcript_key: str) -> list[Artifact]:
-    """S3 에 md/json 저장 후 artifacts 행 전체 교체. result.json 스냅샷도 저장."""
+                         transcript_key: str, summary: CallSummaryResult | None = None) -> list[Artifact]:
+    """S3 에 md/json 저장 후 artifacts 행 전체 교체. result.json 스냅샷도 저장.
+
+    통화 단순요약(`summary`)도 여기서 같이 쓴다 — `replace_artifacts` 가 통화 artifact 를 전량
+    교체하므로 바깥에서 따로 저장하면 다음 실행에 사라진다.
+    """
     keys = rt.s3.keys
     max_kb = rt.settings.result_inline_max_kb
     run = call.generation_run
@@ -64,7 +68,7 @@ async def persist_result(rt: Runtime, s: AsyncSession, call: Call, result: Pipel
         "call_id": call.call_id, "generation_run": run, "model": result.model,
         "prompt_version": result.prompt_version, "farmos_status": result.farmos_status,
         "speaker_map": result.speaker_map, "warnings": result.warnings, "usage": result.usage,
-        "transcript_key": transcript_key, "diaries": [], "report": None,
+        "transcript_key": transcript_key, "diaries": [], "report": None, "summary": None,
     }
     used_codes: set[str] = set()
     for d in result.diaries:
@@ -85,6 +89,14 @@ async def persist_result(rt: Runtime, s: AsyncSession, call: Call, result: Pipel
                   content_type="application/json; charset=utf-8")
         result_snapshot["report"] = {**result.report.structured, "markdown": result.report.markdown,
                                      "s3_key_md": kmd, "s3_key_json": kjs}
+    if summary is not None and summary.markdown.strip():
+        kmd, kjs = keys.summary_md(call.call_id), keys.summary_json(call.call_id)
+        payload = summary.model_dump(exclude={"markdown"})
+        await add("summary_md", kmd, summary.markdown)
+        await add("summary_json", kjs, json.dumps(payload, ensure_ascii=False, indent=2, default=str),
+                  content_type="application/json; charset=utf-8")
+        result_snapshot["summary"] = {**payload, "markdown": summary.markdown,
+                                      "s3_key_md": kmd, "s3_key_json": kjs}
     kres = keys.result_json(call.call_id)
     await add("result_json", kres, json.dumps(result_snapshot, ensure_ascii=False, indent=2, default=str),
               content_type="application/json; charset=utf-8")
@@ -171,10 +183,24 @@ def build_result_view(call: Call, artifacts: list[Artifact], *, inline: bool = T
                 structured = None
         report = ReportView(markdown=rmd.content if inline else None, structured=structured,
                             s3_key_md=rmd.s3_key, s3_key_json=rjs.s3_key if rjs else rmd.s3_key.replace(".md", ".json"))
+    summary = None
+    smd = by_kind.get(("summary_md", ""))
+    if smd:
+        sjs = by_kind.get(("summary_json", ""))
+        structured = None
+        if inline and sjs and sjs.content:
+            try:
+                structured = json.loads(sjs.content)
+            except ValueError:
+                structured = None
+        summary = SummaryView(markdown=smd.content if inline else None, structured=structured,
+                              s3_key_md=smd.s3_key,
+                              s3_key_json=sjs.s3_key if sjs else smd.s3_key.replace(".md", ".json"))
     tr = by_kind.get(("transcript", ""))
     res = by_kind.get(("result_json", ""))
     return ResultView(transcript_key=tr.s3_key if tr else None, speaker_map=call.speaker_map_json or {},
-                      diaries=diaries, report=report, result_key=res.s3_key if res else None)
+                      diaries=diaries, report=report, summary=summary,
+                      result_key=res.s3_key if res else None)
 
 
 def build_daily_result_view(dd: DailyDiary, artifacts: list[DailyArtifact], *, inline: bool = True) -> DailyResultView | None:

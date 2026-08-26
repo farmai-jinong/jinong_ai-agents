@@ -1,0 +1,13 @@
+[통화 시각] {{ call_when }}
+[참여자]
+{% for p in participants %}
+- {{ p.role_ko }}{% if p.name %} {{ p.name }}{% endif %}
+{% endfor %}
+{% if chunk_note %}
+[구간 안내] {{ chunk_note }}
+{% endif %}
+
+[녹취문]
+{{ transcript }}
+
+위 통화의 단순요약 JSON 을 출력하라.

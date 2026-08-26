@@ -1,0 +1,9 @@
+[작물] {{ crop_name }} / [일지 날짜] {{ diary_date }}
+
+[생성된 영농일지 초안]
+{{ diary_markdown }}
+
+[자유 서술(기타 기록사항) 원문]
+{{ content if content else "(비어 있음)" }}
+
+위 초안에 농가가 실제로 남길 만한 영농일지 내용이 있는지 판정 JSON 을 출력하라.

@@ -36,7 +36,8 @@ CALL_STATES = ("OPEN", "ENDED")
 CALL_STATUSES = ("NONE", "PROCESSING", "COMPLETED", "EMPTY", "FAILED")
 GEN_STATES = ("IDLE", "QUEUED", "RUNNING")
 AUDIO_STATUSES = ("PENDING", "TRANSCRIBING", "TRANSCRIBED", "FAILED")
-ARTIFACT_KINDS = ("transcript", "diary_md", "diary_json", "report_md", "report_json", "result_json")
+ARTIFACT_KINDS = ("transcript", "diary_md", "diary_json", "report_md", "report_json",
+                  "summary_md", "summary_json", "result_json")
 
 
 class Call(Base):

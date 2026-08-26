@@ -37,7 +37,7 @@ async def test_strawberry_full_run(settings, farmos_fake):
     assert "사파이어 액상수화제 → 잿빛곰팡이 · 2000배 (확인 필요)" in d.markdown
     assert d.structured["prefill_ready"] is True
     assert res.speaker_map == {"f0:A": "farmer", "f0:B": "consultant"}
-    assert res.farmos_status == "ok" and res.usage["calls"] == 4 and res.model == "fake-llm"
+    assert res.farmos_status == "ok" and res.usage["calls"] == 5 and res.model == "fake-llm"   # +verify_diary
     # 보고서: 근거 없는 bullet 제외 + 농약 bullet 은 needs_verification 강제
     rep = res.report.structured
     assert all(b["text"] != "근거 없는 권고" for b in rep["sections"]["advice"])

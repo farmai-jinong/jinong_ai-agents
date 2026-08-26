@@ -26,7 +26,7 @@
 (1) POST /v1/calls                      통화 시작 — call_id, 참가자, 농가 JWT
 (2) POST /v1/calls/{id}/audio  ×N       녹음 생길 때마다 — S3 bucket/key 참조 (즉시 STT 큐잉)
 (3) POST /v1/calls/{id}/end             통화 종료 — STT 진행 중이어도 즉시 보내도 안전
-(4) 통화요약 콜백 수신(§5.1, 일지 마크다운 동봉) 또는 GET /v1/calls/{id}?inline=false 를 5초 간격 폴링
+(4) 통화요약 콜백 수신(§5.1, 통화 단순요약 동봉) 또는 GET /v1/calls/{id}?inline=false 를 5초 간격 폴링
     → status 가 COMPLETED / EMPTY / FAILED 가 되면 종료
 (5) GET /v1/calls/{id} 로 결과(result) 조회, 필요 시 artifact 엔드포인트로 md/json 직접 조회
 ```
@@ -76,7 +76,7 @@
 | `farm` | object | 선택 | 자유 형식(`farm_id`, `farm_nm` 등). 응답에 그대로 반환 |
 | `num_speakers` | int 1..8 | 선택 | STT 화자 분리 힌트 |
 | `language` | string | 선택 | 기본 `"ko"` |
-| `callback_url` | string | 선택 | 호환용으로 계속 받지만 **통화 단위 콜백에는 사용하지 않습니다** — 통화 결과는 저희 설정의 통화요약 콜백 URL로 발사됩니다 (§5.1). 이 필드는 날짜별 일지(§3.7) 전용 |
+| `callback_url` | string | 선택 | 호환용으로 계속 받지만 **통화 단위 콜백에는 사용하지 않습니다** — 통화 결과 알림은 저희 설정의 통화요약 콜백 URL로 발사됩니다 (§5.1). 이 필드는 날짜별 일지(§3.7) 전용 |
 | `metadata` | object | 선택 | 자유 형식. `metadata.hints`는 특별 취급(아래) |
 
 `metadata.hints` (선택 — farmos 조회가 없거나 실패할 때 대체 사용):
@@ -253,7 +253,8 @@ Body 선택: `{"retranscribe": false, "reason": "...", "farm_access_token": "<�
 
 - `result`는 **`status=COMPLETED`일 때만** 채워집니다.
 - `diaries[]`는 통화에서 다룬 **작물별** 1건씩. `prdlst_code`는 farmos 품목코드이며, 작물을 확정하지
-  못하면 `null`(S3 키·artifact 경로는 `unresolved`; 한 결과에 미확정 작물이 여럿이면 두 번째부터 `unresolved-2`, `unresolved-3` …). 건별 `status` ∈ `OK|PARTIAL|EMPTY|UNRESOLVED_CROP`.
+  못하면 `null`(S3 키·artifact 경로는 `unresolved`; 한 결과에 미확정 작물이 여럿이면 두 번째부터 `unresolved-2`, `unresolved-3` …). 건별 `status` ∈ `OK|PARTIAL|EMPTY|UNRESOLVED_CROP`
+  (`EMPTY` = 이 작물로 일지에 남길 내용 없음 — 규칙 판정 + 독립 LLM 검수 패스, §5.1).
 - **저희는 farmos에 저장하지 않습니다.** `structured.prefill`은 앱 `PUT /m/diary`의 `fields`와 같은
   모양의 **초안**이고, 농가가 앱에서 확인 후 저장하는 용도입니다.
 - markdown 본문이 512KB를 넘으면 인라인이 생략됩니다(`markdown: null`) — S3 키 또는 §3.6으로 조회.
@@ -294,14 +295,26 @@ Body 선택: `{"retranscribe": false, "reason": "...", "farm_access_token": "<�
 |---|---|---|---|
 | `diary_id` | string | **필수** | `[A-Za-z0-9_.:-]{1,128}`. **멱등성 키** — 백엔드가 농가 복합 키/날짜에서 결정적으로 생성 (**확정 규칙**: `daily_{engnId}_{userId}_{yyyyMMdd}`, 예: `daily_18_u123_20260819`). 재전송이 안전해집니다 |
 | `diary_date` | string | **필수** | `yyyy-MM-dd`. 산출물 일지의 날짜는 이 값으로 고정됩니다 |
-| `call_ids` | array 1..50 | **필수** | 합칠 통화들. 중복 불가. **전부 terminal(`COMPLETED`/`EMPTY`)이어야 하고 1건 이상 `COMPLETED`여야 합니다.** 같은 농가의 통화만 묶는 것은 백엔드 책임입니다 |
+| `call_ids` | array 1..50 | **필수** | 합칠 통화들(그 날짜의 **전체 목록** — 통화가 늘면 누적해서 전부 보내주세요). 중복 불가. **전부 terminal(`COMPLETED`/`EMPTY`)이어야 하고 1건 이상 `COMPLETED`여야 합니다.** 같은 농가의 통화만 묶는 것은 백엔드 책임이며, `call_id`↔작물 매핑은 보내실 필요 없습니다 |
 | `farm_access_token` | string | 선택 | **매 트리거·재생성마다 새로 보내주세요** — 통화 때 받은 JWT는 통화 terminal 시 저희 DB에서 삭제되어 재사용되지 않습니다. 생략하면 farmos 조회 없이 전사+힌트만으로 생성합니다. 이 토큰도 daily terminal 시 삭제됩니다 |
 | `callback_url` | string | 선택 | 날짜별 일지 완료를 알릴 agent-callback 수신 URL (§5.2). 통화 단위와 달리 **여기서는 실제로 사용됩니다** |
 | `language` / `metadata` | – | 선택 | §3.1과 동일한 의미(`metadata.hints` 포함) |
 
-**응답**: `201`(신규 — 생성 큐잉) / `200`(같은 `diary_id` 재-POST — 진행 중이면 `note: "already
-processing"`, terminal이면 `note`에 regenerate 안내). 본문은 `DailyDiaryDetail`(§3.8). 재-POST는
-재생성을 일으키지 않습니다 — 다시 만들려면 `/regenerate`를 호출하세요.
+**응답**: `201`(신규 — 생성 큐잉) / `200`(같은 `diary_id` 재-POST). 본문은 `DailyDiaryDetail`(§3.8).
+
+**재-POST = 재생성입니다 (2026-08-26 변경).** 통화가 추가될 때마다 같은 `diary_id` 로 **그 날짜의 전체
+`call_ids`** 를 다시 보내주시면 됩니다. `/regenerate` 를 따로 부르실 필요가 없습니다.
+
+| 그 시점 상태 | 동작 | `note` |
+|---|---|---|
+| terminal (`COMPLETED`/`EMPTY`/`FAILED`) | `call_ids` 를 요청값으로 교체하고 새 생성 회차 큐잉 (`generation.run` +1) | `regeneration queued` |
+| 생성 대기 중 | `call_ids` 만 갱신 — 대기 중인 실행이 새 목록을 읽습니다 (회차 유지) | `already queued — call_ids updated` |
+| 생성 실행 중 | **아무것도 바꾸지 않습니다** — 실행 중인 회차가 이미 목록을 읽었기 때문입니다. 다음 트리거나 보정 배치에서 반영됩니다 | `generation in progress — re-POST after it finishes` |
+
+- `metadata`·`callback_url`·`language` 는 재-POST 값으로 갱신됩니다. `farm_access_token` 은 **보내셨을
+  때만** 갱신합니다(자동 배치처럼 생략하면 기존 값을 건드리지 않습니다).
+- `diary_date` 는 `diary_id` 에 이미 포함돼 있어 **불변**입니다 — 최초 생성값을 유지합니다.
+- 세 경우 모두 2xx이므로 백엔드는 "생성 요청 접수"로 처리하시면 됩니다.
 
 **동기 검증 실패**:
 
@@ -421,33 +434,68 @@ terminal 사유 (`status` + `error.code`):
   `CallDetail.callback_status` / `DailyDiaryDetail.callback_status`(`SENT`/`FAILED`)로 확인할 수 있고,
   콜백 실패가 통화/일지 상태에 영향을 주지는 않습니다.
 
-### 5.1 통화 단위 — 통화요약 콜백 (본문 동봉)
+### 5.1 통화 단위 — 통화요약 콜백 (통화 단순요약 동봉)
 
 - **수신 URL**: 저희 쪽 전역 설정(`SUMMARY_CALLBACK_URL`)입니다. 개발
   `https://dev.jinongservice.co.kr/voicetalk/public/call-summary-callback`, 운영 전환 시 `data.` 도메인
   URL을 알려주시면 저희가 바꿉니다. (통화별 `callback_url`로 받지 않습니다.)
-- **`content`는 요약문이 아니라 영농일지 마크다운 원문**입니다. 한 통화에서 작물이 여러 건이면
-  `\n\n---\n\n` 구분선으로 병합해 1건으로 보냅니다(같은 `call_id + summary_type`은 UPSERT라 나눠 보내면
-  덮어쓰기되기 때문). 작물 구분이 필요하시면 마크다운 안의 제목/표(`| 작물 | 딸기 (0804MM) |`)로 확인하거나
-  `GET /v1/calls/{call_id}`의 `result.diaries[]`를 조회해 주세요.
-- **컨설팅 보고서는 콜백에 포함하지 않습니다** — 저희 S3/DB에만 남습니다(`GET /v1/calls/{id}`로는 조회 가능).
+- **`content`는 통화 내용의 단순요약**입니다 — 주제/조치/후속 불릿 3줄, 대체로 100자 안팎.
+  통화이력 화면에 한 줄로 붙이기 좋은 분량입니다.
+- **영농일지·컨설팅 보고서 마크다운은 콜백에 싣지 않습니다.** 일지와 전사본은 종전대로
+  `GET /v1/calls/{call_id}` 응답(§3.5)으로 가져가시면 됩니다 — **이 콜백 도착이 곧 그 결과가 준비됐다는
+  신호**를 겸합니다(별도의 완료 알림은 보내지 않습니다).
+- 요약은 일지를 요약한 것이 아니라 **녹취문에서 직접 뽑습니다** — 일지 서식이 바뀌어도 요약 문구는
+  영향을 받지 않습니다.
 
 ```json
 {
   "call_id": "20260819_Qmf1D0X",
   "summary_type": "SUMMARY",
   "status": "COMPLETED",
-  "content": "# 영농일지 — 딸기 (2026-08-26)\n\n| 작물 | 딸기 (0804MM) |\n…",
-  "engine_version": "jinong-diary-v1/gemini-3.5-flash"
+  "content": "- 주제: 딸기 잿빛곰팡이병 방제 상담\n- 조치: 환기 관리 권고 / 병든 과실 제거\n- 후속: 화요일 방문 예정",
+  "engine_version": "jinong-summary-v1/gemini-3.5-flash"
 }
+```
+
+수신 후 흐름:
+
+```
+통화요약 콜백 수신  →  content 를 통화이력 요약으로 저장
+                  └→  GET /v1/calls/{call_id}          영농일지 result.diaries[] · 보고서 result.report
+                      GET /v1/calls/{call_id}/transcript  전사본(MergedTranscript)
 ```
 
 | status | 본문 | 비고 |
 |---|---|---|
-| `COMPLETED` | `content` 필수 | 일지 생성 성공 |
-| `EMPTY` | 없음 | 오디오 없음/무음/일지화할 내용 없음. `COMPLETED`인데 본문이 비면 `EMPTY`로 낮춰 보냅니다 |
+| `COMPLETED` | `content` 필수 | 요약·일지 모두 준비됨 |
+| `EMPTY` | `empty_reason` | 일지로 남길 내용이 없음. `content` 키는 아예 오지 않습니다 |
 | `FAILED` | `fail_reason` (≤1000자) | 예 `"GENERATION_FAILED: ..."` — 앞부분이 §8 에러 코드 |
 
+**`EMPTY` 판별 (2026-08-26 — 백엔드 요청 반영).** 영농일지와 무관한 통화(안부·잡담·일정조율)에서 빈 템플릿이
+`COMPLETED`로 나가던 문제를 고쳤습니다. **생성된 일지 초안을 독립 LLM 패스가 한 번 더 검수**해 실질 내용
+(농작업·생육관찰·병해충·자재투입)이 없으면 그 작물 일지를 `EMPTY`로 판정하고, 그런 일지밖에 없으면
+콜백을 `status: "EMPTY"`로 낮춰 보냅니다. **판별 기준은 콜백 본문이 아니라 저장되는 일지(`result.diaries[]`)**
+이며, 이 경우 요약도 만들지 않습니다. 상태값만 보고 처리하시면 됩니다.
+
+`empty_reason` (EMPTY 일 때만 포함):
+
+| empty_reason | 뜻 |
+|---|---|
+| `NO_AUDIO` | 통화에 녹음이 하나도 없음 |
+| `NO_TRANSCRIPT` | 전사에 발화가 없음(무음) |
+| `NO_CONTENT` | 통화 전체에 기록할 내용이 없음 |
+| `NO_DIARY_CONTENT` | 통화는 정상 처리됐지만 영농일지로 남길 실질 내용이 없음(검수 판정) |
+| `NO_SUMMARY` | 일지는 있으나 요약 생성이 끝내 실패함(드묾) |
+
+```json
+{"call_id": "20260819_Qmf1D0X", "summary_type": "SUMMARY", "status": "EMPTY",
+ "empty_reason": "NO_DIARY_CONTENT", "engine_version": "jinong-summary-v1/gemini-3.5-flash"}
+```
+
+- 판정이 애매하면 **내용이 있는 쪽(`COMPLETED`)으로 기울입니다** — 실제 기록을 지우는 오판을 피하기 위함입니다.
+- 작물별 판정 근거는 `GET /v1/calls/{call_id}`의 `result.diaries[].structured.verify`에서 확인할 수 있습니다.
+- 콜백을 놓치셨으면 `GET /v1/calls/{call_id}`의 **`result.summary.markdown`** 또는
+  `GET /v1/calls/{call_id}/artifacts/summary` 로 같은 요약을 다시 가져올 수 있습니다.
 - `summary_type`은 `SUMMARY` 고정입니다(현재 `KEYWORD`/`ACTION_ITEM`은 보내지 않습니다).
 - 중복 제거는 `(call_id, summary_type)` 기준 UPSERT로 처리해 주세요.
 - `POST /v1/calls` body의 `callback_url` 필드는 호환을 위해 계속 받지만 **통화 단위 발사에는 쓰지
@@ -603,8 +651,10 @@ curl "$B/v1/daily-diaries/daily_u1_20260819" -H "Authorization: Bearer $K"
 - [x] 알림 방식 — 콜백 활성화 완료(2026-08-24): 합의된 `X-API-Key` (§5). 폴링은 안전망으로 유지 권장
 - [ ] **통화요약 콜백 수신 준비** — `POST .../voicetalk/public/call-summary-callback` (§5.1). 수신 가능 시점을
       알려주시면 통화 단위 agent-callback 발사를 중단하고 전환합니다
-- [ ] 통화요약 콜백 `content` 컬럼 길이 확인 — 일지 마크다운 원문이라 수 KB~수십 KB (작물 다건이면 병합)
+- [ ] 통화요약 콜백 `content` 는 통화 단순요약(불릿 3줄, 100자 안팎) — 별도 컬럼 확장 불필요
+- [ ] 영농일지·전사본은 콜백이 아니라 `GET /v1/calls/{call_id}` 로 조회 (§3.5, §5.1)
 - [ ] 통화요약 콜백 중복 제거: `(call_id, summary_type)` UPSERT (§5.1)
+- [ ] **`status="EMPTY"` 처리** — 템플릿 내용 대신 상태값으로 표시. 사유는 `empty_reason` (§5.1)
 - [ ] 에러 파서: `detail` 문자열(401) / 객체(도메인) / 리스트(422 검증) 모두 처리
 - [ ] terminal 후 추가 오디오 발생 시 `/regenerate` 호출 로직 (farmos 조회가 필요하면 body에 새 JWT — §3.4)
 

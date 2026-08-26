@@ -68,6 +68,17 @@ class ReportArtifact(BaseModel):
     # structured = {summary, keywords, action_items, sections, speaker_map, needs_verification}
 
 
+class CallSummaryResult(BaseModel):
+    """통화 단순요약 — 영농일지와 별개로 전사에서 직접 뽑는다(백엔드 통화요약 콜백 content)."""
+    topic: str = ""
+    actions: list[str] = Field(default_factory=list)
+    follow_ups: list[str] = Field(default_factory=list)
+    markdown: str = ""                                # 렌더된 불릿 = 콜백 content = summary.md 본문
+    model: str | None = None
+    usage: dict[str, Any] = Field(default_factory=dict)
+    source: str = "llm"                               # llm | report_fallback | fake
+
+
 class PipelineResult(BaseModel):
     diaries: list[DiaryArtifact] = Field(default_factory=list)
     report: ReportArtifact | None = None

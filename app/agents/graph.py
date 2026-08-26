@@ -25,6 +25,7 @@ from .nodes.crop_diary.disambiguate import disambiguate
 from .nodes.crop_diary.fetch_refs import fetch_refs
 from .nodes.crop_diary.map_facts import map_facts
 from .nodes.crop_diary.render_diary import render_diary_node
+from .nodes.crop_diary.verify_diary import verify_diary
 from .nodes.crop_diary.write_content import write_content
 from .nodes.extract_facts import extract_facts
 from .nodes.farm_context import load_farm_context
@@ -52,12 +53,14 @@ def build_crop_diary_graph():  # type: ignore[no-untyped-def]
     g.add_node("disambiguate", disambiguate)
     g.add_node("write_content", write_content)
     g.add_node("render_diary", render_diary_node)
+    g.add_node("verify_diary", verify_diary)
     g.add_edge(START, "fetch_refs")
     g.add_edge("fetch_refs", "map_facts")
     g.add_conditional_edges("map_facts", _needs_llm, {"disambiguate": "disambiguate", "write_content": "write_content"})
     g.add_edge("disambiguate", "write_content")
     g.add_edge("write_content", "render_diary")
-    g.add_edge("render_diary", END)
+    g.add_edge("render_diary", "verify_diary")
+    g.add_edge("verify_diary", END)
     return g.compile()
 
 
@@ -150,10 +153,12 @@ class LangGraphPipeline:
         state: PipelineState = {"ctx": ctx, "raw": transcript, "diaries": [], "errors": [], "usage": [], "warnings": []}
         out = await self.graph.ainvoke(state, config=config)
         result = assemble(out, config)
-        facts = out.get("facts")
         all_empty = all(d.status in ("EMPTY", "UNRESOLVED_CROP") for d in result.diaries) if result.diaries else True
         report_blank = not result.report or not (result.report.structured.get("summary") or any(
             result.report.structured.get("sections", {}).get(k) for k in ("farm_status", "issues", "advice", "farmer_actions", "follow_ups")))
-        if facts is not None and facts.is_blank() and all_empty and report_blank and not (out.get("facts_meta") or {}).get("error"):
-            raise PipelineEmpty("통화에 기록할 내용이 없음")
+        # 생성 자체가 실패한 경우는 EMPTY 로 오보하지 않는다 — 전사는 남기고 COMPLETED 로 둔다
+        degraded = bool((out.get("facts_meta") or {}).get("error")) or any(
+            e.node in ("build_report", "verify_diary") for e in (out.get("errors") or []))
+        if all_empty and report_blank and not degraded:
+            raise PipelineEmpty("영농일지로 남길 실질 내용이 없음")
         return result

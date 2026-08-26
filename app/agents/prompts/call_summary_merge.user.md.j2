@@ -1,0 +1,8 @@
+[구간별 요약]
+{% for s in summaries %}
+{{ loop.index }}) topic: {{ s.topic }}
+   actions: {{ s.actions | join(" / ") if s.actions else "(없음)" }}
+   follow_ups: {{ s.follow_ups | join(" / ") if s.follow_ups else "(없음)" }}
+{% endfor %}
+
+위 구간 요약들을 통합한 통화 단순요약 JSON 을 출력하라.

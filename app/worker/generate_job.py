@@ -8,11 +8,12 @@ from datetime import timedelta
 from typing import Any
 
 from ..agents.interface import PipelineEmpty
+from ..agents.summarize import summary_from_report
 from ..clients.callback import send_callback
 from ..db import repo
 from ..db.models import Call, utcnow
 from ..runtime import Runtime
-from ..schemas.pipeline import CallContext, CallHints, DiaryArtifact, Participant, PipelineResult
+from ..schemas.pipeline import CallContext, CallHints, CallSummaryResult, DiaryArtifact, Participant, PipelineResult
 from ..services.artifacts import persist_result
 from ..services.results import utc
 from ..services.transcripts import merge_transcripts, transcript_markdown
@@ -63,28 +64,66 @@ async def _finalize(rt: Runtime, call_id: str, *, status: str, error_code: str |
 
 
 SUMMARY_TYPE = "SUMMARY"
+EMPTY_DIARY_STATUSES = ("EMPTY", "UNRESOLVED_CROP")
+NO_DIARY_CONTENT = "NO_DIARY_CONTENT"
+NO_SUMMARY = "NO_SUMMARY"
 
 
-def join_diaries(diaries: list[DiaryArtifact]) -> str:
-    """작물별 일지 마크다운을 구분선으로 병합 — 콜백 content 는 통화당 1건이라 합쳐 보낸다."""
-    return "\n\n---\n\n".join(d.markdown.strip() for d in diaries if d.markdown and d.markdown.strip())
+def has_diary_content(diaries: list[DiaryArtifact]) -> bool:
+    """저장되는 일지 중 실질 내용이 있는 건이 하나라도 있는가.
+
+    콜백 content(통화 단순요약)와 무관하게 **저장되는 일지 기준**으로 판정한다. 빈 템플릿
+    (EMPTY/UNRESOLVED_CROP — 검수 강등 포함)뿐이면 요약을 만들지 않고 EMPTY 로 통보한다.
+    """
+    return any(d.status not in EMPTY_DIARY_STATUSES and d.markdown and d.markdown.strip() for d in diaries)
 
 
-async def _summary_callback(rt: Runtime, call: Call, result: PipelineResult | None = None) -> None:
-    """백엔드 통화요약 콜백 — 일지 마크다운 원문 동봉. 컨설팅 보고서는 내부 저장 전용이라 보내지 않는다."""
+async def build_summary(rt: Runtime, transcript, ctx: CallContext, result: PipelineResult,
+                        call_id: str) -> tuple[CallSummaryResult | None, list[str]]:
+    """통화 단순요약 — 일지와 독립된 LLM 패스. 실패해도 생성을 막지 않는다(fail-open).
+
+    실패 시 이미 만들어진 보고서 요약으로 폴백한다(추가 LLM 호출 없음).
+    """
+    if rt.summarizer is None:
+        return None, []
+    try:
+        summary = await asyncio.wait_for(rt.summarizer.summarize(transcript, ctx), rt.settings.node_timeout_s)
+        if summary.markdown.strip():
+            return summary, []
+        warn = "통화 단순요약이 비어 보고서 요약으로 대체"
+    except Exception as e:  # noqa: BLE001
+        log.warning("[%s] call summary failed: %s", call_id, e)
+        warn = f"통화 단순요약 실패({type(e).__name__}) — 보고서 요약으로 대체"
+    fallback = summary_from_report(result.report.structured if result.report else None)
+    return fallback, [warn if fallback else warn.replace("보고서 요약으로 대체", "대체 불가")]
+
+
+async def _summary_callback(rt: Runtime, call: Call, result: PipelineResult | None = None,
+                            summary_md: str | None = None) -> None:
+    """백엔드 통화요약 콜백 — content 는 **통화 단순요약**(불릿).
+
+    영농일지·컨설팅 보고서는 싣지 않는다. 일지는 `GET /v1/calls/{id}` 의 `result.diaries[]`,
+    전사는 `/transcript` 로 조회한다 — 이 콜백 도착이 그 결과가 준비됐다는 신호를 겸한다.
+    """
     st = rt.settings
     if not (st.callback_enabled and st.summary_callback_url):
         return
-    content = join_diaries(result.diaries) if result else ""
+    content = (summary_md or "").strip()
     status = call.status
-    if status == "COMPLETED" and not content:   # 본문 없는 COMPLETED 는 명세 위반(content 필수)
-        status = "EMPTY"
+    empty_reason = call.error_code or NO_DIARY_CONTENT
+    # 일지 유무는 저장되는 산출물 기준으로 판정한다(콜백 content 와 무관).
+    if status == "COMPLETED" and result is not None and not has_diary_content(result.diaries):
+        status, empty_reason = "EMPTY", NO_DIARY_CONTENT
+    elif status == "COMPLETED" and not content:   # 본문 없는 COMPLETED 는 명세 위반(content 필수)
+        status, empty_reason = "EMPTY", NO_SUMMARY
     engine = f"{st.summary_engine_version}/{call.generation_model}" if call.generation_model \
         else st.summary_engine_version
     payload: dict[str, Any] = {"call_id": call.call_id, "summary_type": SUMMARY_TYPE, "status": status,
                                "engine_version": engine[:100]}
     if status == "COMPLETED":
         payload["content"] = content
+    elif status == "EMPTY":
+        payload["empty_reason"] = empty_reason   # NO_AUDIO | NO_TRANSCRIPT | NO_CONTENT | NO_DIARY_CONTENT | NO_SUMMARY
     elif status == "FAILED":
         reason = f"{call.error_code}: {call.error_message}" if call.error_message else (call.error_code or "")
         payload["fail_reason"] = reason[:1000]
@@ -182,13 +221,18 @@ async def run_generate(rt: Runtime, call_id: str) -> None:
         except Exception:  # noqa: BLE001
             pass
     all_warnings = warnings + list(result.warnings or [])
+    # 통화 단순요약 — 일지가 실질 내용을 가질 때만 만든다(잡담 통화에 LLM 을 쓰지 않는다).
+    summary: CallSummaryResult | None = None
+    if has_diary_content(result.diaries):
+        summary, sum_warnings = await build_summary(rt, transcript, ctx, result, call_id)
+        all_warnings += sum_warnings
     async with rt.db.session() as s:
         call = await repo.get_call(s, call_id)
         assert call is not None
-        await persist_result(rt, s, call, result, tkey)
+        await persist_result(rt, s, call, result, tkey, summary=summary)
         await s.commit()
     c = await _finalize(rt, call_id, status="COMPLETED", model=result.model, warnings=all_warnings,
                         usage=result.usage or None, speaker_map=result.speaker_map)
     log.info("[%s] generation COMPLETED: %d diaries, report=%s", call_id, len(result.diaries), result.report is not None)
     # 산출물 S3 저장(persist_result) 이 끝난 뒤에만 콜백 — 백엔드가 조회할 때 키가 이미 존재한다.
-    await _summary_callback(rt, c, result)
+    await _summary_callback(rt, c, result, summary.markdown if summary else None)
