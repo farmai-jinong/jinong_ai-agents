@@ -66,6 +66,7 @@ def make_worktree(repo: Path, wt: Path, base: str, eval_out: Path) -> None:
         remove_worktree(repo, wt)
     subprocess.run(["git", "-C", str(repo), "worktree", "add", "--detach", str(wt), base],
                    check=True, capture_output=True)
+    _exclude_injected(wt)
     env = repo / ".env"
     if env.exists():
         shutil.copyfile(env, wt / ".env")
@@ -77,6 +78,16 @@ def make_worktree(repo: Path, wt: Path, base: str, eval_out: Path) -> None:
         for name in ("stt.json", "stt.md", "stt_score.json", "fixture.json"):
             if (case_dir / name).exists():
                 shutil.copyfile(case_dir / name, dest / name)
+
+
+def _exclude_injected(wt: Path) -> None:
+    """하네스가 넣을 파일을 worktree 전용 exclude 에 등록 — 리포지토리의 .gitignore 와 무관하게 안 보이게."""
+    from .gates import INJECTED
+    gitdir = subprocess.run(["git", "-C", str(wt), "rev-parse", "--absolute-git-dir"],
+                            capture_output=True, text=True, check=True).stdout.strip()
+    info = Path(gitdir) / "info"
+    info.mkdir(parents=True, exist_ok=True)
+    (info / "exclude").write_text("\n".join(["# 자가 개선 루프가 넣어 준 것들", *INJECTED, ""]), encoding="utf-8")
 
 
 def remove_worktree(repo: Path, wt: Path) -> None:

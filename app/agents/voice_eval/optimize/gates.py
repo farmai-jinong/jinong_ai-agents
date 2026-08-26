@@ -66,30 +66,35 @@ class GateResult:
     detail: str = ""
 
 
-# 하네스가 worktree 에 직접 넣어 준 것들 — 제안자의 변경이 아니므로 diff 에서 뺀다.
-# (실제 리포지토리에서는 .gitignore 가 이미 가려 주지만, 그 사실에 기대지 않는다.)
-INJECTED = (":(exclude).env", ":(exclude).env.*", ":(exclude)out")
+# 하네스가 worktree 에 직접 넣어 준 것들 — 제안자의 변경이 아니다.
+# `make_worktree` 가 이 목록을 worktree 의 `.git/info/exclude` 에 써서 git 이 아예 못 보게 하고,
+# 여기서 한 번 더 걸러 낸다(리포지토리의 .gitignore 에 기대지 않기 위해).
+INJECTED = (".env", "out/")
+
+
+def _is_injected(path: str) -> bool:
+    return path == ".env" or path.startswith(".env.") or path.startswith("out/") or path == "out"
 
 
 def changed_files(wt: Path) -> list[str]:
-    out = subprocess.run(["git", "-C", str(wt), "status", "--porcelain", "--", ".", *INJECTED],
+    out = subprocess.run(["git", "-C", str(wt), "status", "--porcelain"],
                          capture_output=True, text=True, check=True).stdout
-    return sorted({ln[3:].strip().split(" -> ")[-1] for ln in out.splitlines() if ln.strip()})
+    paths = {ln[3:].strip().split(" -> ")[-1].strip('"') for ln in out.splitlines() if ln.strip()}
+    return sorted(p for p in paths if not _is_injected(p))
 
 
 def stage(wt: Path) -> None:
-    subprocess.run(["git", "-C", str(wt), "add", "-A", "--", ".", *INJECTED],
-                   check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(wt), "add", "-A"], check=True, capture_output=True)
 
 
 def diff_text(wt: Path) -> str:
     stage(wt)
-    return subprocess.run(["git", "-C", str(wt), "diff", "--cached", "--", ".", *INJECTED],
+    return subprocess.run(["git", "-C", str(wt), "diff", "--cached"],
                           capture_output=True, text=True, check=True).stdout
 
 
 def diff_stat(wt: Path) -> str:
-    out = subprocess.run(["git", "-C", str(wt), "diff", "--cached", "--shortstat", "--", ".", *INJECTED],
+    out = subprocess.run(["git", "-C", str(wt), "diff", "--cached", "--shortstat"],
                          capture_output=True, text=True, check=True).stdout.strip()
     return out or "변경 없음"
 
