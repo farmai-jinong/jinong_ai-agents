@@ -1,0 +1,20 @@
+{
+  "original": {
+    "user_id": "박완춘",
+    "diary_date": "2024-09-30",
+    "diary_id": 530,
+    "engn_id": 18,
+    "prdlst_code": "0804MM",
+    "content": "소독진행.25말 흘러내리게.\n마쿠피카1병 나노-I 50ml\n\n육묘장 소독. 다코닐.모스킬\n25말. 미스트. 전체소독\n마쿠피카1병. 나노-I 50ml\n\n나방약. 모스킬 효과매우좋음",
+    "dbyhs_names": "탄저병, 파밤나방",
+    "farmwork_names": null,
+    "image_file_sns": "2966",
+    "prvnbe_info": "탄저병(다코닐에이스 액상수화제), 파밤나방(엑설트 액상수화제)"
+  },
+  "enriched": {
+    "farmwork_names": "약제살포",
+    "dbyhs_names": "탄저병, 파밤나방",
+    "prvnbe_info": "탄저병(다코닐에이스 액상수화제), 파밤나방(엑설트 액상수화제)"
+  },
+  "_enrichment_note": "원본 farmwork_names 미입력 → 소독(약제 혼용 살포)에서 약제살포 보강. 원본 content의 '모스킬'과 prvnbe의 '엑설트'가 다른 점은 대본에서 '지난주 엑설트, 오늘 모스킬(효과 매우 좋음)'로 both 살려 정합화. '다코닐' 구어 발화 → 표준명 '다코닐에이스 액상수화제' fuzzy 매핑 테스트."
+}

@@ -32,13 +32,21 @@
   hatchery_serving 과 공용, OpenAI 키는 briefing_serving 과 공용.
 - 백엔드 콜백 활성화 (2026-08-24): `.env` 에 `CALLBACK_ENABLED=true` + `CALLBACK_API_KEY`(백엔드
   `VOICETALK_EXTERNAL_CALLBACK_API_KEY` 와 같은 값, `X-API-Key` 헤더로 전송).
-- 통화요약 콜백 전환 (2026-08-26): 통화 단위는 결과 본문(일지 마크다운 원문)을 동봉하는 백엔드
-  통화요약 콜백으로 교체 — `.env` 에 `SUMMARY_CALLBACK_URL` 필요(개발
+- 통화요약 콜백 전환 (2026-08-26): 통화 단위는 백엔드 통화요약 콜백으로 교체. `content` 는 **통화
+  단순요약**(주제/조치/후속 불릿 3줄, `app/agents/summarize.py` 의 독립 LLM 패스 1콜 — 일지가 실질
+  내용을 가질 때만 호출). 영농일지·보고서·전사는 종전대로 결과 API 로만 나간다 — `.env` 에 `SUMMARY_CALLBACK_URL` 필요(개발
   `https://dev.jinongservice.co.kr/voicetalk/public/call-summary-callback`, 운영은 `data.` 도메인).
-  비어 있으면 통화 단위 콜백은 발사되지 않는다. `SUMMARY_ENGINE_VERSION` 은 기본 `jinong-diary-v1`
+  비어 있으면 통화 단위 콜백은 발사되지 않는다. `SUMMARY_ENGINE_VERSION` 은 기본 `jinong-summary-v1`
   (전송 시 `/{모델명}` 이 붙음). 날짜별 일지 콜백(agent-callback)은 종전대로 요청 body 의
   `callback_url` 로 수신하며 변경 없음. 4xx(429 제외) 수신 시에는 재시도하지 않는다(로그에 응답 본문
   앞 200자 기록 — `X-API-Key` 값은 로깅하지 않음).
+- 콜백 API Key 교체 (2026-08-26): 백엔드가 `VOICETALK_EXTERNAL_CALLBACK_API_KEY` 를 회전해 기존 키가
+  통화요약·agent-callback **양쪽 모두 401** 이 되어 있었다(날짜별 일지 콜백도 그동안 실패). 새 키로
+  `.env` 의 `CALLBACK_API_KEY` 교체 후 `docker compose up -d` — 이후 실통화 재생성으로 백엔드 200 확인
+  (백업 `.env.bak.callbackkey-20260826`). `deploy.sh` 는 `.env` 를 rsync 에서 제외하므로 재배포해도 유지된다.
+  증상 판별: `docker compose logs agent | grep callback` 에 `-> 401` 이면 키, `-> 404` 면 백엔드에 없는
+  call_id(시험용 임의 ID), `-> 5xx` 면 백엔드 장애. 4xx 는 재시도하지 않으므로 로그에 1회만 남는다.
+  실서버 E2E 결과는 `docs/callback-e2e-20260826.md`.
 - 2026-08-21 날짜별(멀티콜) 영농일지 `/v1/daily-diaries` 추가(커밋 `a376d8a`) — 신규 env 없음, DB 는 기동 시
   `create_all` 로 테이블 자동 생성. 같은 날 배포·스모크 완료: 통화 E2E 2건(`smoke-20260821-a/b`, raw wav) COMPLETED →
   `daily-smoke-20260821`(멀티콜) COMPLETED, keyset 커서·`INVALID_CURSOR` 422 실서버 확인. 이 과정에서 미확정 작물
@@ -107,6 +115,60 @@ find ./data/storage/agents/voicecall -type f
 
 주의: STT(게이트웨이)·LLM 은 여전히 원격 호출이다 — 로컬 머신에서 `STT_BASE_URL` 접근이 가능해야 한다.
 `STORAGE_IMPL=local` 은 로컬 개발 전용이며 배포 환경에서는 항상 `s3`.
+
+### 4.2 음성 테스트케이스 평가 (STT 정확도 + 영농일지 요약 정확도)
+
+대본을 읽어 녹음한 5건(`tests/agents/testcases/voice/`)으로 **녹음 → STT → 파이프라인 → LLM judge** 를
+돌려 점수와 회귀 여부를 낸다. 프롬프트·플로우를 고칠 때마다 같은 녹음으로 재현 가능한 비교를 하기 위한 것이다.
+
+```bash
+source .venv/bin/activate
+python -m app.agents.voice_eval --audio-dir ~/Downloads/recordings   # 전체 (STT→파이프라인→judge→리포트→게이트)
+open out/voice-eval/report.md
+```
+
+- 단계별로 캐시한다. `stt.json` 이 있으면 게이트웨이를 다시 부르지 않으므로, **프롬프트를 고친 뒤에는**
+  `--stages pipeline,judge --baseline out/voice-eval/summary.json` 으로 싸게 재평가하고 델타만 본다.
+  캐시를 무시하려면 `--force stt|pipeline|judge|all`.
+- 녹음은 리포지토리에 두지 않는다(`--audio-dir`). 파일명에 케이스 이름이 있으면(`녹음대본_<case>.m4a`)
+  자동 매칭되고, 아니면 `tests/agents/testcases/voice/audio_map.json` 에 적거나 전사 유사도로 자동 배정된다.
+  m4a 는 16kHz mono wav 로 변환해 올린다(게이트웨이 415 회피, ffmpeg 필요).
+- judge 는 **파이프라인과 다른 모델**을 쓴다(자기채점 편향 회피). 기본 `JUDGE_MODEL=gemini-2.5-pro`,
+  파이프라인은 `gemini-3.5-flash`. 없는 모델 ID 면 케이스를 태우기 전에 즉시 실패한다.
+- 임계값은 `tests/agents/testcases/voice/thresholds.json` (코드 수정 없이 조정). 미달 시 exit 1,
+  리포트만 보려면 `--no-gate`. 실행하지 않은 단계는 게이트에서 제외된다.
+- 리포트에서 제일 중요한 것은 **§2 원인 귀속 집계** — 감점이 `stt`(전사에 없음) / `extraction`(전사엔 있는데
+  못 뽑음) / `mapping`(표준 명칭·단계 변환) / `rendering`(섹션 배치) 중 어디서 났는지 세어 놓은 표다.
+  다음에 어느 프롬프트를 고칠지는 이 표가 정한다.
+- `--materialize` 를 주면 전사·기대치·facts·화자역할을 `tests/agents/fixtures/` 로 복사해
+  `python -m app.agents.eval` (LLM 없이 `--provider fake` 로도) 에 편입한다.
+
+### 4.3 자가 개선 루프 (평가 결과로 프롬프트·매핑을 고친다)
+
+§4.2 의 평가를 목적함수로 삼아 **측정 → 진단 → 가설 → 최소 변경 → 재측정 → 수락/거부 → 기록**을 반복한다.
+
+```bash
+python -m app.agents.voice_eval.optimize --dry-run        # LLM 없이 게이트·측정 배선만 점검
+python -m app.agents.voice_eval.optimize --max-iters 3    # 실제 반복
+cat docs/eval-journal.md && git log --oneline eval/auto-tune
+```
+
+- **선행 조건**: 작업 트리가 깨끗해야 하고(루프가 거부한다), `out/voice-eval/*/fixture.json` 이 있어야 한다.
+  루프는 **재전사하지 않는다** — 전사를 동결해야 점수 변화를 생성 변경에 귀속시킬 수 있다.
+- **하네스가 루프를 소유하고 LLM 은 아이디어만 낸다.** 측정·게이트·수락 판정·기록은 전부 결정적 코드이고,
+  Claude 세션(`claude -p`)은 격리된 git worktree 안에서 가설 하나와 최소 변경만 만든다.
+- **수정 허용 범위**는 프롬프트(`*.system.md`/`*.user.md.j2`)와 매핑 데이터(`synonyms.yaml`·`severity.yaml`)뿐이다.
+  채점 하네스(`voice_eval/**`)·채점 프롬프트(`judge_diary.*`)·테스트·정답은 경로 게이트가 막는다 —
+  과녁을 옮겨 점수를 올리는 길이 구조적으로 없다.
+- **게이트 순서 = 비용 순서**: 경로 → 일반화(케이스 상표명 하드코딩 차단) → ruff → pytest →
+  픽스처 재현율(`eval.py --provider fake`, 무료) → 그 다음에야 유료 측정. 앞에서 걸리면 judge 토큰을 안 쓴다.
+- **2단계 판정**: judge 1회로 싸게 스크리닝(~160k) → 통과한 후보만 baseline 과 **짝지어** judge 3회 재채점
+  (~360k). 짝지어야 채점 드리프트를 개선으로 오인하지 않는다.
+- **수락 조건**: 종합점수가 노이즈 밴드 이상 상승 + 결정적 지표(재현율·발생단계·일지 상태) 미하락 +
+  **타깃 셀이 늘지 않음**. 수락분은 `eval/auto-tune` 브랜치에만 커밋된다(`main` 불변).
+- **플래토**(연속 3회 실패) → 회고 세션이 `docs/proposals/NNN-*.md` 에 구조 개선 제안서를 쓰고 멈춘다.
+  자동 적용하지 않는다.
+- 기록은 `docs/eval-journal.md`(사람) + `docs/eval-journal.jsonl`(기계 — 재개·쿨다운·플래토 판정의 상태 소스).
 
 ## 5. 대안: 같은 호스트에서 게이트웨이 내부 호출
 

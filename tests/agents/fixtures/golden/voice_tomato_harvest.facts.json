@@ -1,0 +1,186 @@
+{
+ "one_line_summary": "토마토 수확기 담배가루이 발생에 따른 약제 살포 및 방제 관리 상담",
+ "keywords": [
+  "토마토",
+  "담배가루이",
+  "검객 수화제",
+  "끈끈이 트랩",
+  "안전사용기준",
+  "경매값"
+ ],
+ "crops_mentioned": [
+  {
+   "name_raw": "토마토",
+   "matched_name": "토마토",
+   "evidence": [
+    2
+   ]
+  }
+ ],
+ "farm_status": [
+  {
+   "topic": "생육",
+   "text": "토마토 수확은 매일 진행 중이며, 하루에 100kg씩 수확하고 색깔과 품질이 좋음",
+   "crop": "토마토",
+   "evidence": [
+    2
+   ]
+  }
+ ],
+ "farmworks": [
+  {
+   "name": "수확",
+   "crop": "토마토",
+   "when": "today",
+   "date_hint": "오늘 새벽",
+   "detail": "매일 수확 중이며 오늘 새벽에도 수확함",
+   "evidence": [
+    2
+   ]
+  },
+  {
+   "name": "약제살포",
+   "crop": "토마토",
+   "when": "today",
+   "date_hint": "오늘 아침",
+   "detail": "담배가루이 방제를 위해 검객 수화제 살포",
+   "evidence": [
+    9
+   ]
+  }
+ ],
+ "observations": [
+  {
+   "topic": "생육",
+   "text": "잎 뒤에 하얀 벌레가 많이 붙어 있고 잎을 치면 하얗게 날아오름",
+   "crop": "토마토",
+   "evidence": [
+    5
+   ]
+  }
+ ],
+ "pests": [
+  {
+   "name": "담배가루이",
+   "kind": "해충",
+   "status": "발생",
+   "severity": "심함",
+   "severity_raw": "하얗게 막 날아 올라",
+   "location": "잎 뒤",
+   "crop": "토마토",
+   "evidence": [
+    5,
+    7
+   ]
+  }
+ ],
+ "products": [
+  {
+   "name": "검객 수화제",
+   "category": "농약",
+   "target": "담배가루이",
+   "dose": "1000배",
+   "when": "applied",
+   "crop": "토마토",
+   "evidence": [
+    9
+   ]
+  },
+  {
+   "name": "노랑 끈끈이 트랩",
+   "category": "농자재",
+   "target": "담배가루이",
+   "dose": null,
+   "when": "recommended",
+   "crop": "토마토",
+   "evidence": [
+    12
+   ]
+  }
+ ],
+ "questions": [
+  {
+   "text": "수확 중인데 약 치는 건 괜찮은 건가요?",
+   "asked_by": "farmer",
+   "evidence": [
+    11
+   ]
+  },
+  {
+   "text": "요즘 경매값은 좀 어떤가요?",
+   "asked_by": "farmer",
+   "evidence": [
+    18
+   ]
+  }
+ ],
+ "advice": [
+  {
+   "text": "가루이는 알과 약충이 잎 뒤에 남으므로 사흘 뒤에 다시 확인하고 여전히 날아오르면 계통이 다른 약제로 추가 방제해야 함",
+   "category": "병해충관리",
+   "evidence": [
+    10
+   ]
+  },
+  {
+   "text": "검객 라벨의 수확 전 안전 사용 기준을 확인하여 며칠을 띄우고 수확해야 하는지 꼭 지켜야 함",
+   "category": "병해충관리",
+   "evidence": [
+    12
+   ]
+  },
+  {
+   "text": "노랑 끈끈이 트랩을 통로마다 추가로 달아 밀도 확인 및 포살용으로 활용할 것을 권장함",
+   "category": "병해충관리",
+   "evidence": [
+    12
+   ]
+  }
+ ],
+ "actions": [
+  {
+   "text": "검객 수화제 살포 사흘 뒤 가루이 발생 상황 재확인",
+   "actor": "farmer",
+   "status": "agreed",
+   "due_hint": "사흘 뒤",
+   "evidence": [
+    11,
+    20
+   ]
+  },
+  {
+   "text": "노랑 끈끈이 트랩 추가 설치",
+   "actor": "farmer",
+   "status": "agreed",
+   "due_hint": null,
+   "evidence": [
+    12,
+    20
+   ]
+  },
+  {
+   "text": "검객 수화제 수확 전 안전 사용 기준 확인",
+   "actor": "farmer",
+   "status": "agreed",
+   "due_hint": null,
+   "evidence": [
+    12,
+    20
+   ]
+  }
+ ],
+ "follow_ups": [
+  {
+   "text": "농가가 사흘 뒤 가루이 상황을 확인하고 다시 연락하기로 함",
+   "when_hint": "사흘 뒤",
+   "evidence": [
+    11,
+    20
+   ]
+  }
+ ],
+ "has_farmwork_content": true,
+ "stt_uncertainties": [
+  "검객 수화제 첨대로 -> '검객 수화제 1000배액으로'의 오인식으로 추정됨"
+ ]
+}

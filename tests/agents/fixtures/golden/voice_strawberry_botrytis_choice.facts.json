@@ -1,0 +1,213 @@
+{
+ "one_line_summary": "딸기 잿빛곰팡이병 방제를 위해 사파이어 약제를 살포하고 환기 및 응애 예찰 등 관리 방안을 상담함",
+ "keywords": [
+  "딸기",
+  "잿빛곰팡이병",
+  "사파이어",
+  "환기",
+  "점박이응애",
+  "출하"
+ ],
+ "crops_mentioned": [
+  {
+   "name_raw": "딸기",
+   "matched_name": "딸기",
+   "evidence": [
+    0,
+    2
+   ]
+  }
+ ],
+ "farm_status": [
+  {
+   "topic": "기타",
+   "text": "설 대목이라 딸기 한 판에 4만 원까지 받음",
+   "crop": "딸기",
+   "evidence": [
+    14
+   ]
+  }
+ ],
+ "farmworks": [
+  {
+   "name": "약제살포",
+   "crop": "딸기",
+   "when": "today",
+   "date_hint": "오늘 아침",
+   "detail": "사파이어 액상수화제 2000배 희석하여 꽃과 과일 쪽에 살포함",
+   "evidence": [
+    6
+   ]
+  },
+  {
+   "name": "기타",
+   "crop": "딸기",
+   "when": "today",
+   "date_hint": "오늘",
+   "detail": "곰팡이 핀 과일을 골라내어 하우스 밖으로 버림",
+   "evidence": [
+    18
+   ]
+  }
+ ],
+ "observations": [
+  {
+   "topic": "생육",
+   "text": "익은 과일에 회색곰팡이가 한 동에 수십 개씩 나옴",
+   "crop": "딸기",
+   "evidence": [
+    2
+   ]
+  },
+  {
+   "topic": "생육",
+   "text": "흰가루병은 아직 안 보임",
+   "crop": "딸기",
+   "evidence": [
+    10
+   ]
+  }
+ ],
+ "pests": [
+  {
+   "name": "잿빛곰팡이병",
+   "kind": "병",
+   "status": "발생",
+   "severity": "심함",
+   "severity_raw": "꽤 심해요. 익은 과일에 회색곰팡이 핑계 한 동에 수십 편씩 나와요",
+   "location": "익은 과일",
+   "crop": "딸기",
+   "evidence": [
+    2
+   ]
+  },
+  {
+   "name": "흰가루병",
+   "kind": "병",
+   "status": "예방언급",
+   "severity": "불명",
+   "severity_raw": null,
+   "location": null,
+   "crop": "딸기",
+   "evidence": [
+    9,
+    10
+   ]
+  },
+  {
+   "name": "점박이응애",
+   "kind": "해충",
+   "status": "발생",
+   "severity": "경미",
+   "severity_raw": "한 두 마리",
+   "location": "잎 뒤",
+   "crop": "딸기",
+   "evidence": [
+    12,
+    13
+   ]
+  }
+ ],
+ "products": [
+  {
+   "name": "사파이어",
+   "category": "농약",
+   "target": "잿빛곰팡이병, 흰가루병",
+   "dose": "2000배",
+   "when": "applied",
+   "crop": "딸기",
+   "evidence": [
+    6,
+    9
+   ]
+  },
+  {
+   "name": "아줄기",
+   "category": "농약",
+   "target": "잿빛곰팡이병",
+   "dose": null,
+   "when": "recommended",
+   "crop": "딸기",
+   "evidence": [
+    4,
+    5,
+    7
+   ]
+  },
+  {
+   "name": "에이프리",
+   "category": "농약",
+   "target": "잿빛곰팡이병",
+   "dose": null,
+   "when": "recommended",
+   "crop": "딸기",
+   "evidence": [
+    4,
+    5,
+    7,
+    8
+   ]
+  }
+ ],
+ "questions": [
+  {
+   "text": "잎 뒤에 빨간벌레가 한 두 마리 보이던데 그건 뭐예요?",
+   "asked_by": "farmer",
+   "evidence": [
+    12
+   ]
+  }
+ ],
+ "advice": [
+  {
+   "text": "아침에 온도 올리기 전에 환기를 꼭 해서 습기를 빼주어야 함 (잿빛곰팡이는 습도 관리 중요)",
+   "category": "환경관리",
+   "evidence": [
+    11
+   ]
+  },
+  {
+   "text": "점박이응애는 한두 마리 수준일 때는 약을 치지 말고, 일주일에 두어 번 잎 뒷면을 확인하며 늘어나는지 예찰해야 함",
+   "category": "병해충관리",
+   "evidence": [
+    13
+   ]
+  },
+  {
+   "text": "병든 과일은 하우스 안에 두면 포자가 날리므로 반드시 하우스 밖으로 내보내야 함",
+   "category": "병해충관리",
+   "evidence": [
+    19
+   ]
+  }
+ ],
+ "actions": [
+  {
+   "text": "점박이응애 발생 여부를 확인하기 위해 잎 뒷면 들여다보기",
+   "actor": "farmer",
+   "status": "planned",
+   "due_hint": "내일",
+   "evidence": [
+    14
+   ]
+  }
+ ],
+ "follow_ups": [
+  {
+   "text": "사파이어 약제 살포 후 잿빛곰팡이가 잡혔는지 전화로 확인하기",
+   "when_hint": "사나흘 뒤",
+   "evidence": [
+    17,
+    18
+   ]
+  }
+ ],
+ "has_farmwork_content": true,
+ "stt_uncertainties": [
+  "'아조개', '아줄기약'으로 들린 단어는 '아줄기' 또는 특정 상표명의 오인식으로 보임",
+  "'에이프리', '애플'로 들린 단어는 '에이프릴' 등 특정 약제명의 오인식으로 보임",
+  "'회색곰팡이 핑계'는 '회색곰팡이 핀 게'의 오인식임",
+  "'수십 편씩'은 '수십 개씩'의 오인식임",
+  "'양난으로는'은 '약만으로는'의 오인식으로 추정됨"
+ ]
+}

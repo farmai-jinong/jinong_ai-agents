@@ -70,5 +70,100 @@
     ]
    }
   ]
+ },
+ "voice_strawberry_botrytis_choice": {
+  "files": [
+   {
+    "file_index": 0,
+    "confidence": 1.0,
+    "rationale": "strawberry_botrytis_choice 실녹음 전사 실행 결과",
+    "roles": [
+     {
+      "letter": "A",
+      "role": "farmer"
+     },
+     {
+      "letter": "B",
+      "role": "consultant"
+     }
+    ]
+   }
+  ]
+ },
+ "voice_strawberry_microbial": {
+  "files": [
+   {
+    "file_index": 0,
+    "confidence": 1.0,
+    "rationale": "strawberry_microbial 실녹음 전사 실행 결과",
+    "roles": [
+     {
+      "letter": "A",
+      "role": "farmer"
+     },
+     {
+      "letter": "B",
+      "role": "consultant"
+     }
+    ]
+   }
+  ]
+ },
+ "voice_strawberry_nursery_disinfect": {
+  "files": [
+   {
+    "file_index": 0,
+    "confidence": 1.0,
+    "rationale": "strawberry_nursery_disinfect 실녹음 전사 실행 결과",
+    "roles": [
+     {
+      "letter": "A",
+      "role": "consultant"
+     },
+     {
+      "letter": "B",
+      "role": "farmer"
+     }
+    ]
+   }
+  ]
+ },
+ "voice_strawberry_planting": {
+  "files": [
+   {
+    "file_index": 0,
+    "confidence": 1.0,
+    "rationale": "strawberry_planting 실녹음 전사 실행 결과",
+    "roles": [
+     {
+      "letter": "A",
+      "role": "consultant"
+     },
+     {
+      "letter": "B",
+      "role": "farmer"
+     }
+    ]
+   }
+  ]
+ },
+ "voice_tomato_harvest": {
+  "files": [
+   {
+    "file_index": 0,
+    "confidence": 1.0,
+    "rationale": "tomato_harvest 실녹음 전사 실행 결과",
+    "roles": [
+     {
+      "letter": "A",
+      "role": "consultant"
+     },
+     {
+      "letter": "B",
+      "role": "farmer"
+     }
+    ]
+   }
+  ]
  }
 }

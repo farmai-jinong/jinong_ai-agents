@@ -1,0 +1,21 @@
+{
+  "original": {
+    "user_id": "진상수",
+    "diary_date": "2025-09-24",
+    "diary_id": 3753,
+    "engn_id": 45,
+    "prdlst_code": "0804MM",
+    "content": "1.정식  9/11~19일 \n2.정식주수60,000주\n3.관수  3분  4회\n  오전 8시 ~오후 2시\n4.급액EC  0.7  PH 6.0\n5. 시들음,탄저병 발생\n    나방류 피해 흔적\n6.천적사용",
+    "dbyhs_names": "탄저병, 파밤나방",
+    "farmwork_names": null,
+    "image_file_sns": "26688, 26689, 26690, 26691, 26692, 26693",
+    "prvnbe_info": "파밤나방(캡틴 유제)"
+  },
+  "enriched": {
+    "farmwork_names": "정식, 관수, 약제살포",
+    "dbyhs_names": "시들음병, 탄저병, 파밤나방",
+    "prvnbe_info": "파밤나방(캡틴 유제)",
+    "products_extra": "이리응애(천적, 농자재)"
+  },
+  "_enrichment_note": "원본 farmwork_names 미입력 → 메모 1·3항(정식/관수)과 방제이력(약제살포)에서 보강. 메모 5항의 '시들음' 발생을 dbyhs_names에 추가. 메모 6항 '천적사용'을 이리응애(농자재)로 구체화. 나머지는 원본 그대로."
+}

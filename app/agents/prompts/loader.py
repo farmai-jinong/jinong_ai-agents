@@ -30,9 +30,11 @@ def _env() -> Environment:
 
 
 @lru_cache
-def load_system(name: str) -> str:
+def load_system(name: str, preamble: bool = True) -> str:
+    """`preamble=False` 는 공통 규칙이 맞지 않는 프롬프트용(예: 평가 하네스의 judge — 전사에 없는 내용을
+    지어내지 말라·evidence 필수 규칙은 생성 프롬프트의 것이고 채점자에게는 해당하지 않는다)."""
     text = (_DIR / f"{name}.system.md").read_text(encoding="utf-8")
-    return _PREAMBLE + "\n" + text
+    return (_PREAMBLE + "\n" + text) if preamble else text
 
 
 def render_user(name: str, **ctx: Any) -> str:

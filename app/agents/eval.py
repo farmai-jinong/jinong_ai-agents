@@ -1,6 +1,6 @@
 """픽스처 평가 하네스 — 실제 LLM(또는 fake)로 픽스처를 돌려 기대 항목 재현율·근거 유효율·토큰을 표로 출력.
 
-    python -m app.agents.eval [--provider openai|jinong|fake] [--fixtures strawberry_botrytis,tomato_two_files_speaker_flip]
+    python -m app.agents.eval [--provider openai|jinong|gemini|fake] [--fixtures strawberry_botrytis,tomato_two_files_speaker_flip]
                               [--farmos-fixture tests/agents/fixtures/farmos] [--out out/eval]
 
 기대값은 tests/agents/fixtures/golden/<name>.expect.json:
@@ -124,7 +124,7 @@ async def amain(args: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--provider", choices=["openai", "jinong", "fake"], default="fake")
+    ap.add_argument("--provider", choices=["openai", "jinong", "gemini", "fake"], default="fake")
     ap.add_argument("--fixtures")
     ap.add_argument("--farmos-fixture", default=str(FIXTURES / "farmos"))
     ap.add_argument("--out", default="out/eval")

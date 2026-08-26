@@ -1,0 +1,37 @@
+{
+  "original_merged_from": [
+    {
+      "user_id": "김시홍",
+      "diary_date": "2025-08-19",
+      "diary_id": 3509,
+      "engn_id": 18,
+      "prdlst_code": "0803MM",
+      "content": "",
+      "dbyhs_names": "담배가루이",
+      "farmwork_names": null,
+      "image_file_sns": null,
+      "prvnbe_info": "담배가루이(검객 수화제)"
+    },
+    {
+      "user_id": "김시홍",
+      "diary_date": "2025-08-27",
+      "diary_id": 3513,
+      "engn_id": 18,
+      "prdlst_code": "0803MM",
+      "content": "지속 수확\n병해충 예찰",
+      "dbyhs_names": "잿빛곰팡이병",
+      "farmwork_names": null,
+      "image_file_sns": null,
+      "prvnbe_info": null
+    }
+  ],
+  "enriched": {
+    "diary_date": "2025-08-19",
+    "prdlst_code": "0803MM",
+    "content": "지속 수확(하루 100kg 내외, 착색·품질 양호)\n병해충 예찰: 담배가루이 다수 발생\n검객 수화제 살포",
+    "farmwork_names": "수확, 약제살포",
+    "dbyhs_names": "담배가루이",
+    "prvnbe_info": "담배가루이(검객 수화제)"
+  },
+  "_enrichment_note": "같은 작성자의 인접 일지 3509(담배가루이+검객)와 3513(지속 수확·예찰)을 한 날짜로 합성. 원본 메모가 얇아('지속 수확' 2줄) 통화에서 나올 수확량·품질을 임의 보강 — 희소 메모를 통화 기반으로 살찌우는 케이스. 3513의 잿빛곰팡이병은 합성일(8/19) 기준 아직 미발생으로 보고 제외."
+}

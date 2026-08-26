@@ -1,0 +1,9 @@
+{
+  "_comment": "python -m app.agents.voice_eval 회귀 게이트. 2026-08-26 실측 기준선(핵심어 0.95 / 재현율 0.90 / 단계 0.67 / judge 2.8, faithfulness 최저 2)에서 LLM judge 변동폭만큼 여유를 둔 값이다. 목표는 judge_overall_mean 3.5·faithfulness 4 이상 — 프롬프트를 고쳐 실측이 오르면 이 값도 같이 올려 회귀를 계속 잡는다. 코드 수정 없이 여기만 바꾸면 된다.",
+  "stt_keyword_recall": 0.90,
+  "facts_recall": 0.85,
+  "severity_exact": 0.60,
+  "judge_overall_mean": 2.6,
+  "judge_faithfulness_min": 2,
+  "diary_status_all_ok": true
+}

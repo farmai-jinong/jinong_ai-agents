@@ -1,0 +1,302 @@
+{
+ "one_line_summary": "딸기 정식 후 활착기 물 관리 및 시들음병, 탄저병, 파밤나방 등 병해충 관리 방안을 상담하고 다음 주 방문을 계획함",
+ "keywords": [
+  "딸기",
+  "정식",
+  "시들음병",
+  "탄저병",
+  "파밤나방",
+  "캡틴",
+  "이리응애"
+ ],
+ "crops_mentioned": [
+  {
+   "name_raw": "딸기",
+   "matched_name": "딸기",
+   "evidence": [
+    49
+   ]
+  }
+ ],
+ "farm_status": [
+  {
+   "topic": "시설·장비",
+   "text": "하우스 총 6개 동 운영 (올해 한 동 더 지음)",
+   "crop": "딸기",
+   "evidence": [
+    8,
+    10
+   ]
+  },
+  {
+   "topic": "생육",
+   "text": "9월 11일부터 19일까지 9일간 총 6만 주(동당 만 주씩) 정식 완료",
+   "crop": "딸기",
+   "evidence": [
+    5,
+    6,
+    7,
+    8
+   ]
+  }
+ ],
+ "farmworks": [
+  {
+   "name": "정식",
+   "crop": "딸기",
+   "when": "past",
+   "date_hint": "9월 11일부터 19일까지",
+   "detail": "6개 동에 총 6만 주 정식 완료",
+   "evidence": [
+    5,
+    6,
+    7,
+    8
+   ]
+  },
+  {
+   "name": "관수",
+   "crop": "딸기",
+   "when": "past",
+   "date_hint": "지난주부터",
+   "detail": "오전 8시부터 오후 2시 사이 하루 4회, 회당 3분씩 관수",
+   "evidence": [
+    14,
+    16,
+    17
+   ]
+  },
+  {
+   "name": "약제살포",
+   "crop": "딸기",
+   "when": "today",
+   "date_hint": "오늘 아침",
+   "detail": "파밤나방 방제를 위해 캡틴 1000배액 살포",
+   "evidence": [
+    36
+   ]
+  },
+  {
+   "name": "천적방제",
+   "crop": "딸기",
+   "when": "past",
+   "date_hint": "그저께",
+   "detail": "이리응애 옹지제를 6개 동에 모두 투입",
+   "evidence": [
+    41
+   ]
+  },
+  {
+   "name": "이병주 제거",
+   "crop": "딸기",
+   "when": "planned",
+   "date_hint": "2~3일 이내",
+   "detail": "시들음병 증상을 보이는 포기를 뿌리째 뽑아서 하우스 밖으로 배출 예정",
+   "evidence": [
+    27,
+    28,
+    50
+   ]
+  }
+ ],
+ "observations": [
+  {
+   "topic": "토양·양액",
+   "text": "공급 EC 0.7, pH 6.0으로 관리 중",
+   "crop": "딸기",
+   "evidence": [
+    18,
+    20,
+    21
+   ]
+  },
+  {
+   "topic": "생육",
+   "text": "정식 후 활착은 대체로 잘 되었으나 일부 시드는 포기가 관찰됨",
+   "crop": "딸기",
+   "evidence": [
+    21,
+    22
+   ]
+  }
+ ],
+ "pests": [
+  {
+   "name": "시들음병",
+   "kind": "병",
+   "status": "발생",
+   "severity": "경미",
+   "severity_raw": "동당 3~4포기씩, 총 10포기 이상",
+   "location": "군데군데",
+   "crop": "딸기",
+   "evidence": [
+    22,
+    23,
+    24,
+    25
+   ]
+  },
+  {
+   "name": "탄저병",
+   "kind": "병",
+   "status": "발생",
+   "severity": "경미",
+   "severity_raw": "몇 포기",
+   "location": "잎에 까만 반점",
+   "crop": "딸기",
+   "evidence": [
+    30,
+    31
+   ]
+  },
+  {
+   "name": "파밤나방",
+   "kind": "해충",
+   "status": "발생",
+   "severity": "보통",
+   "severity_raw": "새잎을 여기저기 갉아먹어 그물처럼 됨, 유충 몇 마리 포획",
+   "location": "새잎",
+   "crop": "딸기",
+   "evidence": [
+    32,
+    33,
+    34,
+    35
+   ]
+  }
+ ],
+ "products": [
+  {
+   "name": "캡틴",
+   "category": "농약",
+   "target": "파밤나방",
+   "dose": "1000배액",
+   "when": "applied",
+   "crop": "딸기",
+   "evidence": [
+    36,
+    37,
+    38
+   ]
+  },
+  {
+   "name": "이리응애",
+   "category": "기타",
+   "target": "응애",
+   "dose": "옹지제",
+   "when": "applied",
+   "crop": "딸기",
+   "evidence": [
+    41
+   ]
+  }
+ ],
+ "questions": [
+  {
+   "text": "물 관리는 지금 어떻게 하고 계세요?",
+   "asked_by": "consultant",
+   "evidence": [
+    13
+   ]
+  },
+  {
+   "text": "급액 농도(EC)와 산도(pH)는 어떻게 되나요?",
+   "asked_by": "consultant",
+   "evidence": [
+    17,
+    19
+   ]
+  },
+  {
+   "text": "시들음 증상이 있는 포기가 어느 정도나 되나요?",
+   "asked_by": "consultant",
+   "evidence": [
+    23
+   ]
+  },
+  {
+   "text": "천적 신청하셨던 거 왔나요?",
+   "asked_by": "consultant",
+   "evidence": [
+    40
+   ]
+  }
+ ],
+ "advice": [
+  {
+   "text": "시들음병 증상을 보이는 이병주는 뿌리째 뽑아서 하우스 밖으로 버리고, 뽑은 자리는 관수 라인 물이 튀지 않게 조심하세요.",
+   "category": "병해충관리",
+   "evidence": [
+    27,
+    29
+   ]
+  },
+  {
+   "text": "탄저병은 아직 약을 칠 단계는 아니나, 물이 튀면 번지므로 두상관수는 절대 하지 마시고 며칠 더 지켜보세요.",
+   "category": "병해충관리",
+   "evidence": [
+    31
+   ]
+  },
+  {
+   "text": "파밤나방 방제를 위해 살포한 캡틴의 효과를 2~3일간 지켜보고, 그래도 살아있으면 계통이 다른 약제로 변경해야 합니다.",
+   "category": "병해충관리",
+   "evidence": [
+    40
+   ]
+  },
+  {
+   "text": "이리응애 천적을 투입했으므로 향후 응애약이나 독한 살충제를 살포할 때는 천적 피해 예방을 위해 사전에 컨설턴트와 상의하세요.",
+   "category": "병해충관리",
+   "evidence": [
+    42
+   ]
+  }
+ ],
+ "actions": [
+  {
+   "text": "시들음병 걸린 포기를 2~3일 이내에 뽑아내기",
+   "actor": "farmer",
+   "status": "planned",
+   "due_hint": "2~3일 이내",
+   "evidence": [
+    28,
+    50
+   ]
+  },
+  {
+   "text": "탄저병 발생 추이를 관찰하고 심해지면 컨설턴트에게 연락하기",
+   "actor": "farmer",
+   "status": "agreed",
+   "due_hint": "발생 증가 시",
+   "evidence": [
+    31,
+    50
+   ]
+  },
+  {
+   "text": "캡틴 살포 후 2~3일 뒤 파밤나방 방제 효과 확인하기",
+   "actor": "farmer",
+   "status": "agreed",
+   "due_hint": "2~3일 뒤",
+   "evidence": [
+    40,
+    50
+   ]
+  }
+ ],
+ "follow_ups": [
+  {
+   "text": "컨설턴트가 다음 주에 농장을 방문하여 시들음병 뽑은 자리와 딸기 활착 상태를 직접 확인할 예정",
+   "when_hint": "다음 주",
+   "evidence": [
+    52
+   ]
+  }
+ ],
+ "has_farmwork_content": true,
+ "stt_uncertainties": [
+  "우유는 멀쩡해요 -> 하우스는 멀쩡해요 오인식 가능성 있음",
+  "이리응애 옹지제 -> 이리응애 봉지제(천적 방제용 봉투형 제품) 오인식 가능성 있음"
+ ]
+}

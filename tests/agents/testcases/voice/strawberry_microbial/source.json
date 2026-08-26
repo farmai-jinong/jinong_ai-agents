@@ -1,0 +1,20 @@
+{
+  "original": {
+    "user_id": "최연수",
+    "diary_date": "2025-03-21",
+    "diary_id": 3184,
+    "engn_id": 18,
+    "prdlst_code": "0804MM",
+    "content": ".미생물광합성외3종 각6리터 비대용비료1kg 플러스칼23(칼슘제) 물1000리터 3동관주\n.다이마이트(응애)크린캡(곰팡이) 확산제2000밀리 물1000밀리 3동연막방제",
+    "dbyhs_names": "꽃곰팡이병, 점박이응애",
+    "farmwork_names": null,
+    "image_file_sns": null,
+    "prvnbe_info": "꽃곰팡이병(크린캡 유제), 점박이응애(다이마이트 분산성액제)"
+  },
+  "enriched": {
+    "farmwork_names": "시비, 약제살포",
+    "dbyhs_names": "꽃곰팡이병, 점박이응애",
+    "prvnbe_info": "꽃곰팡이병(크린캡 유제), 점박이응애(다이마이트 분산성액제)"
+  },
+  "_enrichment_note": "원본 farmwork_names 미입력 → 관주(미생물+비료)=시비, 연막방제=약제살포로 보강. 연막은 원본상 같은 날 실행 → 대본에서는 '오늘 새벽에 쳤다'로 완료 처리(prvnbe 채움 경로). 원본 content의 '물1000밀리'는 1000리터 오기로 보고 대본은 1000리터로 발화."
+}

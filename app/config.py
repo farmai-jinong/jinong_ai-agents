@@ -81,6 +81,13 @@ class Settings(BaseSettings):
     verify_diary_enabled: bool = True
     verify_diary_min_confidence: float = 0.6   # 확신이 이 값 미만이면 강등하지 않는다
 
+    # --- 평가 하네스 judge (app/agents/voice_eval; 런타임 서비스와 무관) ----------
+    # 파이프라인과 다른 모델로 채점한다 — 같은 모델이 자기 산출물을 채점하면 점수가 후해진다.
+    judge_provider: str = "gemini"     # openai | jinong | gemini (비우면 LLM_PROVIDER 를 그대로)
+    judge_model: str = "gemini-2.5-pro"
+    judge_thinking_level: str = ""     # 비움 = 모델 기본. gemini-2.5-* 는 thinking_level 자체를 거부한다
+    judge_repeat: int = 1              # >1 이면 반복 채점 후 축별 중앙값 (자기일관성)
+
     # --- farmos (kafka-gateway) 읽기 전용 -------------------------------------
     farmos_base_url: str = "https://dev.jinongservice.co.kr"
     farmos_timeout: float = 10.0

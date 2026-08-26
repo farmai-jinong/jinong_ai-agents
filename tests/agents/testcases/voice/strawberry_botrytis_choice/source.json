@@ -1,0 +1,20 @@
+{
+  "original": {
+    "user_id": "강보은",
+    "diary_date": "2025-01-14",
+    "diary_id": 2770,
+    "engn_id": 18,
+    "prdlst_code": "0804MM",
+    "content": "잭빛곰팡이병이 심하여 약제를 처리하려함. 추천약제에 아졸계 약제와 에이플약제가 떳지만 농가서 아졸계약제는 생장억제로 인하여 처리를 하지 않는다하여 에이플보다 잿빛곰팡이병에 효과가 좋은 사파이어 약제를 처리함.",
+    "dbyhs_names": "잿빛곰팡이병, 점박이응애",
+    "farmwork_names": null,
+    "image_file_sns": null,
+    "prvnbe_info": "잿빛곰팡이병(사파이어 액상수화제), 흰가루병(사파이어 액상수화제)"
+  },
+  "enriched": {
+    "farmwork_names": "약제살포",
+    "dbyhs_names": "잿빛곰팡이병, 점박이응애",
+    "prvnbe_info": "잿빛곰팡이병(사파이어 액상수화제), 흰가루병(사파이어 액상수화제)"
+  },
+  "_enrichment_note": "원본 farmwork_names 미입력 → 방제이력(사파이어 살포)에서 약제살포 보강. 원본 content 오타(잭빛→잿빛)는 정답 기준에서 교정. 흰가루병은 dbyhs(발생)가 아니라 prvnbe에만 있는 원본 구조 유지 — 사파이어가 흰가루병에도 등록돼 예방 겸 처리한 것으로 대본화."
+}

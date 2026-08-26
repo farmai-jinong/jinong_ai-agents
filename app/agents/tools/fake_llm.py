@@ -1,7 +1,8 @@
 """테스트/드라이런용 가짜 챗 모델 — 프롬프트 종류를 감지해 캔드 JSON 을 돌려준다.
 
 `responses` 는 kind → (dict | str | callable(messages) -> dict|str). kind ∈ speaker_roles | extract |
-extract_merge | disambiguate | diary_content | report | verify_diary | call_summary(_merge).
+extract_merge | disambiguate | diary_content | report | verify_diary | call_summary(_merge) |
+judge_diary(평가 하네스).
 없는 kind 는 최소 유효 응답.
 `fail_kinds` 에 든 kind 는 예외를 던진다(강등 경로 테스트). `bad_json_first` 면 첫 응답을 깨뜨려 repair 경로를 태운다.
 """
@@ -17,6 +18,7 @@ from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
 _KIND_MARKERS = [
+    ("judge_diary", "영농일지 채점"),
     ("call_summary_merge", "구간별 통화요약"),
     ("call_summary", "통화 단순요약"),
     ("verify_diary", "영농일지 검수"),
@@ -37,6 +39,9 @@ _DEFAULTS: dict[str, Any] = {
     "disambiguate": {"picks": []},
     "diary_content": {"content": "[AI 초안·통화 기반]\n언급 없음", "evidence": []},
     "verify_diary": {"has_diary_content": True, "reason": "", "confidence": 1.0, "evidence": []},
+    "judge_diary": {"dimensions": [{"name": n, "score": 5, "reason": ""} for n in
+                                   ("coverage", "faithfulness", "classification", "severity", "chatter", "format")],
+                    "items": [], "overall": 5, "summary": ""},
     "call_summary": {"topic": "", "actions": [], "follow_ups": [], "evidence": []},
     "call_summary_merge": {"topic": "", "actions": [], "follow_ups": [], "evidence": []},
     "report": {"farm_status": [], "issues": [], "advice": [], "farmer_actions": [], "follow_ups": [],

@@ -1,0 +1,6 @@
+{
+  "farmworks": ["수확", "약제살포"],
+  "pests": [["담배가루이", "4"]],
+  "products": ["검객"],
+  "diary_status": {"0803MM": "OK"}
+}

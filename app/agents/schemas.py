@@ -189,6 +189,29 @@ class DiaryVerdictOut(_Strict):
     evidence: Ev
 
 
+class JudgeDimension(_Strict):
+    """평가 하네스 전용 — 정답 일지 대비 채점 축 하나."""
+    name: Literal["coverage", "faithfulness", "classification", "severity", "chatter", "format"]
+    score: int                       # 1~5
+    reason: str
+
+
+class JudgeItem(_Strict):
+    """감점 사유 1건 + 원인 귀속 — 이 귀속이 다음에 뭘 고칠지(프롬프트/매핑/STT)를 정한다."""
+    kind: Literal["missing", "hallucinated", "misclassified", "chatter_leak"]
+    section: str                     # 일지 섹션명 ("방제이력" 등)
+    text: str
+    cause: Literal["stt", "extraction", "mapping", "rendering", "unknown"]
+
+
+class DiaryJudgeOut(_Strict):
+    """영농일지 초안 채점 결과 (app/agents/voice_eval)."""
+    dimensions: list[JudgeDimension]
+    items: list[JudgeItem]
+    overall: int                     # 1~5
+    summary: str
+
+
 class Bullet(_Strict):
     text: str
     evidence: Ev

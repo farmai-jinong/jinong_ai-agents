@@ -1,0 +1,242 @@
+{
+ "one_line_summary": "농가에서 미생물 관주, 비료 및 칼슘제 투입, 응애와 꽃곰팡이 방제를 위한 연막 소독을 완료하고 향후 응애 발생 상황을 확인하기로 함",
+ "keywords": [
+  "미생물 관주",
+  "비대용 비료",
+  "칼슘제",
+  "응애 방제",
+  "꽃곰팡이 방제",
+  "연막 소독",
+  "딸기 체험"
+ ],
+ "crops_mentioned": [
+  {
+   "name_raw": "딸기",
+   "matched_name": "딸기",
+   "evidence": [
+    20
+   ]
+  }
+ ],
+ "farm_status": [
+  {
+   "topic": "기타",
+   "text": "오늘 낮에 유치원생 30명이 농장 체험을 다녀감",
+   "crop": "딸기",
+   "evidence": [
+    18
+   ]
+  },
+  {
+   "topic": "기타",
+   "text": "다음 주에 면에서 열리는 딸기 축제 부스에 참가할 예정임",
+   "crop": "딸기",
+   "evidence": [
+    20
+   ]
+  }
+ ],
+ "farmworks": [
+  {
+   "name": "관수",
+   "crop": "딸기",
+   "when": "today",
+   "date_hint": "오전",
+   "detail": "미생물 4종(광합성균 포함) 각 6리터를 물 1,000리터에 희석하여 3개 동에 관주함",
+   "evidence": [
+    2,
+    3
+   ]
+  },
+  {
+   "name": "시비",
+   "crop": "딸기",
+   "when": "today",
+   "date_hint": "오전",
+   "detail": "비대용 비료 1kg과 칼슘제(플러스 칼 23)를 섞어서 관주 시 투입함",
+   "evidence": [
+    5,
+    6
+   ]
+  },
+  {
+   "name": "약제살포",
+   "crop": "딸기",
+   "when": "today",
+   "date_hint": "새벽",
+   "detail": "응애 약(다이마이트), 곰팡이 약(크린캡), 확산제 2,000ml를 물 1,000리터에 섞어 3개 동에 연막 소독을 실시함",
+   "evidence": [
+    10,
+    11
+   ]
+  }
+ ],
+ "observations": [
+  {
+   "topic": "생육",
+   "text": "현재 과일이 크는 시기임",
+   "crop": "딸기",
+   "evidence": [
+    5
+   ]
+  }
+ ],
+ "pests": [
+  {
+   "name": "꽃곰팡이",
+   "kind": "병",
+   "status": "발생",
+   "severity": "경미",
+   "severity_raw": "꽃에 거뭇한 게 조금 보이기 시작한 정도",
+   "location": "꽃",
+   "crop": "딸기",
+   "evidence": [
+    13
+   ]
+  },
+  {
+   "name": "응애",
+   "kind": "해충",
+   "status": "발생",
+   "severity": "보통",
+   "severity_raw": "군데군데 있고 안쪽 잎 뒤를 들쳐보면 좀 있음",
+   "location": "잎 뒤, 안쪽 (특히 1동)",
+   "crop": "딸기",
+   "evidence": [
+    15,
+    16,
+    17
+   ]
+  }
+ ],
+ "products": [
+  {
+   "name": "플러스 칼 23",
+   "category": "비료",
+   "target": "팁번 예방 및 칼슘 공급",
+   "dose": "미상",
+   "when": "applied",
+   "crop": "딸기",
+   "evidence": [
+    5,
+    6,
+    7
+   ]
+  },
+  {
+   "name": "다이마이트",
+   "category": "농약",
+   "target": "응애",
+   "dose": "물 1,000리터 기준",
+   "when": "applied",
+   "crop": "딸기",
+   "evidence": [
+    11
+   ]
+  },
+  {
+   "name": "크린캡",
+   "category": "농약",
+   "target": "꽃곰팡이",
+   "dose": "물 1,000리터 기준",
+   "when": "applied",
+   "crop": "딸기",
+   "evidence": [
+    11,
+    12
+   ]
+  },
+  {
+   "name": "확산제",
+   "category": "농자재",
+   "target": "연막 효과 증진",
+   "dose": "2,000ml",
+   "when": "applied",
+   "crop": "딸기",
+   "evidence": [
+    11
+   ]
+  }
+ ],
+ "questions": [
+  {
+   "text": "오늘 미생물 넣는 날인데 넣으셨는지?",
+   "asked_by": "consultant",
+   "evidence": [
+    1
+   ]
+  },
+  {
+   "text": "미생물 관주 시 다른 것도 섞어서 넣으셨는지?",
+   "asked_by": "consultant",
+   "evidence": [
+    4
+   ]
+  },
+  {
+   "text": "연막 소독 시 어떤 약제들을 넣고 돌리셨는지?",
+   "asked_by": "consultant",
+   "evidence": [
+    11
+   ]
+  },
+  {
+   "text": "현재 응애와 꽃곰팡이의 발생 상황이 어느 정도인지?",
+   "asked_by": "consultant",
+   "evidence": [
+    12
+   ]
+  }
+ ],
+ "advice": [
+  {
+   "text": "요즘 팁번이 발생하는 농가가 많으므로 칼슘제를 투입하는 것은 좋은 조치임",
+   "category": "근권관리",
+   "evidence": [
+    7
+   ]
+  },
+  {
+   "text": "다이마이트는 알(난)에는 효과가 약하므로, 연막 소독 3~4일 후에 잎 뒷면을 다시 확인하여 응애가 살아있으면 계통이 다른 약제로 추가 방제를 해야 함",
+   "category": "병해충관리",
+   "evidence": [
+    17
+   ]
+  },
+  {
+   "text": "바쁜 일정 중에도 뿌리 건강을 위해 주 1회 미생물 관주 루틴을 거르지 않고 유지할 것을 권장함",
+   "category": "근권관리",
+   "evidence": [
+    21
+   ]
+  }
+ ],
+ "actions": [
+  {
+   "text": "연막 소독 3~4일 후 잎 뒷면을 확인하여 응애 생존 여부를 체크하기로 함",
+   "actor": "farmer",
+   "status": "agreed",
+   "due_hint": "3~4일 뒤",
+   "evidence": [
+    17,
+    18,
+    23
+   ]
+  }
+ ],
+ "follow_ups": [
+  {
+   "text": "농가가 3~4일 뒤 응애 생존 여부를 확인한 후 컨설턴트에게 전화하여 추가 방제 여부를 논의하기로 함",
+   "when_hint": "3~4일 뒤",
+   "evidence": [
+    17,
+    18,
+    23
+   ]
+  }
+ ],
+ "has_farmwork_content": true,
+ "stt_uncertainties": [
+  "크린탭으로 들린 약제명은 맥락상 꽃곰팡이 약인 '크린캡'으로 판단되어 반영함"
+ ]
+}
