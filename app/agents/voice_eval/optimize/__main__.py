@@ -86,14 +86,17 @@ def run_iteration(args: argparse.Namespace, journal: Journal, base_summary: dict
     rec.target = target.to_dict()
     log.info("#%d 타깃 셀: %s (%d건)", n, target.cell, target.count)
 
-    brief = briefing(target, base_summary, journal, Path(args.eval_out), propose._allowlist_note())
-    (it_dir / "briefing.md").write_text(brief, encoding="utf-8")
-
     wt = it_dir / "wt"
-    propose.make_worktree(REPO, wt, base_commit, Path(args.eval_out))
     try:
+        brief = briefing(target, base_summary, journal, Path(args.eval_out), propose._allowlist_note())
+        (it_dir / "briefing.md").write_text(brief, encoding="utf-8")
+        propose.make_worktree(REPO, wt, base_commit, Path(args.eval_out))
         return _propose_and_judge(args, journal, rec, target, brief, wt, it_dir,
                                   base_measure, base_summary)
+    except Exception as e:  # noqa: BLE001 — 한 반복의 인프라 실패가 루프 전체를 죽이지 않는다
+        log.exception("#%d 반복 실패", n)
+        rec.decision, rec.reason = "error", f"{type(e).__name__}: {e}"
+        return rec, base_measure, base_summary
     finally:
         if not args.keep_worktree:
             propose.remove_worktree(REPO, wt)

@@ -103,14 +103,25 @@ def _drop(cur: float | None, base: float | None, tol: float) -> bool:
 
 
 def screen(cand: Measurement, base: Measurement, target: str, band: float) -> Verdict:
-    """싼 1차 판정 — 여기서 떨어지면 비싼 재채점을 하지 않는다."""
+    """싼 1차 판정 — 여기서 떨어지면 비싼 재채점을 하지 않는다.
+
+    **확정과 같은 문턱을 쓰면 안 된다.** 스크리닝은 judge 1회라 확정(3회 중앙값)보다 잡음이 크다.
+    같은 밴드를 요구하면 진짜 개선이 1회 채점의 흔들림에 걸려 확정 단계까지 가지도 못한다(저널 #1·#2 가
+    둘 다 스크리닝에서 끝났다). 그래서 여기서는 **명백한 악화만** 쳐내고, 판단은 확정 단계에 맡긴다.
+    타깃 셀이 늘어난 것도 이 단계에서 걸러 낸다 — 고치려던 것을 못 고쳤다는 싸고 확실한 신호다.
+    """
     if cand.errors:
         return Verdict(False, f"케이스 실행 실패: {', '.join(cand.errors)}")
     if cand.composite is None or base.composite is None:
         return Verdict(False, "종합점수를 계산할 수 없다(측정 누락)")
-    if cand.composite <= base.composite + band:
-        return Verdict(False, f"종합점수 {cand.composite:.4f} ≤ 기준 {base.composite:.4f} + 노이즈 {band}")
-    return Verdict(True, f"스크리닝 통과 {base.composite:.4f} → {cand.composite:.4f}")
+    if cand.cell(target) > base.cell(target):
+        return Verdict(False, f"타깃 셀이 오히려 증가 {base.cell(target)} → {cand.cell(target)}")
+    floor = base.composite - band / 2
+    if cand.composite < floor:
+        return Verdict(False, f"종합점수 {cand.composite:.4f} < 기준 {base.composite:.4f} - 밴드/2 "
+                              f"({floor:.4f}) — 명백한 악화")
+    return Verdict(True, f"스크리닝 통과 {base.composite:.4f} → {cand.composite:.4f} "
+                         f"(타깃 {base.cell(target)} → {cand.cell(target)}) — 확정 재채점으로")
 
 
 def confirm(cand: Measurement, base: Measurement, target: str, band: float,

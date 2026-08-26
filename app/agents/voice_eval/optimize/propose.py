@@ -62,8 +62,9 @@ class Proposal:
 def make_worktree(repo: Path, wt: Path, base: str, eval_out: Path) -> None:
     """`base` 커밋으로 worktree 를 만들고, 커밋되지 않는 것들(비밀·전사 캐시)을 채워 넣는다."""
     wt.parent.mkdir(parents=True, exist_ok=True)
-    if wt.exists():
-        remove_worktree(repo, wt)
+    # 디렉터리가 지워졌어도 등록만 남아 있으면 `worktree add` 가 128 로 죽는다(중단된 실행 뒤 흔한 상태).
+    subprocess.run(["git", "-C", str(repo), "worktree", "prune"], capture_output=True)
+    remove_worktree(repo, wt)
     subprocess.run(["git", "-C", str(repo), "worktree", "add", "--detach", str(wt), base],
                    check=True, capture_output=True)
     _exclude_injected(wt)

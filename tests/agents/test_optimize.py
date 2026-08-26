@@ -6,6 +6,7 @@ Claude 세션은 부르지 않는다(응답 봉투를 캔드로 파싱만 확인
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 
 import pytest
@@ -205,11 +206,17 @@ def test_summarize_reports_first_failure():
 
 
 # --------------------------------------------------------------------------- 판정
-def test_screen_requires_beating_noise_band():
+def test_screen_only_filters_clear_regressions():
+    """스크리닝(judge 1회)은 확정(3회)보다 잡음이 커서 같은 문턱을 요구하면 진짜 개선이 못 올라온다.
+
+    명백한 악화와 "타깃을 못 고침"만 싸게 쳐내고, 판단은 확정 단계에 맡긴다.
+    """
     base = _measure(0.68, cells={"X": 5})
     assert decide.screen(_measure(0.72, cells={"X": 2}), base, "X", 0.02).accept
-    assert not decide.screen(_measure(0.69, cells={"X": 2}), base, "X", 0.02).accept
-    assert not decide.screen(_measure(0.60, cells={"X": 2}), base, "X", 0.02).accept
+    assert decide.screen(_measure(0.681, cells={"X": 2}), base, "X", 0.02).accept   # 밴드 미만도 통과
+    assert decide.screen(_measure(0.675, cells={"X": 2}), base, "X", 0.02).accept   # 밴드/2 안쪽 하락도
+    assert not decide.screen(_measure(0.60, cells={"X": 2}), base, "X", 0.02).accept  # 명백한 악화
+    assert not decide.screen(_measure(0.72, cells={"X": 7}), base, "X", 0.02).accept  # 타깃 악화
 
 
 def test_screen_rejects_errored_run():
@@ -353,6 +360,9 @@ def test_make_worktree_carries_env_and_stt_cache(tmp_path):
     wt = tmp_path / "wt"
     base = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"],
                           capture_output=True, text=True, check=True).stdout.strip()
+    propose.make_worktree(repo, wt, base, eval_out)
+    # 중단된 실행 뒤에 흔한 상태: 디렉터리는 지워졌는데 등록만 남음 → 재생성이 막히면 안 된다
+    shutil.rmtree(wt)
     propose.make_worktree(repo, wt, base, eval_out)
     try:
         assert (wt / "app" / "x.py").exists()
