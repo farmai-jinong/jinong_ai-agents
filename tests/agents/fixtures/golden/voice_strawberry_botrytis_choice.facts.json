@@ -115,6 +115,7 @@
    "target": "잿빛곰팡이병, 흰가루병",
    "dose": "2000배",
    "when": "applied",
+   "date_hint": null,
    "crop": "딸기",
    "evidence": [
     6,
@@ -127,6 +128,7 @@
    "target": "잿빛곰팡이병",
    "dose": null,
    "when": "recommended",
+   "date_hint": null,
    "crop": "딸기",
    "evidence": [
     4,
@@ -140,6 +142,7 @@
    "target": "잿빛곰팡이병",
    "dose": null,
    "when": "recommended",
+   "date_hint": null,
    "crop": "딸기",
    "evidence": [
     4,

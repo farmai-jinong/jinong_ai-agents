@@ -116,6 +116,7 @@
    "target": "팁번 예방 및 칼슘 공급",
    "dose": "미상",
    "when": "applied",
+   "date_hint": null,
    "crop": "딸기",
    "evidence": [
     5,
@@ -129,6 +130,7 @@
    "target": "응애",
    "dose": "물 1,000리터 기준",
    "when": "applied",
+   "date_hint": null,
    "crop": "딸기",
    "evidence": [
     11
@@ -140,6 +142,7 @@
    "target": "꽃곰팡이",
    "dose": "물 1,000리터 기준",
    "when": "applied",
+   "date_hint": null,
    "crop": "딸기",
    "evidence": [
     11,
@@ -152,6 +155,7 @@
    "target": "연막 효과 증진",
    "dose": "2,000ml",
    "when": "applied",
+   "date_hint": null,
    "crop": "딸기",
    "evidence": [
     11

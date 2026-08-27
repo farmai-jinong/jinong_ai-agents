@@ -25,8 +25,8 @@ def map_farmworks(cf: CropFacts, refs: FarmosRefs | None) -> list[MappedItem]:
     out: list[MappedItem] = []
     palette = [x for x in (refs.farmworks if refs else []) if x.get("use", True)]
     for i, f in enumerate(cf.farmworks):
-        # 일지 체크 대상: today/unknown (+ past 는 날짜 힌트 없이 통화일로 볼 수 없으므로 제외)
-        if f.when not in ("today", "unknown"):
+        # 일지 체크 대상: today/ongoing/unknown (past 는 통화일 작업이 아니므로 제외 — 기타 기록사항 서술로)
+        if f.when not in ("today", "ongoing", "unknown"):
             continue
         item = MappedItem(item_id=f"fw{i}", family="farmwork", source=f.name, status="no_refs",
                           evidence=f.evidence, when=f.when)
@@ -89,7 +89,7 @@ def map_products(cf: CropFacts, refs: FarmosRefs | None) -> list[MappedItem]:
     for i, p in enumerate(cf.products):
         item = MappedItem(item_id=f"prod{i}", family="product", source=p.name, status="no_refs", evidence=p.evidence,
                           when=p.when, category=p.category, needs_verification=True,
-                          payload={"target_raw": _target_for(p, cf), "dose": p.dose})
+                          payload={"target_raw": _target_for(p, cf), "dose": p.dose, "date_hint": p.date_hint})
         if p.category != "농약" or p.when not in ("applied", "unknown"):
             # 방제이력 대상 아님 (투입 제품 섹션에만 표시) — 매핑 목록에서 제외
             continue

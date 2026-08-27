@@ -105,6 +105,7 @@
    "target": "잿빛곰팡이",
    "dose": "2000배",
    "when": "planned",
+   "date_hint": null,
    "crop": "딸기",
    "evidence": [
     6,

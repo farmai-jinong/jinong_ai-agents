@@ -172,6 +172,7 @@
    "target": "파밤나방",
    "dose": "1000배액",
    "when": "applied",
+   "date_hint": null,
    "crop": "딸기",
    "evidence": [
     36,
@@ -185,6 +186,7 @@
    "target": "응애",
    "dose": "옹지제",
    "when": "applied",
+   "date_hint": null,
    "crop": "딸기",
    "evidence": [
     41

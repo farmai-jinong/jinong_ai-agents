@@ -82,6 +82,7 @@
    "target": "담배가루이",
    "dose": null,
    "when": "recommended",
+   "date_hint": null,
    "crop": "토마토",
    "evidence": [
     2
@@ -93,6 +94,7 @@
    "target": null,
    "dose": "조금",
    "when": "applied",
+   "date_hint": null,
    "crop": "토마토",
    "evidence": [
     7
