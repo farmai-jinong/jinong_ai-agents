@@ -11,6 +11,7 @@ import pytest
 
 from app.agents.prompts.loader import load_system, render_user
 from app.agents.run import load_fixture
+from app.agents.schemas import DiaryJudgeOut
 from app.agents.tools.fake_llm import FakeChatModel, detect_kind
 from app.agents.voice_eval import audio as audio_mod
 from app.agents.voice_eval import judge as judge_mod
@@ -19,6 +20,14 @@ from app.agents.voice_eval import stt_score, transcribe
 from app.agents.voice_eval.cases import case_names, load_case, load_cases, parse_script
 
 DIMS = ("coverage", "faithfulness", "classification", "severity", "chatter", "format")
+
+
+async def _no_sleep(_seconds):
+    """재시도 백오프를 실제로 기다리지 않는다."""
+
+
+class _Trace:
+    total_tokens = 10
 
 
 def _stt_raw(turns: list[tuple[str, str]], *, seconds: float = 120.0) -> list:
@@ -142,6 +151,95 @@ def test_build_transcript_skips_blank_segments():
     res = transcribe.parse_raw(_stt_raw([("A", "  "), ("B", "관수했어요")]))
     tr = transcribe.build_transcript("c1", res, key="a.wav")
     assert [s.text for s in tr.segments] == ["관수했어요"] and tr.speakers == ["f0:B"]
+
+
+# --------------------------------------------------------------------------- 일시 오류 견딤
+@pytest.mark.asyncio
+async def test_transcribe_retries_transient_and_raises_permanent(settings, monkeypatch, tmp_path):
+    """일시 오류(전송 실패)는 재시도하고, 영구 오류(415 등)는 즉시 올린다.
+
+    2026-08-27 에 `STT transport error` 한 번으로 tomato_harvest 가 통째로 빠져 그 실행의 점수가
+    전부 비교 불가가 됐다 — 워커는 재시도하는데 하네스만 한 방에 죽던 문제.
+    """
+    from app.agents.voice_eval import transcribe as tr
+    from app.clients.stt import SttError
+
+    audio = tmp_path / "a.wav"
+    audio.write_bytes(b"x")
+    monkeypatch.setattr(tr.asyncio, "sleep", _no_sleep)
+
+    calls = {"n": 0}
+
+    async def flaky(self, data, filename, num_speakers=None):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise SttError("STT transport error: ", permanent=False)
+        return tr.parse_raw(_stt_raw([("A", "관수했어요")]))
+
+    monkeypatch.setattr("app.clients.stt.SttClient.diarize", flaky)
+    raw = await tr.transcribe(settings, audio, attempts=4)
+    assert calls["n"] == 3 and raw[0]["response"]["segments"]
+
+    async def unsupported(self, data, filename, num_speakers=None):
+        calls["n"] += 1
+        raise SttError("STT 415", permanent=True, status=415)
+
+    calls["n"] = 0
+    monkeypatch.setattr("app.clients.stt.SttClient.diarize", unsupported)
+    with pytest.raises(SttError):
+        await tr.transcribe(settings, audio, attempts=4)
+    assert calls["n"] == 1                                    # 영구 오류는 재시도하지 않는다
+
+
+@pytest.mark.asyncio
+async def test_transcribe_gives_up_after_attempts(settings, monkeypatch, tmp_path):
+    from app.agents.voice_eval import transcribe as tr
+    from app.clients.stt import SttError
+
+    audio = tmp_path / "a.wav"
+    audio.write_bytes(b"x")
+    monkeypatch.setattr(tr.asyncio, "sleep", _no_sleep)
+    calls = {"n": 0}
+
+    async def always_fail(self, data, filename, num_speakers=None):
+        calls["n"] += 1
+        raise SttError("boom", permanent=False)
+
+    monkeypatch.setattr("app.clients.stt.SttClient.diarize", always_fail)
+    with pytest.raises(SttError):
+        await tr.transcribe(settings, audio, attempts=3)
+    assert calls["n"] == 3
+
+
+@pytest.mark.asyncio
+async def test_judge_retries_then_tolerates_partial_failure(settings, monkeypatch):
+    """일시 오류는 재시도하고, repeat 중 일부만 성공해도 성공분으로 집계한다."""
+    monkeypatch.setattr(judge_mod.asyncio, "sleep", _no_sleep)
+    c = load_case("tomato_harvest")
+    calls = {"n": 0}
+
+    async def flaky(llm, case, diary, transcript, *, settings, dump_dir=None):
+        calls["n"] += 1
+        if calls["n"] in (1, 2):
+            raise RuntimeError("503 upstream")
+        return DiaryJudgeOut(**_verdict({"coverage": 4}, overall=4)), _Trace()
+
+    monkeypatch.setattr(judge_mod, "judge_once", flaky)
+    out = await judge_mod.judge(None, c, "# 산출", "전사", settings=settings, repeat=1, attempts=3)
+    assert out["runs"] == 1 and out["overall"] == 4 and calls["n"] == 3
+
+
+@pytest.mark.asyncio
+async def test_judge_raises_when_every_attempt_fails(settings, monkeypatch):
+    monkeypatch.setattr(judge_mod.asyncio, "sleep", _no_sleep)
+    c = load_case("tomato_harvest")
+
+    async def always_fail(llm, case, diary, transcript, *, settings, dump_dir=None):
+        raise RuntimeError("503 upstream")
+
+    monkeypatch.setattr(judge_mod, "judge_once", always_fail)
+    with pytest.raises(RuntimeError, match="채점이"):
+        await judge_mod.judge(None, c, "# 산출", "전사", settings=settings, repeat=2, attempts=2)
 
 
 # --------------------------------------------------------------------------- 오디오 매칭

@@ -7,11 +7,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from pathlib import Path
 
-from ...clients.stt import SttClient, SttResult, parse_diarized
+from ...clients.stt import SttClient, SttError, SttResult, backoff_delay, parse_diarized
 from ...config import Settings
 from ...schemas.pipeline import CallContext
 from ...schemas.transcript import MergedTranscript, TranscriptFile, TranscriptSegment
@@ -49,12 +50,29 @@ def build_transcript(call_id: str, result: SttResult, *, key: str, bucket: str =
     )
 
 
-async def transcribe(settings: Settings, audio: Path, *, num_speakers: int = 2) -> list:
-    """게이트웨이 raw 응답(최상위 배열)을 그대로 돌려준다 — 캐시 원본."""
+async def transcribe(settings: Settings, audio: Path, *, num_speakers: int = 2,
+                     attempts: int | None = None) -> list:
+    """게이트웨이 raw 응답(최상위 배열)을 그대로 돌려준다 — 캐시 원본.
+
+    워커(`worker/stt_job.py`)는 재시도 분류기를 타는데 이 하네스는 그냥 한 번 부르고 끝이라,
+    일시적인 전송 오류 한 번에 케이스가 통째로 빠져 평가 전체가 무의미해졌다(2026-08-27 tomato_harvest
+    `STT transport error`). 같은 분류(`SttError.permanent`/`retry_after`)로 여기서도 재시도한다.
+    간격은 워커보다 짧게 잡는다 — 사람이 앞에서 기다리는 실행이라.
+    """
+    tries = attempts or settings.stt_max_attempts
     client = SttClient(settings)
     try:
-        result = await client.diarize(audio.read_bytes(), audio.name, num_speakers)
-        return result.raw
+        for attempt in range(tries):
+            try:
+                return (await client.diarize(audio.read_bytes(), audio.name, num_speakers)).raw
+            except SttError as e:
+                if e.permanent or attempt == tries - 1:
+                    raise
+                delay = e.retry_after or backoff_delay(attempt, base=5.0, cap=60.0)
+                log.warning("%s: STT 실패(%s) — %.0f초 뒤 재시도 %d/%d",
+                            audio.name, e, delay, attempt + 2, tries)
+                await asyncio.sleep(delay)
+        raise AssertionError("unreachable")            # 루프는 반환하거나 raise 로만 끝난다
     finally:
         await client.shutdown()
 

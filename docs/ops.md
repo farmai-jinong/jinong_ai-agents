@@ -129,7 +129,14 @@ open out/voice-eval/report.md
 
 - 단계별로 캐시한다. `stt.json` 이 있으면 게이트웨이를 다시 부르지 않으므로, **프롬프트를 고친 뒤에는**
   `--stages pipeline,judge --baseline out/voice-eval/summary.json` 으로 싸게 재평가하고 델타만 본다.
-  캐시를 무시하려면 `--force stt|pipeline|judge|all`.
+  캐시를 무시하려면 `--force stt|pipeline|judge|all` — 다만 **`--force stt` 는 되도록 쓰지 말 것.**
+  전사가 바뀌면 점수 변화가 생성 변경 때문인지 전사 변경 때문인지 구분할 수 없고, 게이트웨이 장애에도
+  노출된다. 전사를 다시 뜨고 싶으면 그 케이스의 `stt.json` 만 지우고 돌리면 된다.
+- 일시 오류는 흡수한다: STT 는 워커와 같은 분류(`SttError.permanent`/`retry_after`)로 재시도하고,
+  재전사가 끝내 실패하면 **기존 전사 캐시를 유지**한다(멀쩡한 기준선을 장애 한 번에 잃지 않도록).
+  채점도 호출마다 재시도하고, `--judge-repeat` 중 일부 회차만 성공하면 성공분으로 집계한다.
+  케이스가 그래도 실패하면 게이트가 `실행 실패 케이스:` 로 첫 번째 사유에 찍는다 — 그 실행의 평균은
+  케이스 수가 달라 이전 실행과 비교할 수 없으니, 고치고 다시 돌릴 것.
 - 녹음은 리포지토리에 두지 않는다(`--audio-dir`). 파일명에 케이스 이름이 있으면(`녹음대본_<case>.m4a`)
   자동 매칭되고, 아니면 `tests/agents/testcases/voice/audio_map.json` 에 적거나 전사 유사도로 자동 배정된다.
   m4a 는 16kHz mono wav 로 변환해 올린다(게이트웨이 415 회피, ffmpeg 필요).

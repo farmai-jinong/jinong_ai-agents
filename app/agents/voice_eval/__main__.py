@@ -47,9 +47,16 @@ async def stage_stt(case: VoiceCase, out: Path, settings: Settings, args: argpar
             raise FileNotFoundError(f"{case.name}: 녹음 파일을 찾지 못했다 (--audio-dir 확인)")
         upload = audio_mod.prepare(case.audio, out / "audio.wav", convert=not args.no_convert)
         log.info("%s: 전사 요청 %s", case.name, upload.name)
-        raw = await transcribe.transcribe(settings, upload)
-        raw_path.parent.mkdir(parents=True, exist_ok=True)
-        raw_path.write_text(json.dumps(raw, ensure_ascii=False, indent=1), encoding="utf-8")
+        try:
+            raw = await transcribe.transcribe(settings, upload)
+            raw_path.parent.mkdir(parents=True, exist_ok=True)
+            raw_path.write_text(json.dumps(raw, ensure_ascii=False, indent=1), encoding="utf-8")
+        except Exception:
+            # 재전사 실패로 멀쩡한 기준선을 잃지 않는다 — 캐시가 있으면 그걸 쓰고 시끄럽게 알린다.
+            # (게이트웨이 장애 한 번에 케이스가 빠지면 그 실행의 점수 전체가 비교 불가가 된다)
+            if not raw_path.exists():
+                raise
+            log.warning("%s: 재전사 실패 — 기존 전사 캐시를 유지한다 (%s)", case.name, raw_path)
     result = transcribe.parse_raw(transcribe.load_raw(raw_path))
 
     tr = transcribe.build_transcript(case.call_id(), result, key=(case.audio.name if case.audio else "cached.wav"))

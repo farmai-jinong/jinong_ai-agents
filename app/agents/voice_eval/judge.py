@@ -6,6 +6,7 @@ CLI `--judge-provider`/`--judge-model` 로 덮어쓴다. 호출은 기존 `struc
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import statistics
 from typing import Any
@@ -67,15 +68,36 @@ async def judge_once(llm: Any, case: VoiceCase, actual_diary: str, transcript_te
 
 
 async def judge(llm: Any, case: VoiceCase, actual_diary: str, transcript_text: str, *,
-                settings: Settings, repeat: int = 1, dump_dir: str | None = None) -> dict[str, Any]:
-    """repeat 회 채점해 축별 점수는 중앙값, items 는 합집합(중복 제거)으로 합친다."""
+                settings: Settings, repeat: int = 1, dump_dir: str | None = None,
+                attempts: int = 3) -> dict[str, Any]:
+    """repeat 회 채점해 축별 점수는 중앙값, items 는 합집합(중복 제거)으로 합친다.
+
+    한 번의 일시 오류(Vertex 5xx·타임아웃)로 케이스가 통째로 빠지면 그 실행의 점수 전체가 비교
+    불가가 되므로, 채점 호출마다 `attempts` 회까지 다시 시도한다. 채점은 부작용이 없어 안전하다.
+    `repeat > 1` 이면 일부 회차만 성공해도 성공분으로 집계한다 — 전부 실패할 때만 예외를 올린다.
+    """
     runs: list[DiaryJudgeOut] = []
     tokens = 0
-    for _ in range(max(1, repeat)):
-        out, trace = await judge_once(llm, case, actual_diary, transcript_text,
-                                      settings=settings, dump_dir=dump_dir)
-        runs.append(out)
-        tokens += trace.total_tokens
+    last: Exception | None = None
+    for i in range(max(1, repeat)):
+        for attempt in range(max(1, attempts)):
+            try:
+                out, trace = await judge_once(llm, case, actual_diary, transcript_text,
+                                              settings=settings, dump_dir=dump_dir)
+                runs.append(out)
+                tokens += trace.total_tokens
+                break
+            except Exception as e:  # noqa: BLE001 — 일시 오류를 재시도로 흡수한다
+                last = e
+                if attempt == attempts - 1:
+                    log.warning("%s: 채점 %d회차 실패(%s) — 이 회차는 건너뛴다", case.name, i + 1, e)
+                    break
+                delay = 5.0 * (2 ** attempt)
+                log.warning("%s: 채점 실패(%s) — %.0f초 뒤 재시도 %d/%d",
+                            case.name, e, delay, attempt + 2, attempts)
+                await asyncio.sleep(delay)
+    if not runs:
+        raise RuntimeError(f"{case.name}: 채점이 {repeat}회 모두 실패했다 — {last}")
     return aggregate(runs, tokens=tokens, model=getattr(llm, "model_name", None) or settings.judge_model)
 
 
