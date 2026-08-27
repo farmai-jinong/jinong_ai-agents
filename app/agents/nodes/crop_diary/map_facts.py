@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ....clients.farmos import DbyhsRow, FarmosRefs
+from ....clients.farmos import DbyhsRow, FarmosRefs, ladder_single
 from ...mapping.matcher import MatchResult, match
 from ...mapping.severity import severity_to_step
 from ...schemas import CropFacts, MappedItem, MappingReport
@@ -46,6 +46,7 @@ def map_farmworks(cf: CropFacts, refs: FarmosRefs | None) -> list[MappedItem]:
 def map_pests(cf: CropFacts, refs: FarmosRefs | None) -> list[MappedItem]:
     out: list[MappedItem] = []
     rows: list[DbyhsRow] = list(refs.dbyhs) if refs else []
+    ladder = refs.step_ladder if refs else None
     for i, p in enumerate(cf.pests):
         if p.status not in ("발생", "의심"):
             continue
@@ -62,6 +63,10 @@ def map_pests(cf: CropFacts, refs: FarmosRefs | None) -> list[MappedItem]:
             row: DbyhsRow = r.best.item
             item.code, item.name, item.score, item.method = row.dbyhs_code, row.dbyhs_nm, r.best.score, r.best.method
             item.payload.update(row.single(step))
+        elif ladder:
+            # 이름 매칭 실패와 단계 산출은 독립 사건 — 사다리가 전 행 공통이면 단계만 채운다
+            item.payload.update(ladder_single(ladder, step))
+            item.warnings.append("표준 코드 없음 — 단계는 발화 정도 추정")
         out.append(item)
     return out
 

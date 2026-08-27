@@ -56,6 +56,20 @@ class DbyhsRow:
         }
 
 
+def ladder_single(steps: list[DbyhsStep], index: int) -> dict[str, Any]:
+    """코드 없는 단계 4필드 — 이름이 표준 목록에 없어도 사다리가 전 행 공통이면 단계는 채울 수 있다.
+
+    dbyhsCode/dbyhsNm 은 넣지 않는다: 코드가 없다는 사실은 유지해야 하고,
+    disambiguate._fill_payload 가 `"dbyhsCode" not in payload` 로 후보 확정 여부를 판단한다.
+    """
+    i = max(0, min(index, len(steps) - 1))
+    s = steps[i]
+    return {
+        "occrrncStepNm": s.step_nm, "occrrncStepCode": s.step_code,
+        "occrrncStepDesc": s.step_desc, "occrrncStepDescCode": s.step_desc_code,
+    }
+
+
 def expand_dbyhs(row: dict[str, Any]) -> DbyhsRow:
     """`"미발생|2%미만|…"` 파이프 결합 행을 단계 리스트로 전개."""
     nms = str(row.get("occrrncStepNm") or "").split("|")
@@ -83,6 +97,16 @@ class FarmosRefs:
     prvnbe: list[dict[str, Any]] = field(default_factory=list)
     pesti_all: list[dict[str, Any]] = field(default_factory=list)   # plsCmmnCode 없이 전체
     status: dict[str, str] = field(default_factory=dict)            # endpoint → ok | error:<msg>
+
+    @property
+    def step_ladder(self) -> list[DbyhsStep] | None:
+        """전 행의 발생단계 사다리가 동일할 때 그 사다리 (설명서 §3.3 — 단계 눈금은 병해충과 무관).
+
+        행마다 다르면(또는 행이 없으면) None — 미매칭 병해충은 현행대로 '확인 필요'.
+        """
+        ladders = {tuple((s.step_nm, s.step_code, s.step_desc, s.step_desc_code) for s in r.steps)
+                   for r in self.dbyhs}
+        return self.dbyhs[0].steps if len(ladders) == 1 else None
 
     @property
     def gs_nm(self) -> str | None:
