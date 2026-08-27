@@ -43,7 +43,7 @@ app/auth.py           Bearer/X-API-Key, comma-separated multi-key
 app/errors.py         install_error_handlers: {detail:{code,message}} 오류 형식
 app/runtime.py        Runtime(settings, db, s3, stt, pipeline, worker) on app.state.rt
 app/db/               SQLAlchemy 2 async + aiosqlite: models (calls/call_audio/artifacts/daily_diaries/daily_artifacts/job_events), repo (all SQL)
-app/clients/          s3 (boto3 via to_thread + Keys), storage (Protocol + build_storage: STORAGE_IMPL=s3|local), local_storage (로컬 개발용 파일시스템), stt (gateway diarize + retry classifier), farmos (read-only), llm (factory: ChatOpenAI for openai/jinong, ChatGoogleGenerativeAI(vertexai) for gemini; probe), callback
+app/clients/          s3 (boto3 via to_thread + Keys), storage (Protocol + build_storage: STORAGE_IMPL=s3|local), local_storage (로컬 개발용 파일시스템), stt (gateway diarize + retry classifier), farmos (read-only), ap_backend (AP 백엔드 research API — 농가 JWT 없이 작물·품목코드 조회, read-only), llm (factory: ChatOpenAI for openai/jinong, ChatGoogleGenerativeAI(vertexai) for gemini; probe), callback
 app/services/         calls (start/audio/end/regenerate transitions, idempotency), daily (날짜별 멀티콜 트리거/재생성), transcripts (merge + merge_calls), artifacts (persist), results (views)
 app/worker/           runner (poll+wake, semaphores), stt_job, generate_job, daily_job (날짜별 집계 생성), recovery (startup reset, deadline sweep)
 app/routes/           health, calls (/v1/calls/*), daily (/v1/daily-diaries/* — 백엔드 트리거 날짜별 영농일지)

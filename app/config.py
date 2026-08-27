@@ -92,6 +92,13 @@ class Settings(BaseSettings):
     farmos_base_url: str = "https://dev.jinongservice.co.kr"
     farmos_timeout: float = 10.0
 
+    # --- AP 백엔드 research API (농가 JWT 없이 조회) ---------------------------
+    # 계약 SSOT: 백엔드 전달 문서 "AI 영농일지 연동 변경사항" §3·§4.
+    # 인증은 콜백과 같은 키(`X-API-Key: CALLBACK_API_KEY` = VOICETALK_EXTERNAL_CALLBACK_API_KEY).
+    # 비우면 비활성 — 토큰도 없으면 기존대로 hints 로 강등된다.
+    ap_backend_base_url: str = ""
+    ap_backend_timeout: float = 10.0
+
     # --- callback (선택) -----------------------------------------------------
     callback_enabled: bool = False
     callback_api_key: str = ""

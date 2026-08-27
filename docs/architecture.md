@@ -11,6 +11,7 @@ kafka-gateway ──POST /v1/calls ──▶ ⑧ agent ──GET s3://bucket/key
               ──POST …/audio  ──▶   │       ──POST /v1/audio/transcriptions(diarize)──▶ ⑥ gateway ─▶ GPU STT
               ──POST …/end    ──▶   │       ──LLM (gemini: Vertex AI / openai / jinong: ⑥ gateway vLLM — env 전환)
               ──POST /v1/daily-diaries ▶│   ──GET /m/diary/* (farmos, 농가 JWT, 읽기 전용)
+                                        │   ──GET /voicetalk/public/research/* (AP 백엔드, X-API-Key, 읽기 전용)
               ◀─GET /v1/calls/{id}──┘       ──PUT agents/voicecall/{call_id}/… · …/daily/{diary_id}/… (S3 산출물)
 ```
 

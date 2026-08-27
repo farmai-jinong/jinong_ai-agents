@@ -19,6 +19,11 @@ class FarmosLike(Protocol):
 FarmosFactory = Callable[[str], FarmosLike]   # token → client
 
 
+class ApBackendLike(Protocol):
+    """AP 백엔드 research API — 농가 JWT 없이 작물 목록을 준다(백엔드 문서 §3)."""
+    async def farm_context(self, engn_id: str, user_id: str) -> list[dict[str, Any]]: ...
+
+
 def _utcnow() -> datetime:
     return datetime.now(UTC)
 
@@ -28,6 +33,7 @@ class Deps:
     settings: Settings
     llm: Any                                  # BaseChatModel (ChatOpenAI 또는 Fake)
     farmos_factory: FarmosFactory | None       # None → farmos 비활성
+    ap_backend: ApBackendLike | None = None    # None → 토큰 없을 때 hints 로 강등(기존 동작)
     clock: Callable[[], datetime] = _utcnow
     prompt_version: str = "1"
     dump_dir: str | None = None

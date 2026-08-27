@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Request
 
 from .. import __version__
 from ..auth import require_api_key
+from ..clients.ap_backend import ApBackendClient
 from ..clients.llm import probe_llm
 from ..db import repo
 from ..runtime import Runtime
@@ -48,6 +49,18 @@ async def upstream_health(request: Request) -> dict:
     async def s3() -> dict:
         return {"ok": await rt.s3.head_bucket(), "bucket": rt.s3.bucket}
 
-    stt_r, llm_r, s3_r, fo_r = await asyncio.gather(rt.stt.probe(), probe_llm(st), s3(), farmos())
-    return {"stt": {**stt_r, "url": st.stt_base_url}, "llm": {**llm_r, "model": st.llm_model, "provider": st.llm_provider},
-            "s3": s3_r, "farmos": {**fo_r, "url": st.farmos_base_url}, "pipeline": st.pipeline_impl}
+    async def ap_backend() -> dict | None:
+        if not (st.ap_backend_base_url and st.callback_api_key):
+            return None
+        async with ApBackendClient(st.ap_backend_base_url, st.callback_api_key,
+                                   timeout=st.ap_backend_timeout) as c:
+            return await c.probe()
+
+    stt_r, llm_r, s3_r, fo_r, ap_r = await asyncio.gather(
+        rt.stt.probe(), probe_llm(st), s3(), farmos(), ap_backend())
+    out = {"stt": {**stt_r, "url": st.stt_base_url},
+           "llm": {**llm_r, "model": st.llm_model, "provider": st.llm_provider},
+           "s3": s3_r, "farmos": {**fo_r, "url": st.farmos_base_url}, "pipeline": st.pipeline_impl}
+    if ap_r is not None:
+        out["ap_backend"] = ap_r
+    return out
