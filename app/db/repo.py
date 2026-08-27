@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import and_, delete, func, or_, select, update
@@ -258,14 +258,31 @@ async def ended_call_ids(s: AsyncSession) -> list[str]:
     return list((await s.execute(q)).scalars().all())
 
 
+def _utc(dt: datetime | None) -> datetime | None:
+    """SQLite 에서 돌아온 naive datetime 을 UTC aware 로 (aware 비교 대상과 섞이므로)."""
+    if dt is None:
+        return None
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
+
+
 async def sweep_stt_deadline(s: AsyncSession, deadline_sec: int) -> list[str]:
-    """ENDED 후 deadline 초 넘도록 미종료 오디오 → FAILED(STT_TIMEOUT). 영향받은 call_id 반환."""
+    """ENDED 후 deadline 초 넘도록 미종료 오디오 → FAILED(STT_TIMEOUT). 영향받은 call_id 반환.
+
+    기준 시각은 **서버가 종료 이벤트를 받은 시각**(`call_ended` 이벤트 ts)이다 — 호출자가 보낸
+    `ended_at` 은 쓰지 않는다. 시계 오차나 지연된 이벤트 재전송으로 과거 `ended_at` 이 오면 전사가
+    정상 진행 중인데도 즉시 STT_TIMEOUT 이 나기 때문이다(2026-08-27 실측: 게이트웨이가 33초 뒤
+    200 으로 성공했는데 25초 시점에 스윕이 통화를 FAILED 로 확정).
+    종료 뒤에 도착한 녹음이 도착하자마자 스윕당하지 않도록 **오디오 행 생성 시각과 나중 것**부터 잰다.
+    """
     cutoff = utcnow() - timedelta(seconds=deadline_sec)
-    q = (select(CallAudio.id, CallAudio.call_id)
+    ended_ts = (select(func.max(JobEvent.ts))
+                .where(JobEvent.call_id == Call.call_id, JobEvent.event == "call_ended")
+                .correlate(Call).scalar_subquery())
+    q = (select(CallAudio.id, CallAudio.call_id, CallAudio.created_at, ended_ts, Call.created_at)
          .join(Call, Call.call_id == CallAudio.call_id)
-         .where(Call.state == "ENDED", Call.ended_at.is_not(None), Call.ended_at <= cutoff,
-                CallAudio.status.in_(ACTIVE_AUDIO)))
-    rows = (await s.execute(q)).all()
+         .where(Call.state == "ENDED", CallAudio.status.in_(ACTIVE_AUDIO)))
+    rows = [r for r in (await s.execute(q)).all()
+            if max(_utc(r[3]) or _utc(r[4]), _utc(r[2])) <= cutoff]
     ids = [r[0] for r in rows]
     if ids:
         await s.execute(update(CallAudio).where(CallAudio.id.in_(ids))

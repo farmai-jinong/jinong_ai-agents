@@ -85,7 +85,7 @@ def stt_mock(stt_sample):
 
 
 async def full_flow(client, call_id="call-1", keys=("raw/sample1.wav",), end=True):
-    # 시각은 '지금' 기준 상대값 — 고정 시각이면 END_STT_DEADLINE_SEC(1h) 가 지난 뒤 deadline 스윕이 먼저 FAILED 처리한다.
+    # 시각은 '지금' 기준 상대값 — 실제 통화와 같은 모양으로. (deadline 스윕은 서버 수신 시각을 쓰므로 여기에 의존하지 않는다)
     from datetime import datetime, timedelta
     now = datetime.now(UTC)
     started_at = (now - timedelta(minutes=15)).isoformat()
