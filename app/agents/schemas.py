@@ -258,7 +258,9 @@ class CropRef(BaseModel):
 
 class FarmContext(BaseModel):
     crops: list[CropRef] = Field(default_factory=list)
-    source: Literal["farmos", "hints", "none"] = "none"
+    # ap_backend = 농가 JWT 없이 AP 백엔드 research API 로 받은 작물 목록(코드까지 확정되지만
+    # 방제대상·약제 표준은 없다 → prefill 불가). farmos = 농가 JWT 로 직접 조회(prefill 가능).
+    source: Literal["farmos", "ap_backend", "hints", "none"] = "none"
     status: Literal["ok", "partial", "unavailable", "disabled"] = "disabled"
     error: str | None = None
 

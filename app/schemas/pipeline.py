@@ -27,6 +27,10 @@ class CallHints(BaseModel):
     farmer_crops: list[dict[str, Any]] | None = None     # [{prdlstCode, prdlstNm, reprsntPrdlstCnt}]
     diary_date: str | None = None                        # yyyy-MM-dd
     topic: str | None = None
+    # 농가 복합 키 — participants 의 farmer 항목이 비었을 때의 대체 경로. AP 백엔드 research API
+    # (`/voicetalk/public/research/farm-context`) 조회 키로 쓴다. 계약: 백엔드 "AI 영농일지 연동 변경사항" §1·§3.
+    farmer_engn_id: str | None = None
+    farmer_user_id: str | None = None
 
 
 class CallContext(BaseModel):

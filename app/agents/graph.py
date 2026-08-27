@@ -13,6 +13,7 @@ from typing import Any
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
 
+from ..clients.ap_backend import ApBackendClient
 from ..clients.farmos import FarmosClient
 from ..clients.llm import make_chat_model
 from ..config import Settings
@@ -134,6 +135,14 @@ def default_farmos_factory(settings: Settings) -> Callable[[str], FarmosClient]:
     return factory
 
 
+def default_ap_backend(settings: Settings) -> ApBackendClient | None:
+    """AP 백엔드 research API — URL·키가 다 있을 때만. 없으면 기존대로 hints 강등."""
+    if not (settings.ap_backend_base_url and settings.callback_api_key):
+        return None
+    return ApBackendClient(settings.ap_backend_base_url, settings.callback_api_key,
+                           timeout=settings.ap_backend_timeout)
+
+
 class LangGraphPipeline:
     """워커가 쓰는 파사드. `deps` 를 직접 주면(테스트/CLI) 그대로 사용."""
 
@@ -142,6 +151,7 @@ class LangGraphPipeline:
         if deps is None:
             deps = Deps(settings=settings, llm=make_chat_model(settings),
                         farmos_factory=default_farmos_factory(settings) if use_farmos else None,
+                        ap_backend=default_ap_backend(settings),
                         prompt_version=PROMPT_VERSION, dump_dir=settings.prompt_dump_dir or None)
         self.deps = deps
         self.graph = build_graph()

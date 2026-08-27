@@ -80,15 +80,19 @@
 | `metadata` | object | 선택 | 자유 형식. `metadata.hints`는 특별 취급(아래) |
 
 `metadata.hints` (선택 — farmos 조회가 없거나 실패할 때 대체 사용):
-`prdlst_code`, `prdlst_nm`, `farmer_crops[]`(`[{prdlstCode, prdlstNm, reprsntPrdlstCnt}]`), `diary_date`(`yyyy-MM-dd`), `topic`.
+`prdlst_code`, `prdlst_nm`, `farmer_crops[]`(`[{prdlstCode, prdlstNm, reprsntPrdlstCnt}]`), `diary_date`(`yyyy-MM-dd`), `topic`,
+`farmer_engn_id`·`farmer_user_id`(농가 복합 키 — `participants`의 farmer에 `engn_id`가 없을 때 대체 조회 키로 사용).
 
 **응답**: `201`(신규) / `200`(재전송) — 본문은 `CallDetail`(§3.5).
 
 **재전송(업서트) 규칙**:
 - 같은 `call_id`로 다시 보내면 보낸 필드만 갱신됩니다(부분 업서트). **JWT가 만료되면 새
   `farm_access_token`으로 이 엔드포인트를 다시 호출해 갱신할 수 있습니다.**
-- 단, 통화가 이미 terminal(`COMPLETED|EMPTY|FAILED`)이면 **아무것도 변경하지 않고** `200` +
-  `note: "call already finalized"`를 반환합니다. terminal 후 토큰을 갱신하려면 §3.4의 순서를 따르세요.
+- 통화가 이미 terminal(`COMPLETED|EMPTY|FAILED`)이어도 **`participants` / `farm` / `metadata`는
+  갱신합니다** — 누락된 `engn_id`를 같은 `call_id` 재등록으로 보정하는 용도입니다. 상태·산출물·생성
+  회차는 바뀌지 않고, 갱신된 필드가 `note`에 담겨 옵니다
+  (`"call already finalized — updated participants, metadata"`, 바뀐 게 없으면 `"call already finalized"`).
+- terminal 통화에서 `farm_access_token`은 이 경로로 갱신되지 않습니다 — §3.4의 `/regenerate`를 쓰세요.
 
 ### 3.2 `POST /v1/calls/{call_id}/audio` — 녹음 수신
 

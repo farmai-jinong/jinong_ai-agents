@@ -38,6 +38,23 @@ def _aware(dt: datetime | None) -> datetime | None:
     return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
 
 
+def _upsert_identity(call: Call, req: CallStartRequest) -> list[str]:
+    """terminal 통화에 허용하는 갱신 범위 — 참가자/농장/메타뿐. 바뀐 필드 이름을 돌려준다."""
+    changed: list[str] = []
+    if req.participants:
+        new = [p.model_dump() for p in req.participants]
+        if new != (call.participants_json or []):
+            call.participants_json = new
+            changed.append("participants")
+    if req.farm is not None and req.farm != (call.farm_json or None):
+        call.farm_json = req.farm
+        changed.append("farm")
+    if req.metadata is not None and req.metadata != (call.metadata_json or None):
+        call.metadata_json = req.metadata
+        changed.append("metadata")
+    return changed
+
+
 class CallService:
     def __init__(self, rt: Runtime) -> None:
         self.rt = rt
@@ -53,8 +70,18 @@ class CallService:
                 call = Call(call_id=req.call_id, s3_prefix=self.s3.keys.base(req.call_id))
                 s.add(call)
             if call.status in repo.TERMINAL_STATUSES:
+                # terminal 이어도 **식별자·메타는 갱신한다** — 백엔드가 engn_id 누락분을 같은 call_id 로
+                # 재등록해 보정하는 규약(백엔드 문서 §2). 산출물은 건드리지 않는다(재생성은 /regenerate).
+                changed = _upsert_identity(call, req)
+                if changed:
+                    await repo.add_event(s, call.call_id, "call_identity_updated", {"fields": changed})
                 await s.commit()
-                return Transition(call, 200, note="call already finalized")
+                await s.refresh(call)
+                if changed:
+                    await self._put_call_json(call)
+                note = f"call already finalized — updated {', '.join(changed)}" if changed \
+                    else "call already finalized"
+                return Transition(call, 200, note=note)
             call.started_at = _aware(req.started_at) or call.started_at
             call.participants_json = [p.model_dump() for p in req.participants] or call.participants_json
             if req.farm_access_token:

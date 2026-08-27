@@ -148,3 +148,44 @@ async def test_regenerate_accepts_farm_token_in_body(client, app, stt_mock):
     async with rt.db.session() as s:
         call = await repo.get_call(s, "c-regen-token")
         assert call.farm_access_token is None                                   # terminal 재-purge
+
+
+# --- terminal 통화 재등록으로 식별자 보정 (백엔드 문서 §2) --------------------
+@pytest.mark.asyncio
+async def test_terminal_call_reregister_updates_identifiers(client, app, stt_mock):
+    """COMPLETED 된 통화에 engn_id 를 채워 재-POST 하면 참가자·메타가 갱신된다(산출물은 그대로)."""
+    rt = app.state.rt
+    await full_flow(client, "idc1")
+    await rt.worker.drain()
+    before = (await client.get("/v1/calls/idc1")).json()
+    assert before["status"] == "COMPLETED"
+    assert before["participants"][0]["engn_id"] is None
+    run_before = before["generation"]["run"]
+
+    r = await client.post("/v1/calls", json={
+        "call_id": "idc1", "started_at": before["started_at"],
+        "participants": [{"role": "farmer", "user_id": "u1", "engn_id": "18", "name": "홍길동"},
+                         {"role": "consultant", "user_id": "c1", "engn_id": "18", "name": "김상담"}],
+        "metadata": {"hints": {"farmer_engn_id": "18", "farmer_user_id": "u1"}},
+    })
+    assert r.status_code == 200, r.text
+    assert "updated" in (r.json().get("note") or "")
+
+    after = (await client.get("/v1/calls/idc1")).json()
+    assert after["participants"][0]["engn_id"] == "18"
+    assert after["metadata"]["hints"]["farmer_engn_id"] == "18"
+    assert after["status"] == "COMPLETED"                     # 상태·산출물은 그대로
+    assert after["generation"]["run"] == run_before
+    assert after["result"]["diaries"] == before["result"]["diaries"]
+
+
+@pytest.mark.asyncio
+async def test_terminal_reregister_without_changes_is_noop(client, app, stt_mock):
+    rt = app.state.rt
+    await full_flow(client, "idc2")
+    await rt.worker.drain()
+    body = (await client.get("/v1/calls/idc2")).json()
+    r = await client.post("/v1/calls", json={"call_id": "idc2", "started_at": body["started_at"],
+                                             "participants": body["participants"]})
+    assert r.status_code == 200
+    assert r.json()["note"] == "call already finalized"

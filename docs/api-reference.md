@@ -37,7 +37,12 @@
 - `call_id`: `[A-Za-z0-9_.:-]{1,128}` — kafka-gateway 의 callId 그대로.
 - `participants[]`: `{role, user_id, engn_id, name}` — 농가 구분은 `engn_id`(영농체 ID)+`user_id` **복합 키**(user_id 단독 식별 금지). farmer 항목의 `engn_id`는 daily FARM_MISMATCH 검사에 사용.
 - `farm_access_token`: 농가 JWT. 영농일지 작성용 farmos **읽기** 조회(`/m/diary/*`)에만 사용, 응답/로그에 절대 노출하지 않고 terminal 시 삭제. 없으면 farmos 조회 없이 전사만으로 생성.
-- `metadata.hints` (선택): `prdlst_code`, `prdlst_nm`, `farmer_crops[]`, `diary_date`, `topic` — farmos 조회 실패 시 대체.
+- `metadata.hints` (선택): `prdlst_code`, `prdlst_nm`, `farmer_crops[]`, `diary_date`, `topic`,
+  `farmer_engn_id`·`farmer_user_id` — farmos 조회가 없거나 실패할 때 대체. 뒤 두 개는 농가 복합 키로,
+  `participants` 의 farmer 항목에 `engn_id` 가 비었을 때 AP 백엔드 research API 조회에 쓴다.
+- 응답 `200`(재전송)에서 통화가 이미 terminal 이어도 **`participants`/`farm`/`metadata` 는 갱신한다**
+  (백엔드가 누락된 `engn_id` 를 같은 `call_id` 로 재등록해 보정하는 규약). 산출물·상태는 그대로이고,
+  갱신된 필드는 `note` 에 나온다(`"call already finalized — updated participants, metadata"`).
 - `callback_url`: 호환용으로 계속 받지만 통화 단위 콜백에는 쓰지 않는다(날짜별 일지 전용) — 통화 결과는 전역 `SUMMARY_CALLBACK_URL` 로 발사. 콜백 절 참조.
 - 응답: `201` 신규 / `200` 재전송(참가자·토큰·메타 upsert; terminal 후엔 변경 없이 `note`). 본문은 `CallDetail`.
 
@@ -112,7 +117,7 @@ Body(선택) `{"ended_at": "...", "duration_sec": 900}` → `202` (`state=ENDED,
 | GET | `/v1/calls?status=&state=&limit=50&cursor=` | 운영용 목록 `{items:[{call_id,state,status,updated_at,stt_progress}], next_cursor}` (`limit` 1..200, 기본 50) |
 | POST | `/v1/calls/{id}/regenerate` | `{"retranscribe": false, "reason": "…", "farm_access_token": "…"}` → `202`. 토큰을 주면 purge 된 농가 JWT 재공급(daily 와 동일 계약). `409 CALL_NOT_ENDED` / `409 ALREADY_PROCESSING`. 산출물 같은 S3 키에 덮어쓰기, `generation.run` +1 |
 | GET | `/healthz` | 무인증 `{status: "ok"\|"degraded", version, worker:{running,pending_stt,pending_gen,pending_daily}}`. DB ping 실패 시 `status:"degraded"` 이고 `pending_*` 는 모두 `null` |
-| GET | `/v1/upstream/health` | STT / LLM(openai·jinong: `/models`, gemini: Vertex publisher model 조회) / S3(head_bucket) / farmos 도달성 |
+| GET | `/v1/upstream/health` | STT / LLM(openai·jinong: `/models`, gemini: Vertex publisher model 조회) / S3(head_bucket) / farmos 도달성. `AP_BACKEND_BASE_URL` 이 설정돼 있으면 `ap_backend` 항목도 포함 |
 
 목록 커서(`/v1/calls` · `/v1/daily-diaries` 공통): 최신 생성순(`created_at DESC, id DESC`) keyset.
 `next_cursor` 는 **불투명 토큰** — 그대로 `cursor=` 로 되돌리면 다음 페이지, `null` 이면 마지막.
