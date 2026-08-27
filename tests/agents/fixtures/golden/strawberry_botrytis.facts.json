@@ -78,6 +78,7 @@
    "severity": "경미",
    "severity_raw": "조금 보이는 것 같아요",
    "location": "하우스 2동 꽃·열매",
+   "note": null,
    "crop": "딸기",
    "evidence": [
     2,
@@ -91,6 +92,7 @@
    "severity": "불명",
    "severity_raw": null,
    "location": null,
+   "note": null,
    "crop": "딸기",
    "evidence": [
     9,
@@ -106,6 +108,7 @@
    "dose": "2000배",
    "when": "planned",
    "date_hint": null,
+   "note": null,
    "crop": "딸기",
    "evidence": [
     6,

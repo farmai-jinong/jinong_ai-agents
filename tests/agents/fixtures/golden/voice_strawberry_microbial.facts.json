@@ -89,6 +89,7 @@
    "severity": "경미",
    "severity_raw": "꽃에 거뭇한 게 조금 보이기 시작한 정도",
    "location": "꽃",
+   "note": null,
    "crop": "딸기",
    "evidence": [
     13
@@ -101,6 +102,7 @@
    "severity": "보통",
    "severity_raw": "군데군데 있고 안쪽 잎 뒤를 들쳐보면 좀 있음",
    "location": "잎 뒤, 안쪽 (특히 1동)",
+   "note": null,
    "crop": "딸기",
    "evidence": [
     15,
@@ -117,6 +119,7 @@
    "dose": "미상",
    "when": "applied",
    "date_hint": null,
+   "note": null,
    "crop": "딸기",
    "evidence": [
     5,
@@ -131,6 +134,7 @@
    "dose": "물 1,000리터 기준",
    "when": "applied",
    "date_hint": null,
+   "note": null,
    "crop": "딸기",
    "evidence": [
     11
@@ -143,6 +147,7 @@
    "dose": "물 1,000리터 기준",
    "when": "applied",
    "date_hint": null,
+   "note": null,
    "crop": "딸기",
    "evidence": [
     11,
@@ -156,6 +161,7 @@
    "dose": "2,000ml",
    "when": "applied",
    "date_hint": null,
+   "note": null,
    "crop": "딸기",
    "evidence": [
     11

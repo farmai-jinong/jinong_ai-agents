@@ -146,7 +146,7 @@ async def test_pipeline_empty_when_nothing(settings, farmos_fake):
 async def test_disambiguate_path(settings, farmos_fake):
     tr, ctx = load_call("tomato_two_files_speaker_flip")
     facts = dict(fake_llm("tomato_two_files_speaker_flip").responses["extract"])
-    facts["pests"] = [{"name": "가루이", "kind": "해충", "status": "발생", "severity": "보통", "severity_raw": None,
+    facts["pests"] = [{"name": "가루이", "kind": "해충", "status": "발생", "severity": "보통", "severity_raw": None, "note": None,
                        "location": None, "crop": "토마토", "evidence": [1]}]     # 담배가루이 / 온실가루이 → ambiguous
     llm = fake_llm("tomato_two_files_speaker_flip", responses={"extract": facts,
                    "disambiguate": lambda msgs: {"picks": [{"item_id": "pest0", "choice": "002005012"}]}})
@@ -162,7 +162,7 @@ async def test_disambiguate_path(settings, farmos_fake):
 async def test_disambiguate_rejects_out_of_candidates(settings, farmos_fake):
     tr, ctx = load_call("tomato_two_files_speaker_flip")
     facts = dict(fake_llm("tomato_two_files_speaker_flip").responses["extract"])
-    facts["pests"] = [{"name": "가루이", "kind": "해충", "status": "발생", "severity": "보통", "severity_raw": None,
+    facts["pests"] = [{"name": "가루이", "kind": "해충", "status": "발생", "severity": "보통", "severity_raw": None, "note": None,
                        "location": None, "crop": "토마토", "evidence": [1]}]
     llm = fake_llm("tomato_two_files_speaker_flip", responses={"extract": facts,
                    "disambiguate": {"picks": [{"item_id": "pest0", "choice": "999999"}]}})

@@ -128,6 +128,7 @@
    "severity": "경미",
    "severity_raw": "동당 3~4포기씩, 총 10포기 이상",
    "location": "군데군데",
+   "note": null,
    "crop": "딸기",
    "evidence": [
     22,
@@ -143,6 +144,7 @@
    "severity": "경미",
    "severity_raw": "몇 포기",
    "location": "잎에 까만 반점",
+   "note": null,
    "crop": "딸기",
    "evidence": [
     30,
@@ -156,6 +158,7 @@
    "severity": "보통",
    "severity_raw": "새잎을 여기저기 갉아먹어 그물처럼 됨, 유충 몇 마리 포획",
    "location": "새잎",
+   "note": null,
    "crop": "딸기",
    "evidence": [
     32,
@@ -173,6 +176,7 @@
    "dose": "1000배액",
    "when": "applied",
    "date_hint": null,
+   "note": null,
    "crop": "딸기",
    "evidence": [
     36,
@@ -187,6 +191,7 @@
    "dose": "옹지제",
    "when": "applied",
    "date_hint": null,
+   "note": null,
    "crop": "딸기",
    "evidence": [
     41

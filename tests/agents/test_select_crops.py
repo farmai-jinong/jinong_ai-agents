@@ -46,7 +46,7 @@ def test_route_facts_multi_target_warning():
                                CropMention(name_raw="포도", matched_name="포도", evidence=[1])],
               farmworks=[FarmworkFact(name="관수", crop="딸기", when="today", date_hint=None, detail=None, evidence=[2]),
                          FarmworkFact(name="적심", crop=None, when="today", date_hint=None, detail=None, evidence=[3])],
-              pests=[PestFact(name="노균병", kind="병", status="발생", severity="경미", severity_raw=None, location=None, crop="포도", evidence=[4])])
+              pests=[PestFact(name="노균병", kind="병", status="발생", severity="경미", severity_raw=None, location=None, note=None, crop="포도", evidence=[4])])
     targets, n2k, _ = choose_targets(f, FARM, None, None)
     routed, w = route_facts(f, targets, n2k)
     assert [x.name for x in routed["0804MM"].farmworks] == ["관수", "적심"]
