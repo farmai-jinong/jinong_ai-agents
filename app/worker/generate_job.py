@@ -66,7 +66,8 @@ async def _finalize(rt: Runtime, call_id: str, *, status: str, error_code: str |
 SUMMARY_TYPE = "SUMMARY"
 EMPTY_DIARY_STATUSES = ("EMPTY", "UNRESOLVED_CROP")
 NO_DIARY_CONTENT = "NO_DIARY_CONTENT"
-NO_SUMMARY = "NO_SUMMARY"
+# 백엔드가 받는 empty_reason 허용값(백엔드 연동 문서 §6) — 이 밖의 값은 콜백에 싣지 않는다.
+ALLOWED_EMPTY_REASONS = ("NO_AUDIO", "NO_TRANSCRIPT", "NO_CONTENT", NO_DIARY_CONTENT)
 
 
 def has_diary_content(diaries: list[DiaryArtifact]) -> bool:
@@ -110,12 +111,13 @@ async def _summary_callback(rt: Runtime, call: Call, result: PipelineResult | No
         return
     content = (summary_md or "").strip()
     status = call.status
-    empty_reason = call.error_code or NO_DIARY_CONTENT
+    empty_reason = call.error_code if call.error_code in ALLOWED_EMPTY_REASONS else NO_DIARY_CONTENT
     # 일지 유무는 저장되는 산출물 기준으로 판정한다(콜백 content 와 무관).
     if status == "COMPLETED" and result is not None and not has_diary_content(result.diaries):
         status, empty_reason = "EMPTY", NO_DIARY_CONTENT
     elif status == "COMPLETED" and not content:   # 본문 없는 COMPLETED 는 명세 위반(content 필수)
-        status, empty_reason = "EMPTY", NO_SUMMARY
+        # 일지는 있는데 요약이 폴백까지 실패한 경우 — 백엔드 허용값에 맞춰 NO_CONTENT 로 접는다.
+        status, empty_reason = "EMPTY", "NO_CONTENT"
     engine = f"{st.summary_engine_version}/{call.generation_model}" if call.generation_model \
         else st.summary_engine_version
     payload: dict[str, Any] = {"call_id": call.call_id, "summary_type": SUMMARY_TYPE, "status": status,
@@ -123,7 +125,7 @@ async def _summary_callback(rt: Runtime, call: Call, result: PipelineResult | No
     if status == "COMPLETED":
         payload["content"] = content
     elif status == "EMPTY":
-        payload["empty_reason"] = empty_reason   # NO_AUDIO | NO_TRANSCRIPT | NO_CONTENT | NO_DIARY_CONTENT | NO_SUMMARY
+        payload["empty_reason"] = empty_reason   # ALLOWED_EMPTY_REASONS 중 하나
     elif status == "FAILED":
         reason = f"{call.error_code}: {call.error_message}" if call.error_message else (call.error_code or "")
         payload["fail_reason"] = reason[:1000]

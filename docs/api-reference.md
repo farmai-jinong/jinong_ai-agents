@@ -225,10 +225,10 @@ terminal 시 (형식은 통화 콜백과 동일한 전송 규칙):
 ```
 
 - `status`: `COMPLETED`(+`content` 필수) / `EMPTY`(+`empty_reason`, content 없음) / `FAILED`(+`fail_reason`, 1000자 컷).
-- `empty_reason` ∈ `NO_AUDIO` | `NO_TRANSCRIPT` | `NO_CONTENT` | `NO_DIARY_CONTENT` | `NO_SUMMARY`.
+- `empty_reason` ∈ `NO_AUDIO` | `NO_TRANSCRIPT` | `NO_CONTENT` | `NO_DIARY_CONTENT` — 백엔드 허용값 4종만 보낸다.
   앞의 셋은 `Call.error_code` 그대로다. **`NO_DIARY_CONTENT` 판정은 콜백 content 가 아니라 저장되는
   `result.diaries[]` 기준** — 통화는 `COMPLETED` 인데 남길 일지가 전부 `EMPTY`/`UNRESOLVED_CROP`(검수 강등 포함)이면
-  요약 LLM 을 호출하지 않고 이 사유로 보낸다. `NO_SUMMARY` 는 일지는 있는데 요약이 폴백까지 실패한 경우.
+  요약 LLM 을 호출하지 않고 이 사유로 보낸다. 일지는 있는데 요약이 폴백까지 실패한 드문 경우는 `NO_CONTENT` 로 접는다.
 - 요약 LLM 이 실패하면 이미 만들어진 보고서 요약(`report.structured.summary` + `action_items`)으로 폴백하고
   `generation.warnings` 에 경고를 남긴다 — 통화 상태는 `COMPLETED` 를 유지한다.
 - 같은 `(call_id, summary_type)` 은 백엔드에서 UPSERT — 재생성 시 덮어쓰기.

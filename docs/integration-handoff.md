@@ -487,9 +487,8 @@ terminal 사유 (`status` + `error.code`):
 |---|---|
 | `NO_AUDIO` | 통화에 녹음이 하나도 없음 |
 | `NO_TRANSCRIPT` | 전사에 발화가 없음(무음) |
-| `NO_CONTENT` | 통화 전체에 기록할 내용이 없음 |
+| `NO_CONTENT` | 통화 전체에 기록할 내용이 없음(일지는 있으나 요약 생성이 끝내 실패한 드문 경우 포함) |
 | `NO_DIARY_CONTENT` | 통화는 정상 처리됐지만 영농일지로 남길 실질 내용이 없음(검수 판정) |
-| `NO_SUMMARY` | 일지는 있으나 요약 생성이 끝내 실패함(드묾) |
 
 ```json
 {"call_id": "20260819_Qmf1D0X", "summary_type": "SUMMARY", "status": "EMPTY",

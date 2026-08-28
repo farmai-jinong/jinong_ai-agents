@@ -357,6 +357,42 @@ async def test_summary_callback_empty_diaries_are_not_sent(client, app, stt_mock
     assert body["result"]["diaries"][0]["status"] == "EMPTY"
 
 
+async def test_summary_callback_no_summary_folds_to_no_content(client, app, stt_mock):
+    """일지는 있는데 요약이 폴백까지 실패 → 백엔드 허용값 NO_CONTENT 로 접어 보낸다(구 NO_SUMMARY 제거)."""
+    import json
+
+    from app.schemas.pipeline import DiaryArtifact, PipelineResult
+    from app.worker.generate_job import ALLOWED_EMPTY_REASONS
+
+    rt = app.state.rt
+
+    class DiaryOnlyPipeline:
+        """실질 일지는 있으나 보고서가 없어 요약 폴백도 불가능한 경우."""
+
+        async def run(self, transcript, ctx):
+            d = DiaryArtifact(prdlst_code="0804MM", prdlst_nm="딸기", diary_date="2026-08-26",
+                              status="OK", markdown="# 영농일지 — 딸기 (2026-08-26)\n\n## 주요 농작업\n- 관수 2시간\n")
+            return PipelineResult(diaries=[d], report=None, model="fake", prompt_version="0")
+
+    restore = _enable_summary_callback(rt)
+    orig_pipeline, orig_summarizer = rt.pipeline, rt.summarizer
+    rt.pipeline = DiaryOnlyPipeline()
+    rt.summarizer = None                                  # 요약 패스 자체가 없음 → content 를 만들 수 없다
+    try:
+        with respx.mock(assert_all_called=True) as router:
+            route = router.post(SUMMARY_HOOK).mock(return_value=httpx.Response(200))
+            await full_flow(client, "cb6")
+            await rt.worker.drain()
+    finally:
+        rt.pipeline, rt.summarizer = orig_pipeline, orig_summarizer
+        restore()
+
+    payload = json.loads(route.calls[0].request.content)
+    assert payload["status"] == "EMPTY" and "content" not in payload
+    assert payload["empty_reason"] == "NO_CONTENT"
+    assert payload["empty_reason"] in ALLOWED_EMPTY_REASONS
+
+
 async def test_summary_callback_failed_has_reason(client, app, stt_mock):
     """생성 실패 → FAILED + fail_reason."""
     import json
