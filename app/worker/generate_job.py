@@ -16,7 +16,7 @@ from ..runtime import Runtime
 from ..schemas.pipeline import CallContext, CallHints, CallSummaryResult, DiaryArtifact, Participant, PipelineResult
 from ..services.artifacts import persist_result
 from ..services.results import utc
-from ..services.transcripts import merge_transcripts, transcript_markdown
+from ..services.transcripts import apply_speaker_map, merge_transcripts, transcript_markdown
 
 log = logging.getLogger(__name__)
 
@@ -129,6 +129,10 @@ async def _summary_callback(rt: Runtime, call: Call, result: PipelineResult | No
     elif status == "FAILED":
         reason = f"{call.error_code}: {call.error_message}" if call.error_message else (call.error_code or "")
         payload["fail_reason"] = reason[:1000]
+    # 화자 역할표 — 글자 A/B 만으로는 누가 농가인지 알 수 없으므로 추정 결과를 같이 싣는다(선택 필드).
+    # 이번 실행의 결과가 있을 때만 — 이른 종료(NO_AUDIO/STT_FAILED)에서는 직전 run 의 값이 남아 있을 수 있다.
+    if st.callback_include_speaker_map and result is not None and call.speaker_map_json:
+        payload["speaker_map"] = dict(call.speaker_map_json)
     ok, attempts = await send_callback(rt.settings, st.summary_callback_url, payload)
     async with rt.db.session() as s:
         c = await repo.get_call(s, call.call_id)
@@ -216,12 +220,15 @@ async def run_generate(rt: Runtime, call_id: str) -> None:
         await _summary_callback(rt, c)
         return
 
-    # 성공 — 산출물 저장
-    if transcript_markdown and result.speaker_map:
+    # 성공 — 산출물 저장. 추정된 역할(농가/컨설턴트)을 전사에 되먹여 merged.json/md 를 다시 쓴다
+    # (처음 쓸 때는 아직 역할을 모른다 — 같은 키를 덮어쓰므로 GET /transcript 가 곧바로 role 을 본다).
+    if result.speaker_map:
+        transcript = apply_speaker_map(transcript, result.speaker_map)
         try:
-            await rt.s3.put_text(rt.s3.keys.transcript_md(call_id), transcript_markdown(transcript, result.speaker_map))
-        except Exception:  # noqa: BLE001
-            pass
+            await rt.s3.put_json(tkey, transcript.model_dump(mode="json"))
+            await rt.s3.put_text(rt.s3.keys.transcript_md(call_id), transcript_markdown(transcript))
+        except Exception as e:  # noqa: BLE001
+            log.warning("[%s] transcript rewrite with roles failed: %s", call_id, e)
     all_warnings = warnings + list(result.warnings or [])
     # 통화 단순요약 — 일지가 실질 내용을 가질 때만 만든다(잡담 통화에 LLM 을 쓰지 않는다).
     summary: CallSummaryResult | None = None

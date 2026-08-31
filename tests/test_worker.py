@@ -457,3 +457,81 @@ async def test_send_callback_no_retry_on_4xx(settings):
         route = router.post(SUMMARY_HOOK).mock(return_value=httpx.Response(500))
         ok, attempts = await send_callback(settings, SUMMARY_HOOK, {"call_id": "x"}, delays=(0.0, 0.0, 0.0))
     assert (ok, attempts) == (False, 3) and route.call_count == 3
+
+
+# --- 화자 역할(농가/컨설턴트) 되먹임 -------------------------------------------
+
+
+class RolePipeline:
+    """speaker_map 을 실제 역할로 돌려주는 파이프라인 (fake 는 전부 unknown)."""
+
+    async def run(self, transcript, ctx):
+        from app.schemas.pipeline import DiaryArtifact, PipelineResult
+
+        roles = ["consultant", "farmer"]
+        return PipelineResult(
+            diaries=[DiaryArtifact(prdlst_code="0804MM", prdlst_nm="딸기", diary_date="2026-08-26",
+                                   status="OK", markdown="# 영농일지 — 딸기 (2026-08-26)\n\n본문\n")],
+            report=None, model="fake", prompt_version="0",
+            speaker_map={k: roles[i % 2] for i, k in enumerate(transcript.speakers)})
+
+
+async def test_transcript_carries_roles_after_generation(client, app, stt_mock):
+    """생성이 끝나면 merged.json 이 역할과 함께 다시 쓰인다 — GET /transcript 가 농가/컨설턴트를 그대로 준다."""
+    rt = app.state.rt
+    orig = rt.pipeline
+    rt.pipeline = RolePipeline()
+    try:
+        await full_flow(client, "role1")
+        await rt.worker.drain()
+    finally:
+        rt.pipeline = orig
+
+    tr = (await client.get("/v1/calls/role1/transcript")).json()
+    assert tr["speaker_map"] == {"f0:A": "consultant", "f0:B": "farmer"}
+    by_key = {s["speaker_key"]: s["role"] for s in tr["segments"]}
+    assert by_key == {"f0:A": "consultant", "f0:B": "farmer"}
+    assert all(s["role"] in ("farmer", "consultant") for s in tr["segments"])
+    # 결과 API 의 speaker_map 과 같은 값 (백엔드가 둘 중 무엇을 봐도 일치)
+    assert (await client.get("/v1/calls/role1")).json()["result"]["speaker_map"] == tr["speaker_map"]
+    # 사람이 읽는 md 도 한글 라벨
+    md = (await rt.s3.get_bytes(rt.settings.s3_bucket,
+                                "agents/voicecall/role1/transcript/merged.md")).decode("utf-8")
+    assert "컨설턴트(f0:A):" in md and "농가(f0:B):" in md
+
+
+async def test_transcript_roles_unknown_when_pipeline_cannot_tell(client, app, stt_mock):
+    """역할 추정이 안 되면(fake=전부 unknown) role 은 unknown 으로 남는다 — 추측하지 않는다."""
+    rt = app.state.rt
+    await full_flow(client, "role2")
+    await rt.worker.drain()
+    tr = (await client.get("/v1/calls/role2/transcript")).json()
+    assert {s["role"] for s in tr["segments"]} == {"unknown"}
+    assert set(tr["speaker_map"].values()) == {"unknown"}
+
+
+async def test_summary_callback_carries_speaker_map(client, app, stt_mock):
+    """통화요약 콜백에 화자 역할표를 동봉 — 끄면 필드 자체가 빠진다."""
+    import json
+
+    rt = app.state.rt
+    restore = _enable_summary_callback(rt)
+    orig = rt.pipeline
+    rt.pipeline = RolePipeline()
+    try:
+        with respx.mock(assert_all_called=True) as router:
+            route = router.post(SUMMARY_HOOK).mock(return_value=httpx.Response(200))
+            await full_flow(client, "role3")
+            await rt.worker.drain()
+        assert json.loads(route.calls[0].request.content)["speaker_map"] == {"f0:A": "consultant", "f0:B": "farmer"}
+
+        rt.settings.callback_include_speaker_map = False
+        with respx.mock(assert_all_called=True) as router:
+            route = router.post(SUMMARY_HOOK).mock(return_value=httpx.Response(200))
+            await full_flow(client, "role4")
+            await rt.worker.drain()
+        assert "speaker_map" not in json.loads(route.calls[0].request.content)
+    finally:
+        rt.settings.callback_include_speaker_map = True
+        rt.pipeline = orig
+        restore()

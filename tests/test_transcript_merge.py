@@ -92,3 +92,29 @@ def test_merge_calls_single_call_equals_merge_transcripts():
     assert [s.model_dump(exclude={"seg_id"}) for s in combined.segments] == \
            [s.model_dump(exclude={"seg_id"}) for s in single.segments]
     assert combined.total_duration_sec == single.total_duration_sec
+
+
+# --- apply_speaker_map (역할 되먹임) -----------------------------------------
+
+from app.services.transcripts import apply_speaker_map, transcript_markdown  # noqa: E402
+
+
+def test_apply_speaker_map_fills_roles():
+    t = merge_transcripts("c", [_audio(1, seq=1, stt_seconds=10)])
+    assert all(s.role == "unknown" for s in t.segments)      # 병합 시점에는 역할을 모른다
+    t2 = apply_speaker_map(t, {"f0:A": "consultant", "f0:B": "farmer"})
+    assert t2.speaker_map == {"f0:A": "consultant", "f0:B": "farmer"}
+    assert [s.role for s in t2.segments] == ["consultant", "farmer"]
+    assert t2.model_dump(mode="json")["segments"][1]["role"] == "farmer"
+    assert all(s.role == "unknown" for s in t.segments)      # 원본은 그대로 (순수 함수)
+    # md 는 speaker_map 인자를 안 줘도 전사에 실린 역할을 쓴다
+    assert "컨설턴트(f0:A):" in transcript_markdown(t2) and "농가(f0:B):" in transcript_markdown(t2)
+
+
+def test_apply_speaker_map_unknown_and_missing():
+    t = merge_transcripts("c", [_audio(1, seq=1, stt_seconds=10)])
+    t2 = apply_speaker_map(t, {"f0:A": "farmer", "f9:Z": "consultant"})   # 없는 키는 무시
+    assert t2.speaker_map == {"f0:A": "farmer", "f0:B": "unknown"}        # 빠진 화자는 unknown
+    assert transcript_markdown(t2).count("농가(f0:A):") == 1
+    assert "] f0:B: " in transcript_markdown(t2)                         # unknown 은 라벨을 안 붙인다
+    assert apply_speaker_map(t, None).speaker_map == {"f0:A": "unknown", "f0:B": "unknown"}

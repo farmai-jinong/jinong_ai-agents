@@ -269,7 +269,7 @@ Body 선택: `{"retranscribe": false, "reason": "...", "farm_access_token": "<�
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
-| GET | `/v1/calls/{id}/transcript` | 병합 전사 JSON. 미준비 시 `404 NOT_READY` |
+| GET | `/v1/calls/{id}/transcript` | 병합 전사 JSON. 세그먼트마다 `role`(농가/컨설턴트) 포함 — §3.6.1. 미준비 시 `404 NOT_READY` |
 | GET | `/v1/calls/{id}/artifacts/report?format=md\|json` | 컨설팅 보고서 (기본 `text/markdown`) |
 | GET | `/v1/calls/{id}/artifacts/diary/{prdlst_code}?format=md\|json` | 작물별 영농일지. 미확정 작물은 `{prdlst_code}` 자리에 `unresolved`(다건이면 `unresolved-2` …) |
 | GET | `/v1/calls?status=&state=&limit=50&cursor=` | 운영/디버그용 목록 |
@@ -277,6 +277,32 @@ Body 선택: `{"retranscribe": false, "reason": "...", "farm_access_token": "<�
 
 목록의 `next_cursor`는 **불투명 토큰**입니다(내용을 해석하지 마시고 그대로 되돌려 주세요). 정렬은 최신
 생성순이며, `next_cursor`가 `null`이면 마지막 페이지입니다.
+
+#### 3.6.1 화자 역할 — 누가 농가인가
+
+STT가 붙이는 화자 글자 `A`/`B`는 **그 녹음에서 먼저 말한 순서**일 뿐입니다. 발신/수신과도 무관하고,
+녹음 파일이 둘로 나뉘면 A와 B가 뒤바뀝니다. 그래서 글자만으로는 농가를 가릴 수 없습니다.
+
+저희가 통화 **내용**으로 역할을 추정해 두 곳에 같은 값으로 실어 드립니다:
+
+```json
+// GET /v1/calls/{id}/transcript
+{"speaker_map": {"f0:A": "consultant", "f0:B": "farmer"},
+ "segments": [{"speaker_key": "f0:A", "role": "consultant", "abs_start": 0.0, "text": "…"}]}
+```
+
+| 위치 | 값 |
+|---|---|
+| `GET /v1/calls/{id}/transcript` → `segments[].role` | `farmer` \| `consultant` \| `unknown` (세그먼트별) |
+| `GET /v1/calls/{id}/transcript` → `speaker_map` | `speaker_key` → 역할 (같은 값의 요약) |
+| `GET /v1/calls/{id}` → `result.speaker_map` | 위와 항상 같은 값 |
+| 통화요약 콜백 payload → `speaker_map` | 위와 같은 값 (§5.1) |
+
+- **확신이 없으면 `unknown`으로 둡니다** — 찍지 않습니다. 화면에는 "화자 A/B"로 그대로 두시면 됩니다.
+- 역할은 **생성이 끝난 뒤** 채워집니다. 통화요약 콜백을 받은 시점이면 이미 들어 있습니다.
+  `EMPTY`/`FAILED`로 끝난 통화는 전부 `unknown`입니다.
+- `speaker_key`(`f0:A`)의 `f0`은 녹음 파일 인덱스입니다 — 파일이 여럿이면 `f0:A`와 `f1:A`가 **다른
+  사람일 수 있으니** 반드시 `speaker_key` 단위로 매칭해 주세요.
 
 ### 3.7 `POST /v1/daily-diaries` — 날짜별(멀티콜) 영농일지 트리거
 
@@ -457,9 +483,17 @@ terminal 사유 (`status` + `error.code`):
   "summary_type": "SUMMARY",
   "status": "COMPLETED",
   "content": "- 주제: 딸기 잿빛곰팡이병 방제 상담\n- 조치: 환기 관리 권고 / 병든 과실 제거\n- 후속: 화요일 방문 예정",
-  "engine_version": "jinong-summary-v1/gemini-3.5-flash"
+  "engine_version": "jinong-summary-v1/gemini-3.5-flash",
+  "speaker_map": {"f0:A": "consultant", "f0:B": "farmer"}
 }
 ```
+
+- **`speaker_map`은 선택 필드입니다** (2026-08-31 추가) — 화자 글자 `A`/`B` 중 누가 농가인지의 추정
+  결과입니다(§3.6.1). **DTO에서 무시하셔도 됩니다.** 다만 미지 필드를 거부(4xx)하는 설정이면
+  알려주세요 — 저희 쪽 스위치(`CALLBACK_INCLUDE_SPEAKER_MAP`)로 즉시 뺍니다. 같은 값은
+  `GET /v1/calls/{call_id}`의 `result.speaker_map`에도 있습니다.
+- 역할이 확정되지 않은 통화(`EMPTY`/`FAILED`, 또는 추정 신뢰도 미달)에서는 키가 없거나 값이
+  `unknown`입니다.
 
 수신 후 흐름:
 
@@ -658,6 +692,8 @@ curl "$B/v1/daily-diaries/daily_u1_20260819" -H "Authorization: Bearer $K"
 - [ ] 영농일지·전사본은 콜백이 아니라 `GET /v1/calls/{call_id}` 로 조회 (§3.5, §5.1)
 - [ ] 통화요약 콜백 중복 제거: `(call_id, summary_type)` UPSERT (§5.1)
 - [ ] **`status="EMPTY"` 처리** — 템플릿 내용 대신 상태값으로 표시. 사유는 `empty_reason` (§5.1)
+- [ ] 통화요약 콜백의 **선택 필드 `speaker_map`** — 무시하거나 저장. 미지 필드를 거부하는 DTO면 알려 주세요 (§5.1)
+- [ ] 전사 화면에 화자를 표시하신다면 `segments[].role` 사용 — `unknown`은 "화자 A/B" 그대로 (§3.6.1)
 - [ ] 에러 파서: `detail` 문자열(401) / 객체(도메인) / 리스트(422 검증) 모두 처리
 - [ ] terminal 후 추가 오디오 발생 시 `/regenerate` 호출 로직 (farmos 조회가 필요하면 body에 새 JWT — §3.4)
 

@@ -3,6 +3,7 @@
 - 정렬: (seq NULLS LAST, recorded_at NULLS LAST, id)
 - 오프셋: 앞 파일 duration 누적. duration = usage.seconds → source_end_sec → 호출자 duration_sec → 세그먼트 max end → 0
 - speaker_key = f"f{file_index}:{speaker}" (파일 간 글자 뒤바뀜 대응)
+- 역할(농가/컨설턴트)은 병합 시점에는 알 수 없다 — 생성이 끝난 뒤 `apply_speaker_map` 으로 되먹인다.
 """
 
 from __future__ import annotations
@@ -12,7 +13,9 @@ from typing import Any
 
 from ..db.models import Call, CallAudio
 from ..db.repo import order_audio
-from ..schemas.transcript import MergedTranscript, TranscriptFile, TranscriptSegment
+from ..schemas.transcript import MergedTranscript, Role, TranscriptFile, TranscriptSegment
+
+ROLE_KO: dict[str, str | None] = {"farmer": "농가", "consultant": "컨설턴트", "unknown": None}
 
 
 def _fmt_ts(sec: float) -> str:
@@ -126,14 +129,32 @@ def merge_calls(diary_id: str, per_call: Sequence[tuple["Call", Sequence[CallAud
                             total_duration_sec=offset, text=text)
 
 
+def apply_speaker_map(t: MergedTranscript, speaker_map: dict[str, str] | None) -> MergedTranscript:
+    """파이프라인이 추정한 역할(speaker_key → farmer|consultant|unknown)을 전사에 되먹인다 (순수 함수).
+
+    화자 글자(A/B)는 등장 순서일 뿐이라 그 자체로는 농가/컨설턴트를 뜻하지 않는다. 역할은 생성
+    파이프라인의 `assign_speaker_roles` 가 내용으로 추정하므로, 전사를 처음 쓸 때는 알 수 없고
+    생성이 끝난 뒤에야 채울 수 있다. 알 수 없는 키·허용값 밖의 값은 `unknown` 으로 남긴다.
+    """
+    mp: dict[str, Role] = {}
+    for key in t.speakers:
+        v = (speaker_map or {}).get(key)
+        mp[key] = v if v in ("farmer", "consultant") else "unknown"
+    return t.model_copy(update={
+        "speaker_map": mp,
+        "segments": [s.model_copy(update={"role": mp.get(s.speaker_key, "unknown")}) for s in t.segments],
+    })
+
+
 def transcript_markdown(t: MergedTranscript, speaker_map: dict[str, str] | None = None) -> str:
-    """사람이 읽는 병합 전사 (S3 transcript/merged.md)."""
-    role_ko = {"farmer": "농가", "consultant": "컨설턴트", "unknown": None}
+    """사람이 읽는 병합 전사 (S3 transcript/merged.md). speaker_map 생략 시 전사에 실린 역할을 쓴다."""
+    mp: dict[str, str] = dict(speaker_map or t.speaker_map or {})
     lines = [f"# 통화 전사 — {t.call_id}", "",
              f"- 파일 수: {len(t.files)} · 총 길이: {_fmt_ts(t.total_duration_sec)} · 세그먼트: {len(t.segments)}", ""]
     for s in t.segments:
         label = s.speaker_key
-        if speaker_map and speaker_map.get(s.speaker_key) in role_ko and role_ko[speaker_map[s.speaker_key]]:
-            label = f"{role_ko[speaker_map[s.speaker_key]]}({s.speaker_key})"
+        ko = ROLE_KO.get(mp.get(s.speaker_key, ""))
+        if ko:
+            label = f"{ko}({s.speaker_key})"
         lines.append(f"- [{_fmt_ts(s.abs_start)}–{_fmt_ts(s.abs_end)}] {label}: {s.text}")
     return "\n".join(lines) + "\n"
