@@ -39,7 +39,12 @@ kafka-gateway ──POST /v1/calls ──▶ ⑧ agent ──GET s3://bucket/key
 - STT job(`stt_job.run_stt`): S3 get → 게이트웨이 diarize → raw JSON S3(`stt/NN-sha8.json`) → 행 갱신(`segments_json` 경량 캐시) → 생성 스케줄 시도.
   분류: 429(Retry-After) · 5xx/timeout(백오프 min(300, 15·2ⁿ)) · 4xx 영구.
 - Generation job(`generate_job.run_generate`): 정렬·오프셋 → `MergedTranscript` → S3 `transcript/merged.{json,md}` → 파이프라인
-  (`app.agents.build_pipeline`, `asyncio.wait_for(GEN_TIMEOUT_SEC)`) → **통화 단순요약**(아래) → 산출물 S3 + `artifacts` 행 교체 → status → 토큰 purge → 콜백.
+  (`app.agents.build_pipeline`, `asyncio.wait_for(GEN_TIMEOUT_SEC)`) → **화자 역할 되먹임**(아래) → **통화 단순요약**(아래) → 산출물 S3 + `artifacts` 행 교체 → status → 토큰 purge → 콜백.
+- **화자 역할 되먹임(`services/transcripts.apply_speaker_map`)** — STT 화자 글자 A/B 는 등장 순서일 뿐이라
+  전사를 처음 쓸 때는 역할을 모른다. 파이프라인의 `result.speaker_map`(`assign_speaker_roles`, 신뢰도 0.6
+  미만은 `unknown`)을 전사에 되먹여 `segment.role` 을 채우고 `transcript/merged.json|.md` 를 **같은 키에
+  다시 쓴다** — `GET /v1/calls/{id}/transcript` 가 곧바로 농가/컨설턴트를 준다. 콜백에도 `speaker_map` 을
+  동봉한다(`CALLBACK_INCLUDE_SPEAKER_MAP`, 기본 on). daily 도 동일.
 - **통화 단순요약(`agents/summarize.py`)** — 일지 파이프라인과 분리된 LLM 패스(`build_summarizer`, 같은 `PIPELINE_IMPL` 스위치).
   일지가 실질 내용을 가질 때만(`has_diary_content`) 녹취문을 다시 읽어 주제/조치/후속 불릿을 만든다. 긴 통화는
   `chunk_turns` 로 구간 요약 후 통합 1회. 산출물은 `artifacts/summary.md|.json` + `result.summary`, 그리고 백엔드

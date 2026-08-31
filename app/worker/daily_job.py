@@ -20,7 +20,7 @@ from ..runtime import Runtime
 from ..schemas.pipeline import CallContext, CallHints, Participant, PipelineResult
 from ..services.artifacts import persist_daily_result
 from ..services.results import utc
-from ..services.transcripts import merge_calls, transcript_markdown
+from ..services.transcripts import apply_speaker_map, merge_calls, transcript_markdown
 
 log = logging.getLogger(__name__)
 
@@ -176,12 +176,13 @@ async def run_daily_generate(rt: Runtime, diary_id: str) -> None:
     # 성공 — 산출물 저장 (daily 는 작물별 일지만: result.report 는 버린다)
     if result.report is not None:
         log.info("[%s] discarding report artifact (daily scope is diary-only)", diary_id)
-    if result.speaker_map:
+    if result.speaker_map:   # 역할(농가/컨설턴트)을 전사에 되먹여 merged.json/md 를 다시 쓴다
+        transcript = apply_speaker_map(transcript, result.speaker_map)
         try:
-            await rt.s3.put_text(rt.s3.keys.daily_transcript_md(diary_id),
-                                 transcript_markdown(transcript, result.speaker_map))
-        except Exception:  # noqa: BLE001
-            pass
+            await rt.s3.put_json(tkey, transcript.model_dump(mode="json"))
+            await rt.s3.put_text(rt.s3.keys.daily_transcript_md(diary_id), transcript_markdown(transcript))
+        except Exception as e:  # noqa: BLE001
+            log.warning("[%s] daily transcript rewrite with roles failed: %s", diary_id, e)
     all_warnings = warnings + list(result.warnings or [])
     async with rt.db.session() as s:
         dd = await repo.get_daily(s, diary_id)

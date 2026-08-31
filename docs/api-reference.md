@@ -110,7 +110,7 @@ Body(선택) `{"ended_at": "...", "duration_sec": 900}` → `202` (`state=ENDED,
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
-| GET | `/v1/calls/{id}/transcript` | 병합 전사 JSON(`MergedTranscript`). 미준비 `404 NOT_READY` |
+| GET | `/v1/calls/{id}/transcript` | 병합 전사 JSON(`MergedTranscript`, 화자 역할 포함). 미준비 `404 NOT_READY` |
 | GET | `/v1/calls/{id}/artifacts/summary[?format=json]` | 통화 단순요약 md / JSON (콜백 `content` 와 동일) |
 | GET | `/v1/calls/{id}/artifacts/report[?format=json]` | 보고서 `text/markdown` / JSON |
 | GET | `/v1/calls/{id}/artifacts/diary/{prdlst_code}[?format=json]` | 작물별 영농일지 md / JSON (`unresolved`, 다건이면 `unresolved-2` … 가능) |
@@ -118,6 +118,26 @@ Body(선택) `{"ended_at": "...", "duration_sec": 900}` → `202` (`state=ENDED,
 | POST | `/v1/calls/{id}/regenerate` | `{"retranscribe": false, "reason": "…", "farm_access_token": "…"}` → `202`. 토큰을 주면 purge 된 농가 JWT 재공급(daily 와 동일 계약). `409 CALL_NOT_ENDED` / `409 ALREADY_PROCESSING`. 산출물 같은 S3 키에 덮어쓰기, `generation.run` +1 |
 | GET | `/healthz` | 무인증 `{status: "ok"\|"degraded", version, worker:{running,pending_stt,pending_gen,pending_daily}}`. DB ping 실패 시 `status:"degraded"` 이고 `pending_*` 는 모두 `null` |
 | GET | `/v1/upstream/health` | STT / LLM(openai·jinong: `/models`, gemini: Vertex publisher model 조회) / S3(head_bucket) / farmos 도달성. `AP_BACKEND_BASE_URL` 이 설정돼 있으면 `ap_backend` 항목도 포함 |
+
+### 화자 역할 (`role` / `speaker_map`)
+
+STT 화자 글자(`A`/`B`…)는 **그 요청 안의 등장 순서**일 뿐이다 — 발신/수신도, 농가/컨설턴트도 아니고,
+파일이 나뉘면 뒤집힌다(게이트웨이 계약 `jinong_ai-gateway/docs/api-reference.md` §3). 역할은 생성
+파이프라인의 `assign_speaker_roles` 가 **내용으로** 추정하고, 생성이 끝나면 `merged.json`/`merged.md`
+를 같은 키에 다시 써서 전사에 되먹인다.
+
+```json
+{"call_id": "…", "speakers": ["f0:A", "f0:B"],
+ "speaker_map": {"f0:A": "consultant", "f0:B": "farmer"},
+ "segments": [{"file_index": 0, "speaker": "A", "speaker_key": "f0:A", "role": "consultant",
+               "start": 0.0, "end": 2.1, "abs_start": 0.0, "abs_end": 2.1, "text": "…"}]}
+```
+
+- `role` ∈ `farmer` | `consultant` | `unknown`. `speaker_map` 은 같은 값을 `speaker_key` 별로 모은 것이고
+  `GET /v1/calls/{id}` 의 `result.speaker_map` 과 항상 일치한다.
+- **신뢰도 0.6 미만이면 `unknown`** — 두 화자가 같은 역할로 나오거나 LLM 이 실패한 경우도 마찬가지다. 찍지 않는다.
+- 생성 **전**(STT 직후)에 조회하면 `role` 은 전부 `unknown` 이다. `EMPTY`/`FAILED` 로 끝난 통화도 마찬가지 —
+  역할 추정은 일지 생성 파이프라인 안에서만 돈다.
 
 목록 커서(`/v1/calls` · `/v1/daily-diaries` 공통): 최신 생성순(`created_at DESC, id DESC`) keyset.
 `next_cursor` 는 **불투명 토큰** — 그대로 `cursor=` 로 되돌리면 다음 페이지, `null` 이면 마지막.
@@ -225,10 +245,10 @@ terminal 시 (형식은 통화 콜백과 동일한 전송 규칙):
 ```
 
 - `status`: `COMPLETED`(+`content` 필수) / `EMPTY`(+`empty_reason`, content 없음) / `FAILED`(+`fail_reason`, 1000자 컷).
-- `empty_reason` ∈ `NO_AUDIO` | `NO_TRANSCRIPT` | `NO_CONTENT` | `NO_DIARY_CONTENT` | `NO_SUMMARY`.
+- `empty_reason` ∈ `NO_AUDIO` | `NO_TRANSCRIPT` | `NO_CONTENT` | `NO_DIARY_CONTENT` — 백엔드 허용값 4종만 보낸다.
   앞의 셋은 `Call.error_code` 그대로다. **`NO_DIARY_CONTENT` 판정은 콜백 content 가 아니라 저장되는
   `result.diaries[]` 기준** — 통화는 `COMPLETED` 인데 남길 일지가 전부 `EMPTY`/`UNRESOLVED_CROP`(검수 강등 포함)이면
-  요약 LLM 을 호출하지 않고 이 사유로 보낸다. `NO_SUMMARY` 는 일지는 있는데 요약이 폴백까지 실패한 경우.
+  요약 LLM 을 호출하지 않고 이 사유로 보낸다. 일지는 있는데 요약이 폴백까지 실패한 드문 경우는 `NO_CONTENT` 로 접는다.
 - 요약 LLM 이 실패하면 이미 만들어진 보고서 요약(`report.structured.summary` + `action_items`)으로 폴백하고
   `generation.warnings` 에 경고를 남긴다 — 통화 상태는 `COMPLETED` 를 유지한다.
 - 같은 `(call_id, summary_type)` 은 백엔드에서 UPSERT — 재생성 시 덮어쓰기.

@@ -18,7 +18,7 @@ _TPL = Path(__file__).parent / "templates"
 KST = ZoneInfo("Asia/Seoul")
 
 WHEN_KO = {"applied": "투입함", "planned": "투입 예정", "recommended": "권고됨", "unknown": "시점 불명",
-           "today": "오늘", "past": "이전", "unknown_fw": "시점 불명"}
+           "today": "오늘", "ongoing": "계속", "past": "이전", "unknown_fw": "시점 불명"}
 
 
 def evref(ev: list[int] | None) -> str:
@@ -112,8 +112,7 @@ def render_diary(d: DiaryResult, ctx: CallContext, transcript: NormalizedTranscr
     for f in crop_facts.farmworks:
         if f.when == "planned":
             plans.append({"text": f.name + (f" — {f.detail}" if f.detail else ""), "hint": f.date_hint, "evidence": f.evidence})
-        elif f.when == "past" and f.date_hint:
-            plans.append({"text": f"(다른 날짜) {f.name}", "hint": f.date_hint, "evidence": f.evidence})
+        # past 작업은 미래 섹션에 넣지 않는다 — 기타 기록사항(diary_content)이 시점을 붙여 서술한다
     for p in crop_facts.products:
         if p.when in ("planned", "recommended"):
             plans.append({"text": f"{p.name} {WHEN_KO[p.when]}" + (f" ({p.target})" if p.target else ""),

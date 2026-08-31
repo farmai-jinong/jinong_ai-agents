@@ -81,7 +81,7 @@ class CropMention(_Strict):
 class FarmworkFact(_Strict):
     name: str
     crop: str | None
-    when: Literal["today", "past", "planned", "unknown"]
+    when: Literal["today", "ongoing", "past", "planned", "unknown"]
     date_hint: str | None
     detail: str | None
     evidence: Ev
@@ -101,6 +101,7 @@ class PestFact(_Strict):
     severity: Literal["경미", "보통", "심함", "불명"]
     severity_raw: str | None
     location: str | None
+    note: str | None
     crop: str | None
     evidence: Ev
 
@@ -111,6 +112,8 @@ class ProductFact(_Strict):
     target: str | None
     dose: str | None
     when: Literal["applied", "planned", "recommended", "unknown"]
+    date_hint: str | None
+    note: str | None
     crop: str | None
     evidence: Ev
 

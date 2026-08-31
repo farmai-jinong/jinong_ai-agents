@@ -21,7 +21,7 @@
 - [x] {{ name }} (기존 일지)
 {% endfor %}
 {% for x in matched %}
-- [x] {{ x.name }}{{ x.evidence | evref }}
+- [x] {{ x.name }}{% if x.when == "ongoing" %} (계속){% endif %}{{ x.evidence | evref }}
 {% else %}
 {% if not d.existing_farmworks %}
 - 언급 없음
@@ -58,7 +58,7 @@
 ## 방제이력
 {% set pest_products = m.products | selectattr("category", "equalto", "농약") | list %}
 {% for x in pest_products %}
-- 방제대상: {{ x.payload.get("prvnbeNm") or "불명" }} / 약제: {{ x.payload.get("pestiNm") or x.source }}{% if x.status != "matched" %} [약제 코드 미매핑]{% endif %} ※ 라벨·PLS 확인 필요{{ x.evidence | evref }}
+- 방제대상: {{ x.payload.get("prvnbeNm") or "불명" }} / 약제: {{ x.payload.get("pestiNm") or x.source }}{% if x.payload.get("date_hint") %} ({{ x.payload.get("date_hint") }} 살포){% endif %}{% if x.status != "matched" %} [약제 코드 미매핑]{% endif %} ※ 라벨·PLS 확인 필요{{ x.evidence | evref }}
 {% else %}
 - 언급 없음
 {% endfor %}
@@ -68,7 +68,7 @@
 
 ## 투입 제품 (농약·비료·종자·농자재)
 {% for p in products %}
-- [{{ p.category }}] {{ p.name }}{% if p.target %} → {{ p.target }}{% endif %}{% if p.dose %} · {{ p.dose }} (확인 필요){% endif %} · {{ p.when | when_ko }}{{ p.evidence | evref }}
+- [{{ p.category }}] {{ p.name }}{% if p.target %} → {{ p.target }}{% endif %}{% if p.dose %} · {{ p.dose }} (확인 필요){% endif %} · {{ p.when | when_ko }}{% if p.date_hint %} ({{ p.date_hint }}){% endif %}{{ p.evidence | evref }}
 {% else %}
 - 언급 없음
 {% endfor %}

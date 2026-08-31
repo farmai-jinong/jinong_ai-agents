@@ -68,6 +68,7 @@
    "severity": "심함",
    "severity_raw": "너무 많아졌어요",
    "location": "잎 뒷면",
+   "note": null,
    "crop": "토마토",
    "evidence": [
     1,
@@ -82,6 +83,8 @@
    "target": "담배가루이",
    "dose": null,
    "when": "recommended",
+   "date_hint": null,
+   "note": null,
    "crop": "토마토",
    "evidence": [
     2
@@ -93,6 +96,8 @@
    "target": null,
    "dose": "조금",
    "when": "applied",
+   "date_hint": null,
+   "note": null,
    "crop": "토마토",
    "evidence": [
     7

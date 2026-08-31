@@ -76,6 +76,7 @@
    "severity": "심함",
    "severity_raw": "꽤 심해요. 익은 과일에 회색곰팡이 핑계 한 동에 수십 편씩 나와요",
    "location": "익은 과일",
+   "note": null,
    "crop": "딸기",
    "evidence": [
     2
@@ -88,6 +89,7 @@
    "severity": "불명",
    "severity_raw": null,
    "location": null,
+   "note": null,
    "crop": "딸기",
    "evidence": [
     9,
@@ -101,6 +103,7 @@
    "severity": "경미",
    "severity_raw": "한 두 마리",
    "location": "잎 뒤",
+   "note": null,
    "crop": "딸기",
    "evidence": [
     12,
@@ -115,6 +118,8 @@
    "target": "잿빛곰팡이병, 흰가루병",
    "dose": "2000배",
    "when": "applied",
+   "date_hint": null,
+   "note": null,
    "crop": "딸기",
    "evidence": [
     6,
@@ -127,6 +132,8 @@
    "target": "잿빛곰팡이병",
    "dose": null,
    "when": "recommended",
+   "date_hint": null,
+   "note": null,
    "crop": "딸기",
    "evidence": [
     4,
@@ -140,6 +147,8 @@
    "target": "잿빛곰팡이병",
    "dose": null,
    "when": "recommended",
+   "date_hint": null,
+   "note": null,
    "crop": "딸기",
    "evidence": [
     4,

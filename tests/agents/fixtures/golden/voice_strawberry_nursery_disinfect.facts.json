@@ -82,6 +82,7 @@
    "severity": "경미",
    "severity_raw": "몇 폭이 수준",
    "location": "육묘장 어미묘 앞 까만 점",
+   "note": null,
    "crop": "딸기",
    "evidence": [
     12,
@@ -96,6 +97,7 @@
    "severity": "심함",
    "severity_raw": "벌레가 많이 다녔어",
    "location": "육묘장 어린잎",
+   "note": null,
    "crop": "딸기",
    "evidence": [
     15,
@@ -111,6 +113,8 @@
    "target": "영양 공급",
    "dose": "한 병",
    "when": "applied",
+   "date_hint": null,
+   "note": null,
    "crop": "딸기",
    "evidence": [
     5,
@@ -124,6 +128,8 @@
    "target": "영양 공급",
    "dose": "50ml",
    "when": "applied",
+   "date_hint": null,
+   "note": null,
    "crop": "딸기",
    "evidence": [
     6,
@@ -137,6 +143,8 @@
    "target": "탄저병",
    "dose": "25말에 혼용",
    "when": "applied",
+   "date_hint": null,
+   "note": null,
    "crop": "딸기",
    "evidence": [
     8,
@@ -151,6 +159,8 @@
    "target": "나방",
    "dose": "25말에 혼용",
    "when": "applied",
+   "date_hint": null,
+   "note": null,
    "crop": "딸기",
    "evidence": [
     8,
@@ -164,6 +174,8 @@
    "target": "나방",
    "dose": null,
    "when": "applied",
+   "date_hint": null,
+   "note": null,
    "crop": "딸기",
    "evidence": [
     16,

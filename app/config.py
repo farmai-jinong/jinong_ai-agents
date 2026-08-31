@@ -108,6 +108,10 @@ class Settings(BaseSettings):
     # 날짜별 일지는 요청 body 의 callback_url 을 계속 사용한다.
     summary_callback_url: str = ""
     summary_engine_version: str = "jinong-summary-v1"   # 콜백 engine_version (모델명이 붙어 최대 100자로 컷)
+    # 통화요약 콜백에 화자 역할표(speaker_key → farmer|consultant|unknown)를 같이 싣는다.
+    # 백엔드 DTO 가 미지 필드를 거부(4xx)하면 0 으로 내려 끄면 된다 — 같은 값은 GET /v1/calls/{id}
+    # 의 result.speaker_map 과 GET /v1/calls/{id}/transcript 에도 그대로 있다.
+    callback_include_speaker_map: bool = True
 
     # --- worker ---------------------------------------------------------------
     worker_poll_sec: float = 5.0
