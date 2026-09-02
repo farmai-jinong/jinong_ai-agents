@@ -2,16 +2,20 @@
 #
 # STT/LLM 은 ⑥ 게이트웨이(https://jinong-stt.jinongservice.co.kr) 를 공개 HTTPS 로 호출한다(같은 호스트의
 # 7002 는 loopback 바인드라 host.docker.internal 로 못 간다). 대안(docker network 공유)은 docs/ops.md.
+#
+# 같은 호스트에 dev 인스턴스를 나란히 올린다(docs/ops.md §7): 디렉터리 apps/jinong_ai-agents-dev + .env 의
+# AGENT_BIND/AGENT_CONTAINER_NAME/AGENT_IMAGE_TAG 만 다르다. compose 프로젝트명(=볼륨 prefix)은 디렉터리명에서 오므로
+# 여기에 `name:` 을 추가하지 말 것 — 넣으면 prod 의 agent_data 볼륨 이름이 바뀌어 빈 DB 로 뜬다.
 
 services:
   agent:
     build: .
-    image: jinong-ai-agents:latest
-    container_name: jinong-ai-agents
+    image: jinong-ai-agents:${AGENT_IMAGE_TAG:-latest}
+    container_name: ${AGENT_CONTAINER_NAME:-jinong-ai-agents}
     restart: unless-stopped
     ports:
       # host 127.0.0.1:7003 -> container 8080. 외부 노출은 호스트 nginx(jinong-stt-report-generation.jinongservice.co.kr, TLS)만.
-      # 7001=hatchery-serving, 7002=jinong-ai-gateway, 7003=이 서비스.
+      # 7001=hatchery-serving, 7002=jinong-ai-gateway, 7003=이 서비스, 7013=이 서비스 dev.
       - "${AGENT_BIND:-127.0.0.1:7003}:8080"
     env_file:
       - .env

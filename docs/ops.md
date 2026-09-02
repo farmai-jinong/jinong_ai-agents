@@ -2,9 +2,14 @@
 
 호스트: 지농서버(AWS EC2 `13.125.70.226`), `ssh jinong_aws_office`(사무실, 22) / `ssh jinong_aws`(외부, 7022), 사용자 `ubuntu`.
 포트: **7003**(loopback) — 7001 hatchery-serving, 7002 jinong-ai-gateway 와 나란히. 외부는 호스트 nginx(443) 로만.
+같은 호스트의 **dev 인스턴스**는 **7013** / `apps/jinong_ai-agents-dev` / `jinong-stt-report-generation-dev.jinongservice.co.kr` — §7.
 
-## 0. 현재 상태 (2026-08-24)
+## 0. 현재 상태 (2026-09-02)
 
+- 2026-09-02 dev 인스턴스 분리(§7): 같은 호스트에 `jinong-ai-agents-dev`(`127.0.0.1:7013`, `apps/jinong_ai-agents-dev`,
+  compose 볼륨 `jinong_ai-agents-dev_agent_data`, `S3_PREFIX=agents/voicecall-dev`, 별도 `AGENT_API_KEY`) 기동. 기존 7003 인스턴스는
+  무변경(백엔드 `dev.jinongservice.co.kr` 를 계속 바라봄 — prod 백엔드 `data.` 전환은 별도 작업). dev 공개 HTTPS 는 DNS A
+  레코드 등록 후 §7-3 절차로 개통.
 - 2026-08-24 스토리지 MinIO 전환 + 백엔드 콜백 활성화 배포: 백엔드 MinIO에 `jinong-agri-stt` 버킷·전용 사용자
   `jinong-ai-agents` 생성(아래 자격증명 메모), 서버 `.env` 에 `S3_ENDPOINT_URL`/전용 키/`CALLBACK_*` 반영(구 AWS 키는
   `.env.bak.minio`). 로컬에서 실녹음(`voice-recordings/records/...ogg`) E2E COMPLETED 확인 후 배포.
@@ -54,6 +59,8 @@
 
 ## 1. 최초 1회
 
+(dev 인스턴스는 §7 — 여기 절차의 dev 판.)
+
 1. DNS A `jinong-stt-report-generation.jinongservice.co.kr → 13.125.70.226` (jinong-stt 때와 같은 경로로 요청).
 2. 서버 디렉터리: `sudo mkdir -p /srv/jinong-agent/{logs,letsencrypt,deploy}` (deploy/letsencrypt 스크립트를 `/srv/jinong-agent/deploy/letsencrypt/` 로 복사).
 3. nginx vhost: `deploy/nginx/jinong-stt-report-generation.jinongservice.co.kr.conf` → `/etc/nginx/sites.d/` (**HTTPS 블록 주석**) → `sudo nginx -t && sudo systemctl reload nginx`.
@@ -63,10 +70,11 @@
 ## 2. 배포
 
 ```bash
-./deploy/deploy.sh                 # rsync(.env 제외) → 원격 docker compose up -d --build → :7003/healthz 폴링 → upstream health
+./deploy/deploy.sh                 # prod: rsync(.env 제외) → 원격 docker compose up -d --build → AGENT_BIND(:7003)/healthz 폴링 → upstream health
+./deploy/deploy.sh dev             # dev : apps/jinong_ai-agents-dev, :7013 (§7)
 REMOTE=jinong_aws ./deploy/deploy.sh
 ```
-로그: `ssh jinong_aws_office 'cd apps/jinong_ai-agents && docker compose logs -f --tail=100 agent'`
+로그: `ssh jinong_aws_office 'cd apps/jinong_ai-agents && docker compose logs -f --tail=100 agent'` (dev 는 `apps/jinong_ai-agents-dev`)
 
 ## 3. 검증
 
@@ -205,3 +213,70 @@ cat docs/eval-journal.md && git log --oneline eval/auto-tune
 | daily 트리거 `422 NO_TRANSCRIBED_CALLS` / `FARM_MISMATCH` | `COMPLETED` call 0건 / call 들의 `farm.farm_id` 상이 — call_ids 구성 재확인 |
 | daily 재생성에 farmos 조회가 빠짐 | 토큰은 terminal 마다 purge — `/regenerate` body 에 새 `farm_access_token` 을 매번 포함해야 함 |
 | daily 산출물 확인 | `GET /v1/daily-diaries/{id}` 또는 `aws s3 ls s3://jinong-agri-stt/agents/voicecall/daily/<diary_id>/ --recursive --endpoint-url https://smart-minio.jinongservice.co.kr` |
+
+## 7. dev 인스턴스 (같은 호스트, 2026-09-02)
+
+환경별 분리 배포의 첫 단계. 코드에 환경 개념은 없고 **`.env` 만 다른** 두 번째 compose 프로젝트다.
+
+브랜치 ↔ 인스턴스: `dev` 브랜치(기본 작업 브랜치) → `./deploy/deploy.sh dev`, `prod` 브랜치 → `./deploy/deploy.sh`(7003).
+승격은 `dev` → `prod` 머지 후 `prod` 에서 배포. `main` 은 안정 이력 라인. deploy.sh 는 현재 브랜치가 환경과 다르면 경고만 한다
+(rsync 는 워킹트리 기준이라 브랜치가 아니라 **체크아웃된 내용**이 올라간다).
+
+prod 와 나란히 두는 값:
+
+| 항목 | prod | dev |
+|---|---|---|
+| 원격 디렉터리(=compose 프로젝트명, 볼륨 prefix) | `apps/jinong_ai-agents` | `apps/jinong_ai-agents-dev` (볼륨 `jinong_ai-agents-dev_agent_data` 자동 분리 — compose 에 `name:` 을 넣지 말 것) |
+| 컨테이너 / 이미지 | `jinong-ai-agents` / `:latest` | `AGENT_CONTAINER_NAME=jinong-ai-agents-dev` / `AGENT_IMAGE_TAG=dev` |
+| 호스트 포트 | `AGENT_BIND=127.0.0.1:7003` | `AGENT_BIND=127.0.0.1:7013` |
+| 도메인 / `PUBLIC_BASE_URL` | `jinong-stt-report-generation.jinongservice.co.kr` | `jinong-stt-report-generation-dev.jinongservice.co.kr` |
+| `S3_PREFIX` (같은 `jinong-agri-stt` 버킷·같은 MinIO 사용자) | `agents/voicecall` | `agents/voicecall-dev` |
+| `/srv` 운영 디렉터리(로그·인증서) | `/srv/jinong-agent` | `/srv/jinong-agent-dev` |
+| `AGENT_API_KEY` | 기존 | 별도 발급 → 백엔드팀 dev 설정 |
+| `STT_API_KEY`·MinIO 키·`CALLBACK_API_KEY`·SA 키·백엔드 URL | 기존 | **재사용**(게이트웨이 재기동 없이 시작; 게이트웨이 `GATEWAY_API_KEY` 에 dev 전용 키를 추가하면 그때 교체) |
+
+### 7.1 부트스트랩 (DNS 없이 가능)
+
+```bash
+# (a) dev .env — prod .env 에서 파생, 4개 치환 + compose 변수 2개 추가 (deploy.sh 는 .env 를 절대 덮어쓰지 않으므로 먼저 만든다)
+ssh jinong_aws_office 'cd ~/apps && mkdir -p jinong_ai-agents-dev && \
+  NEWKEY=$(python3 -c "import secrets;print(secrets.token_urlsafe(32))") && \
+  sed -e "s#^PUBLIC_BASE_URL=.*#PUBLIC_BASE_URL=https://jinong-stt-report-generation-dev.jinongservice.co.kr#" \
+      -e "s#^S3_PREFIX=.*#S3_PREFIX=agents/voicecall-dev#" \
+      -e "s#^AGENT_BIND=.*#AGENT_BIND=127.0.0.1:7013#" \
+      -e "s#^AGENT_API_KEY=.*#AGENT_API_KEY=$NEWKEY#" \
+      jinong_ai-agents/.env > jinong_ai-agents-dev/.env && \
+  printf "AGENT_CONTAINER_NAME=jinong-ai-agents-dev\nAGENT_IMAGE_TAG=dev\n" >> jinong_ai-agents-dev/.env && \
+  chmod 600 jinong_ai-agents-dev/.env'
+# (b) 배포 → :7013/healthz + upstream health 까지 확인
+./deploy/deploy.sh dev
+# (c) /srv 디렉터리 + nginx vhost (HTTP 만 — sites.d 사본의 HTTPS 블록을 주석 처리한 채 reload)
+ssh jinong_aws_office 'sudo mkdir -p /srv/jinong-agent-dev/{logs,letsencrypt,deploy} && \
+  sudo cp -r ~/apps/jinong_ai-agents-dev/deploy/letsencrypt /srv/jinong-agent-dev/deploy/ && \
+  sudo cp ~/apps/jinong_ai-agents-dev/deploy/nginx/jinong-stt-report-generation-dev.jinongservice.co.kr.conf /etc/nginx/sites.d/'
+#   → sudo sed 로 `listen 443` ~ `redirect-to-https.conf` 줄 주석 → sudo nginx -t && sudo systemctl reload nginx
+```
+
+### 7.2 검증
+
+```bash
+ssh jinong_aws_office 'docker ps --filter name=jinong-ai-agents --format "{{.Names}} {{.Ports}} {{.Status}}"; \
+  curl -s 127.0.0.1:7013/healthz; echo; curl -s 127.0.0.1:7003/healthz; echo'        # 둘 다 healthy, prod 무영향
+ssh jinong_aws_office 'cd apps/jinong_ai-agents-dev && AGENT_URL=http://127.0.0.1:7013 AGENT_API_KEY=$(grep ^AGENT_API_KEY= .env|cut -d= -f2) \
+  ./scripts/curl_flow.sh voice-recordings <key>'                                        # COMPLETED → 산출물은 agents/voicecall-dev/<call_id>/ 아래에만
+```
+
+### 7.3 공개 HTTPS (DNS A `jinong-stt-report-generation-dev.jinongservice.co.kr → 13.125.70.226` 등록 후)
+
+```bash
+ssh jinong_aws_office 'cd /srv/jinong-agent-dev && export INSTANCE=jinong-agent-dev DOMAIN_NAME=jinong-stt-report-generation-dev.jinongservice.co.kr && \
+  bash deploy/letsencrypt/cert.sh --dry-run && bash deploy/letsencrypt/cert.sh'
+# vhost HTTPS 블록 주석 해제 → sudo nginx -t && sudo systemctl reload nginx
+# root crontab: 58 4 * * * INSTANCE=jinong-agent-dev /srv/jinong-agent-dev/deploy/letsencrypt/renew.sh >> /srv/jinong-agent-dev/logs/letsencrypt.log 2>&1
+AGENT_URL=https://jinong-stt-report-generation-dev.jinongservice.co.kr AGENT_API_KEY=<dev 키> ./scripts/smoke_remote.sh
+```
+
+### 7.4 인수인계·후속
+
+- dev `AGENT_API_KEY` + dev URL 을 백엔드(kafka-gateway) dev 설정으로 전달. 게이트웨이 레포 CLAUDE.md 포트 표(SSOT)에 `7013=agents-dev` 추가.
+- 후속: 게이트웨이 dev 전용 STT 키 분리, prod 인스턴스의 `FARMOS_BASE_URL/AP_BACKEND_BASE_URL/SUMMARY_CALLBACK_URL` 을 `data.` 로 전환.

@@ -32,9 +32,12 @@ STORAGE_IMPL=local ./scripts/run_local.sh
 ## 배포 (지농서버, 포트 7003, nginx TLS `jinong-stt-report-generation.jinongservice.co.kr`)
 
 ```bash
-./deploy/deploy.sh          # rsync + 원격 docker compose up -d --build + health 확인
+./deploy/deploy.sh          # prod: rsync + 원격 docker compose up -d --build + health 확인
+./deploy/deploy.sh dev      # dev : 같은 호스트 apps/jinong_ai-agents-dev, 포트 7013, jinong-stt-report-generation-dev.jinongservice.co.kr
 ```
-최초 1회(DNS·nginx vhost·인증서·`.env`)는 `docs/ops.md`.
+최초 1회(DNS·nginx vhost·인증서·`.env`)는 `docs/ops.md`(dev 는 §7).
+
+브랜치: 기본 작업 브랜치는 **`dev`**(→ dev 인스턴스). `prod` 는 7003 운영 인스턴스에 올라간 것(`dev` → `prod` 머지로 승격, prod 배포는 `prod` 에서만). `main` 은 안정 이력.
 
 ## 설계 요점
 

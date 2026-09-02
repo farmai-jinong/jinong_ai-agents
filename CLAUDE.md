@@ -14,6 +14,12 @@ LangGraph pipeline. It holds no model and no GPU. Product spec SSOT: farmos cons
 
 Deploy target: 지농서버(AWS EC2), Docker, host port **7003** (loopback) behind host nginx
 `jinong-stt-report-generation.jinongservice.co.kr`. `ssh jinong_aws_office` (office, 22) / `ssh jinong_aws` (external, 7022).
+A **dev** instance runs on the same host (`./deploy/deploy.sh dev` → `apps/jinong_ai-agents-dev`, port **7013**,
+`jinong-stt-report-generation-dev.jinongservice.co.kr`, `S3_PREFIX=agents/voicecall-dev`); only `.env` differs — `docs/ops.md` §7.
+
+Branches: **`dev` is the default working branch** (deploy with `./deploy/deploy.sh dev`); `prod` is what runs on
+7003 (`./deploy/deploy.sh` from `prod` only, promoted by merging `dev` → `prod`); `main` is kept as the stable
+history line. Feature/eval branches fork from `dev`.
 
 ## Hard rules
 
@@ -65,7 +71,8 @@ STORAGE_IMPL=local ./scripts/run_local.sh && ./scripts/e2e_local.sh <audio>   # 
 python -m app.agents.run --transcript tests/agents/fixtures/calls/<fixture>.json --out out/   # pipeline dry-run
 python -m app.agents.voice_eval --audio-dir ~/Downloads/recordings   # 실녹음 5건 평가 → out/voice-eval/report.md (ops.md §4.2)
 python -m app.agents.voice_eval.optimize --max-iters 3       # 자가 개선 루프 → docs/eval-journal.md, eval/auto-tune (ops.md §4.3)
-./deploy/deploy.sh                          # to jinong_aws_office (see docs/ops.md for first-time DNS/TLS/.env)
+./deploy/deploy.sh                          # prod → jinong_aws_office :7003 (see docs/ops.md for first-time DNS/TLS/.env)
+./deploy/deploy.sh dev                      # dev  → same host, apps/jinong_ai-agents-dev :7013 (ops.md §7)
 ```
 
 ## Contract pointers
