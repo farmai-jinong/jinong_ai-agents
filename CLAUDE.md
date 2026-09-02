@@ -51,7 +51,7 @@ app/agents/           LangGraph pipeline: interface.py (contract), fake.py, grap
 app/schemas/          calls (API), daily (daily-diaries API), transcript (MergedTranscript), pipeline (CallContext/PipelineResult contract)
 tests/                pytest-asyncio + respx (STT/farmos) + moto (S3), FakePipeline; tests/agents/ for the pipeline, tests/agents/testcases/voice/ (대본·정답·임계값 — 녹음은 리포지토리 밖)
 deploy/               deploy.sh (rsync + remote compose), nginx vhost, letsencrypt cert/renew
-docs/                 api-reference.md (contract), architecture.md, ops.md (runbook), integration-briefing.md (내부), integration-handoff.md (백엔드 전달용), eval-journal.md/.jsonl (자가 개선 루프 기록), proposals/ (구조 개선 제안서 — 자동 적용 안 함)
+docs/                 api-reference.md (contract), architecture.md, agent-flow.md (노드별 판정 기준·프롬프트 출처), ops.md (runbook), integration-briefing.md (내부), integration-handoff.md (백엔드 전달용), eval-journal.md/.jsonl (자가 개선 루프 기록), proposals/ (구조 개선 제안서 — 자동 적용 안 함)
 scripts/              run_local.sh, curl_flow.sh, e2e_local.sh (로컬 파일 E2E), daily_flow.sh (날짜별 일지 스모크), smoke_remote.sh, farmos_login.py (농가 JWT 발급)
 ```
 
