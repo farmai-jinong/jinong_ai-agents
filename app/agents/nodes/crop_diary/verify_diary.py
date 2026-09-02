@@ -18,10 +18,20 @@ from ...render.markdown import render_diary
 from ...schemas import DiaryResult, DiaryVerdictOut
 from ...state import CropDiaryState
 from .._common import err
+from .render_diary import EMPTY_PRAISE
 
 log = logging.getLogger(__name__)
 
 SKIP_STATUSES = ("EMPTY", "UNRESOLVED_CROP")
+
+
+def strip_lead_quotes(markdown: str) -> str:
+    """상단 `> 📝 요약 / > 💬 격려` 인용 블록을 떼어낸다 — 통화 요약·격려는 이 작물의 일지 내용이 아니므로 판정 근거에서 뺀다."""
+    lines = markdown.splitlines()
+    i = 0
+    while i < len(lines) and lines[i].startswith(">"):
+        i += 1
+    return "\n".join(lines[i:]).lstrip("\n")
 
 
 async def verify_diary(state: CropDiaryState, config) -> dict:  # type: ignore[no-untyped-def]
@@ -31,7 +41,7 @@ async def verify_diary(state: CropDiaryState, config) -> dict:  # type: ignore[n
         return {}                                   # 이미 빈 판정이거나 검수 비활성 — LLM 호출 없음
     msgs = [SystemMessage(content=load_system("verify_diary")),
             HumanMessage(content=render_user("verify_diary", crop_name=d.prdlst_nm, diary_date=d.diary_date,
-                                             diary_markdown=d.markdown, content=d.content))]
+                                             diary_markdown=strip_lead_quotes(d.markdown), content=d.content))]
     try:
         out, trace = await structured_call(deps.llm, DiaryVerdictOut, msgs,
                                            name=f"verify_diary_{d.prdlst_code or 'x'}",
@@ -46,10 +56,11 @@ async def verify_diary(state: CropDiaryState, config) -> dict:  # type: ignore[n
     if out.has_diary_content or out.confidence < deps.settings.verify_diary_min_confidence:
         return {"diary": d, "usage": [trace.usage()]}
 
-    # 강등 — 빈 템플릿으로 다시 렌더하고 prefill 을 거둔다(농가 앱에 빈 초안을 밀어 넣지 않기 위해)
+    # 강등 — 같은 템플릿을 EMPTY 로 다시 렌더하고 prefill 을 거둔다(농가 앱에 빈 초안을 밀어 넣지 않기 위해)
     d.status = "EMPTY"
     d.prefill = None
     d.prefill_ready = False
+    d.praise = EMPTY_PRAISE
     d.warnings.append(f"검수: 실질 영농일지 내용 없음 — {out.reason}".strip().rstrip("—").strip())
     d.markdown = render_diary(d, state["ctx"], state["transcript"], state["crop_facts"],
                               model=getattr(deps.llm, "model_name", None) or deps.settings.llm_model,

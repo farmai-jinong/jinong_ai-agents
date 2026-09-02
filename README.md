@@ -43,5 +43,5 @@ STORAGE_IMPL=local ./scripts/run_local.sh
 
 - 상태 어휘는 앱(`sttStatus`)과 동일: `NONE / PROCESSING / COMPLETED / EMPTY / FAILED`. 같은 `call_id`·같은 오디오 재전송은 멱등.
 - LLM 은 env 로 provider 전환: `gemini`(Vertex AI `gemini-3.5-flash`, 서비스 계정 키 — 현재 기본) / `openai` / `jinong`(게이트웨이 vLLM, EXAONE). gemini·openai 는 외부 처리라 동의서 §7(외부 위탁 없음) 충족은 게이트웨이(jinong) 전환이 최종 목표.
-- 에이전트는 farmos 에 쓰지 않는다. 영농일지는 앱의 5개 블록(주요 농작업·기타 기록사항·병해충·방제이력·사진)에 맞춰 markdown + `PutDiaryDTO` 형태 prefill 로 돌려주고, 농가가 앱에서 확인 후 저장한다.
+- 에이전트는 farmos 에 쓰지 않는다. 영농일지는 앱의 5개 블록(주요 농작업·기타 기록사항·병해충·방제이력·사진)에 맞춰 markdown + `PutDiaryDTO` 형태 prefill 로 돌려주고, 농가가 앱에서 확인 후 저장한다. 마크다운의 `##` 섹션 집합은 항상 고정이며(빈 섹션은 `언급 없음` 한 줄), 맨 위 `> 📝 통화 요약 / > 💬 격려` 인용 블록은 섹션이 아니라 읽는 사람용 머리말이라 prefill 에 들어가지 않는다.
 - 날짜별 일지는 별도 리소스(`/v1/daily-diaries`, `diary_id` 멱등 키)로, 백엔드가 명시적으로 트리거한다. 통화 전사를 시간순으로 병합해 같은 파이프라인을 1회 실행하고 보고서 노드는 스킵한다.

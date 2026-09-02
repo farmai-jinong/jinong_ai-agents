@@ -3,6 +3,7 @@
 import pytest
 
 from app.agents.interface import PipelineEmpty
+from app.agents.nodes.crop_diary.verify_diary import strip_lead_quotes
 from app.schemas.pipeline import PipelineResult
 
 from .conftest import fake_llm, load_call, make_pipeline
@@ -33,7 +34,10 @@ async def test_verdict_empty_downgrades_and_rerenders(settings, farmos_fake):
     d = res.diaries[0]
     assert d.status == "EMPTY"
     assert EMPTY_TEMPLATE_LINE in d.markdown
-    assert "사파이어" not in d.markdown                       # 원래 초안이 남아 있지 않다
+    body = strip_lead_quotes(d.markdown)
+    assert "사파이어" not in body                              # 원래 초안이 남아 있지 않다(상단 통화 요약 줄은 예외)
+    assert d.markdown.startswith("> 📝 **통화 요약** · ") and "다음 통화도 응원할게요" in d.markdown   # 요약 유지, 격려는 중립 문구
+    assert "꼼꼼히" not in d.markdown
     assert d.structured["prefill"] is None and d.structured["prefill_ready"] is False
     assert d.structured["verify"]["has_diary_content"] is False
     assert any("검수" in w for w in res.warnings)
@@ -115,3 +119,10 @@ async def test_report_failure_does_not_report_empty(settings, farmos_fake):
                    fail_kinds={"report"})
     res = await make_pipeline(settings, llm, farmos_fake).run(tr, ctx)
     assert isinstance(res, PipelineResult) and res.diaries[0].status == "EMPTY"
+
+
+def test_strip_lead_quotes_removes_only_top_block():
+    """검수 LLM 입력에서는 상단 요약·격려 인용 블록만 떼고, 본문 안의 `>` 안내문은 그대로 둔다."""
+    md = "> 📝 **통화 요약** · 요약\n> 💬 격려 🌱\n\n| 항목 | 값 |\n|---|---|\n> 이 날짜에 기존 일지(#7)가 있어요.\n\n## 주요 농작업\n- 언급 없음\n"
+    out = strip_lead_quotes(md)
+    assert out.startswith("| 항목 | 값 |") and "격려" not in out and "기존 일지(#7)" in out

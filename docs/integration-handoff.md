@@ -198,7 +198,7 @@ Body 선택: `{"retranscribe": false, "reason": "...", "farm_access_token": "<�
     "speaker_map": {"f0:A": "consultant", "f0:B": "farmer"},
     "diaries": [{
       "prdlst_code": null, "prdlst_nm": "마늘", "diary_date": "2026-08-21", "status": "PARTIAL",
-      "markdown": "# 영농일지 — 마늘 (2026-08-21)\n\n| 항목 | 값 |\n…(총 1,791자)",
+      "markdown": "> 📝 **통화 요약** · …\n> 💬 …\n\n| 항목 | 값 |\n…(총 1,800자 내외; H1 제목 없음, 섹션은 항상 주요 농작업·기타 기록사항·병해충·방제이력·농작업 사진·투입 제품·향후 작업·확인 계획·근거 발화·참고)",
       "structured": {
         "prdlst_code": null, "prdlst_nm": "마늘", "diary_date": "2026-08-21", "status": "PARTIAL",
         "schema_version": "1",
@@ -388,7 +388,7 @@ STT가 붙이는 화자 글자 `A`/`B`는 **그 녹음에서 먼저 말한 순�
     "speaker_map": {"f0:A": "consultant", "f0:B": "farmer", "f1:A": "consultant", "f1:B": "farmer"},
     "diaries": [
       {"prdlst_code": null, "prdlst_nm": "벼", "diary_date": "2026-08-21", "status": "PARTIAL",
-       "markdown": "# 영농일지 — 벼 (2026-08-21) …(총 5,592자)",
+       "markdown": "> 📝 **통화 요약** · … …(총 5,600자 내외)",
        "structured": {"…": "통화별 diaries[].structured 와 동일 모양"},
        "s3_key_md": "agents/voicecall/daily/daily-smoke-20260821/artifacts/diary/unresolved.md",
        "s3_key_json": "agents/voicecall/daily/daily-smoke-20260821/artifacts/diary/unresolved.json"},

@@ -97,7 +97,7 @@ kafka-gateway ──POST /v1/calls ──▶ ⑧ agent ──GET s3://bucket/key
 "추출된 사실이 하나라도 있는가"만 보므로, 잡담에서 사실 1건이 잘못 뽑히면 모든 칸이 `언급 없음` 인 빈
 템플릿이 `OK` 로 나간다. 검수 노드는 **렌더된 초안을 독립 LLM 패스로 다시 읽고**(작물당 1콜,
 `VERIFY_DIARY_ENABLED`) 실질 내용이 없으면 `EMPTY` 로 **강등만** 한다(승격 없음, 애매하면 유지).
-강등 시 `diary_empty.md.j2` 로 재렌더하고 `prefill` 을 회수한다. 판정은 `structured.verify` 에 남는다.
+강등 시 같은 `diary.md.j2` 를 `status=EMPTY` 로 재렌더(섹션 집합은 그대로, 내용만 `언급 없음`)하고 `prefill` 을 회수한다. 검수 LLM 입력에서는 상단 `> 📝 통화 요약 / > 💬 격려` 인용 블록을 떼어낸다(`strip_lead_quotes`) — 통화 요약이 빈 일지를 '내용 있음'으로 보이게 하지 않기 위해. 판정은 `structured.verify` 에 남는다.
 LLM 실패는 fail-open(규칙 판정 유지 + warning). `VERIFY_DIARY_MIN_CONFIDENCE` 미만 확신이면 강등하지 않는다.
 
 `LangGraphPipeline.run` 의 EMPTY 롤업: 전 작물이 `EMPTY|UNRESOLVED_CROP` 이고 보고서도 비면 `PipelineEmpty`.

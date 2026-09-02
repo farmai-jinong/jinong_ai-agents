@@ -79,8 +79,10 @@ class VoiceCase:
 
     @property
     def crop_name(self) -> str:
-        """expect.json 의 diary_status 키(=prdlstCode)와 짝이 되는 작물명은 정답 일지 제목에 있다."""
-        m = re.search(r"^#\s*영농일지\s*—\s*([^\(\n]+)", self.expected_diary, re.M)
+        """expect.json 의 diary_status 키(=prdlstCode)와 짝이 되는 작물명은 정답 일지의 `| 작물 | 이름 (코드) |` 표 행에 있다
+        (구형 정답의 `# 영농일지 — 이름` 제목도 폴백으로 읽는다)."""
+        m = re.search(r"^\|\s*작물\s*\|\s*([^\(|\n]+)", self.expected_diary, re.M) \
+            or re.search(r"^#\s*영농일지\s*—\s*([^\(\n]+)", self.expected_diary, re.M)
         return (m.group(1).strip() if m else "") or "작물"
 
     @property

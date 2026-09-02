@@ -11,7 +11,7 @@ from .conftest import FIX, load_call
 
 NOW = datetime(2026, 8, 19, 12, 0, tzinfo=UTC)
 DIARY_HEADINGS = ["## 주요 농작업", "## 기타 기록사항", "## 병해충", "## 방제이력", "## 농작업 사진",
-                  "## 투입 제품 (농약·비료·종자·농자재)", "## 향후 작업·확인 계획", "## 근거 발화"]
+                  "## 투입 제품 (농약·비료·종자·농자재)", "## 향후 작업·확인 계획", "## 근거 발화", "## 참고"]
 REPORT_HEADINGS = ["## 대화 요약", "## 상담 개요", "## 농가·농장·작물 현황", "## 주요 문의·문제사항",
                    "## 컨설팅·권고 내용", "## 농가 조치사항", "## 후속 확인·상담 계획", "## 근거 발화"]
 
@@ -31,10 +31,15 @@ def test_diary_headings_order_and_footer():
                                           evidence=[2], payload={"occrrncStepNm": "2%미만", "occrrncStepDesc": "주의"})])
     d = DiaryResult(prdlst_code="0804MM", prdlst_nm="딸기", diary_date="2026-08-19", status="OK", gs_nm="수확기",
                     mapping=rep, content="[AI 초안·통화 기반]\n테스트", evidence=[2, 4])
+    d.summary_line = "딸기 잿빛곰팡이 초기 발생 상담"
+    d.praise = "적엽까지 꼼꼼히 챙기셨네요 👍"
     md = render_diary(d, ctx, nt, CropFacts(), model="m", prompt_version="1", now=NOW)
-    assert md.startswith("# 영농일지 — 딸기 (2026-08-19)")
+    assert md.startswith("> 📝 **통화 요약** · 딸기 잿빛곰팡이 초기 발생 상담\n> 💬 적엽까지 꼼꼼히 챙기셨네요 👍\n\n| 항목 | 값 |")
+    assert "# 영농일지" not in md
     assert _ordered(md, DIARY_HEADINGS)
-    assert "- [x] 관수 (근거: #4)" in md and "신규 후보" in md and "런너제거" in md
+    assert "- [x] 관수 (근거: #4)" in md and "- [ ] 런너정리 (신규 후보" in md and "런너제거" in md
+    assert "언급 없음" not in md.split("## 기타 기록사항")[0]          # 항목이 있으면 '언급 없음' 은 안 나온다
+    assert "## 참고\n- 없음" in md
     assert "잿빛곰팡이병 — 발생단계: 2%미만 (주의)" in md
     assert "AI 초안 — 농가 확인 후 저장" in md and "프롬프트 v1" in md
     assert "`#2`" in md and "`#4`" in md
@@ -44,8 +49,23 @@ def test_diary_empty_template():
     tr, ctx = load_call("grape_multi_crop_no_work")
     nt = build_turns(tr)
     d = DiaryResult(prdlst_code="0603MM", prdlst_nm="포도", diary_date="2026-08-19", status="EMPTY")
+    d.praise = "다음 통화도 응원할게요 🌱"
     md = render_diary(d, ctx, nt, CropFacts(), model=None, prompt_version="1", now=NOW)
-    assert "확인되지 않았습니다" in md and "## 주요 농작업\n- 언급 없음" in md
+    assert md.startswith("> 📝 **통화 요약** · (요약 없음)\n> 💬 다음 통화도 응원할게요 🌱")
+    assert "확인되지 않았어요" in md and "## 주요 농작업\n- 언급 없음" in md
+    assert _ordered(md, DIARY_HEADINGS)                                  # 빈 일지도 같은 섹션 집합
+    assert "## 근거 발화\n- (없음)" in md and "## 참고\n- 없음" in md
+
+
+def test_diary_no_mention_never_coexists_with_items():
+    """주요 농작업: 매핑 실패(no_refs)·신규 후보만 있어도 '언급 없음' 은 찍히지 않는다."""
+    tr, ctx = load_call("strawberry_botrytis")
+    nt = build_turns(tr)
+    rep = MappingReport(farmworks=[MappedItem(item_id="fw0", family="farmwork", source="관수", status="no_refs", evidence=[4])])
+    d = DiaryResult(prdlst_code="0804MM", prdlst_nm="딸기", diary_date="2026-08-19", status="PARTIAL", mapping=rep)
+    md = render_diary(d, ctx, nt, CropFacts(), model=None, prompt_version="1", now=NOW)
+    block = md.split("## 주요 농작업")[1].split("## 기타 기록사항")[0]
+    assert "- [ ] 관수 (표준 목록 조회 불가" in block and "언급 없음" not in block
 
 
 def test_report_headings_and_verification_mark():

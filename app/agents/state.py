@@ -52,6 +52,7 @@ class CropDiaryState(TypedDict, total=False):
     farm: FarmContext
     target: CropTarget
     crop_facts: CropFacts
+    call_summary: str                           # CallFacts.one_line_summary — 일지 상단 요약 줄(작물 공통)
     refs: Any                                   # FarmosRefs | None
     refs_status: str
     mapping: MappingReport

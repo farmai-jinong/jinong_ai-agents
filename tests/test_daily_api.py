@@ -175,7 +175,7 @@ async def test_list_and_artifact_endpoints(client, app, stt_mock):
     code = detail["result"]["diaries"][0]["prdlst_code"]
 
     r = await client.get(f"/v1/daily-diaries/{DAILY['diary_id']}/artifacts/diary/{code}")
-    assert r.status_code == 200 and r.text.startswith("# 영농일지")
+    assert r.status_code == 200 and r.text.startswith("> 📝") and "## 주요 농작업" in r.text
     r = await client.get(f"/v1/daily-diaries/{DAILY['diary_id']}/artifacts/diary/{code}", params={"format": "json"})
     assert r.status_code == 200 and r.json()["diary_date"] == "2026-08-20"
 

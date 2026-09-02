@@ -1,4 +1,5 @@
-"""Markdown 렌더 — Jinja2 템플릿 + 필터. 산출물 헤딩은 앱 화면 블록/동의서 §4 와 일치."""
+"""Markdown 렌더 — Jinja2 템플릿 + 필터. 산출물 `##` 헤딩은 앱 화면 블록/동의서 §4 와 일치하며 항상 같은 집합으로 나온다.
+맨 위 `> 📝 통화 요약 / > 💬 격려` 인용 블록은 섹션이 아니다(앱 블록에 대응하지 않고 prefill 에도 들어가지 않는다)."""
 
 from __future__ import annotations
 
@@ -106,7 +107,8 @@ def _duration(sec: float) -> str:
 # --------------------------------------------------------------------------- diary
 def render_diary(d: DiaryResult, ctx: CallContext, transcript: NormalizedTranscript, crop_facts: CropFacts,
                  *, model: str | None, prompt_version: str, now: datetime) -> str:
-    template = "diary_empty.md.j2" if d.status in ("EMPTY", "UNRESOLVED_CROP") else "diary.md.j2"
+    # EMPTY/UNRESOLVED_CROP 도 같은 템플릿 — 섹션 집합을 고정하고 status 로만 내용을 비운다
+    template = "diary.md.j2"
     products = [p for p in crop_facts.products]
     plans: list[dict[str, Any]] = []
     for f in crop_facts.farmworks:

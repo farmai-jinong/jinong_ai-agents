@@ -37,7 +37,7 @@ _DEFAULTS: dict[str, Any] = {
                 "follow_ups": [], "has_farmwork_content": False, "stt_uncertainties": []},
     "extract_merge": {"one_line_summary": "", "keywords": []},
     "disambiguate": {"picks": []},
-    "diary_content": {"content": "[AI 초안·통화 기반]\n언급 없음", "evidence": []},
+    "diary_content": {"content": "[AI 초안·통화 기반]\n언급 없음", "praise": None, "evidence": []},
     "verify_diary": {"has_diary_content": True, "reason": "", "confidence": 1.0, "evidence": []},
     "judge_diary": {"dimensions": [{"name": n, "score": 5, "reason": ""} for n in
                                    ("coverage", "faithfulness", "classification", "severity", "chatter", "format")],

@@ -60,7 +60,7 @@ async def test_end_and_get_flow(client, app, stt_mock):
     assert body["stt_progress"] == {"total": 1, "transcribed": 1, "failed": 0, "pending": 0}
     res = body["result"]
     assert res["diaries"][0]["prdlst_code"] == "0804MM"
-    assert res["diaries"][0]["markdown"].startswith("# 영농일지")
+    assert res["diaries"][0]["markdown"].startswith("> 📝") and "## 주요 농작업" in res["diaries"][0]["markdown"]
     assert res["diaries"][0]["s3_key_md"] == "agents/voicecall/c3/artifacts/diary/0804MM.md"
     assert res["report"]["markdown"].startswith("# 컨설팅 보고서")
     assert res["transcript_key"] == "agents/voicecall/c3/transcript/merged.json"

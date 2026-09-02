@@ -193,7 +193,7 @@ async def test_summary_callback_completed(client, app, stt_mock, s3_env):
     res = body["result"]
     diary = res["diaries"][0]
     assert diary["s3_key_md"] == "agents/voicecall/cb1/artifacts/diary/0804MM.md"
-    assert diary["markdown"].startswith("# 영농일지 —")      # 일지는 응답으로 그대로 나간다
+    assert diary["markdown"].startswith("> 📝") and "## 주요 농작업" in diary["markdown"]      # 일지는 응답으로 그대로 나간다
     assert res["report"]["s3_key_md"] == "agents/voicecall/cb1/artifacts/report.md"
     assert res["transcript_key"] == "agents/voicecall/cb1/transcript/merged.json"
     # (2) 요약도 결과에 실려 id 로 다시 꺼낼 수 있다
@@ -220,7 +220,7 @@ async def test_summary_callback_completed(client, app, stt_mock, s3_env):
     r = await client.get("/v1/calls/cb1/artifacts/summary")
     assert r.status_code == 200 and r.text.strip() == content
     r = await client.get("/v1/calls/cb1/artifacts/diary/0804MM")
-    assert r.status_code == 200 and "영농일지" in r.text
+    assert r.status_code == 200 and r.text.startswith("> 📝") and "## 주요 농작업" in r.text
     r = await client.get("/v1/calls/cb1/artifacts/report")
     assert r.status_code == 200 and "컨설팅 보고서" in r.text
 

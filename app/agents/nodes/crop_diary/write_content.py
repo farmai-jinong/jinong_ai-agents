@@ -18,6 +18,7 @@ from .._common import err
 
 log = logging.getLogger(__name__)
 MAX_CHARS = 500
+MAX_PRAISE_CHARS = 80
 
 
 def facts_evidence(cf: CropFacts) -> list[int]:
@@ -34,12 +35,16 @@ def residual_facts(cf: CropFacts, unmatched_fw: list[str]) -> dict:
     follow_ups·actions·planned/recommended 제품·planned 작업은 '향후 작업·확인 계획'이 이미 렌더하므로
     입력에서 제외한다 — 섹션 배타성을 프롬프트 문장이 아니라 입력 집합으로 보장한다.
     서술(note·detail)은 반드시 그 사실에 붙어 들어온다 — 어떤 사실에도 안 붙는 잡담은 담을 칸이 없다.
+    `체크된_농작업` 은 예외 — content 입력이 아니라 격려 한 줄(praise)의 근거 전용이며 프롬프트가 그렇게 지시한다.
     """
     farmworks = []
+    checked_names: list[str] = []
     for f in cf.farmworks:
         if f.when == "planned":
             continue
         checked = f.when in ("today", "ongoing", "unknown") and f.name not in unmatched_fw
+        if checked and f.name not in checked_names:
+            checked_names.append(f.name)
         if checked and not f.detail:
             continue                     # 체크 줄로 이미 표현됨 — 부가 서술이 있을 때만 산문으로
         farmworks.append({"name": f.name, "when": f.when, "date_hint": f.date_hint,
@@ -48,14 +53,16 @@ def residual_facts(cf: CropFacts, unmatched_fw: list[str]) -> dict:
                 for p in cf.products if p.note and p.when not in ("planned", "recommended")]
     pests = [{"name": p.name, "note": p.note, "evidence": p.evidence} for p in cf.pests if p.note]
     return {"observations": [o.model_dump() for o in cf.observations],
-            "farmworks": farmworks, "products": products, "pests": pests}
+            "farmworks": farmworks, "products": products, "pests": pests,
+            "체크된_농작업": checked_names}
 
 
 def residual_evidence(residual: dict) -> list[int]:
     ev: list[int] = []
     for group in residual.values():
         for x in group:
-            ev.extend(x.get("evidence") or [])
+            if isinstance(x, dict):
+                ev.extend(x.get("evidence") or [])
     return sorted(set(ev))
 
 
@@ -86,7 +93,7 @@ def deterministic_content(cf: CropFacts, unmatched_fw: list[str]) -> DiaryConten
         lines.append(f"- {pr['name']}: {pr['note']}")
         ev.extend(pr.get("evidence") or [])
     text = "\n".join(lines[:8])
-    return DiaryContentOut(content=text[:MAX_CHARS], evidence=sorted(set(ev)))
+    return DiaryContentOut(content=text[:MAX_CHARS], praise=None, evidence=sorted(set(ev)))
 
 
 def _trim(text: str) -> str:
@@ -95,6 +102,15 @@ def _trim(text: str) -> str:
         text = "[AI 초안·통화 기반]\n" + text
     lines = [ln for ln in text.splitlines() if ln.strip()][:8]
     return "\n".join(lines)[:MAX_CHARS]
+
+
+def _trim_praise(text: str | None) -> str | None:
+    """격려 한 줄 정규화 — 한 줄로 접고 마크다운 기호를 벗기고 길이를 자른다. 비면 None(렌더가 고정 문구로 대체)."""
+    if not text:
+        return None
+    one = " ".join(text.replace("|", " ").split())
+    one = one.lstrip("#>-* ").strip()
+    return one[:MAX_PRAISE_CHARS] or None
 
 
 async def write_content(state: CropDiaryState, config) -> dict:  # type: ignore[no-untyped-def]
@@ -116,6 +132,7 @@ async def write_content(state: CropDiaryState, config) -> dict:  # type: ignore[
                                            mode=deps.settings.llm_structured_mode, dump_dir=deps.dump_dir,
                                            timeout=deps.settings.node_timeout_s)
         out.content = _trim(out.content)
+        out.praise = _trim_praise(out.praise)
         valid = set(t.tid for t in state["transcript"].turns)
         out.evidence = [e for e in out.evidence if e in valid] or ev
         return {"content": out, "usage": [trace.usage()]}

@@ -9,7 +9,8 @@ from app.schemas.pipeline import PipelineResult
 
 from .conftest import FIX, fake_llm, load_call, make_pipeline
 
-STRAW_CONTENT = {"content": "[AI 초안·통화 기반]\n- 2동 잿빛곰팡이 초기 발생, 환기 강화\n- 내일 사파이어 살포 예정 (확인 필요)", "evidence": [2, 3, 8]}
+STRAW_CONTENT = {"content": "[AI 초안·통화 기반]\n- 2동 잿빛곰팡이 초기 발생, 환기 강화\n- 내일 사파이어 살포 예정 (확인 필요)",
+                 "praise": "관수와 적엽까지 꼼꼼히 챙기셨네요 👍", "evidence": [2, 3, 8]}
 STRAW_REPORT = {"farm_status": [{"text": "딸기 하우스 2동", "evidence": [2], "needs_verification": False}],
                 "issues": [{"text": "잿빛곰팡이병 초기 발생", "evidence": [2, 3], "needs_verification": False}],
                 "advice": [{"text": "[병해충관리] 사파이어 2000배 살포", "evidence": [7], "needs_verification": False},
@@ -35,6 +36,10 @@ async def test_strawberry_full_run(settings, farmos_fake):
     assert pre["prvnbeNPestiList"] == []                              # 사파이어는 planned → 방제이력 아님
     assert "## 방제이력\n- 언급 없음" in d.markdown
     assert "사파이어 액상수화제 → 잿빛곰팡이 · 2000배 (확인 필요)" in d.markdown
+    # 상단 요약·격려 블록: 마크다운에는 있고 prefill(앱 일지 메모)에는 없다
+    assert d.markdown.startswith("> 📝 **통화 요약** · ") and "> 💬 관수와 적엽까지 꼼꼼히 챙기셨네요 👍" in d.markdown
+    assert "# 영농일지" not in d.markdown
+    assert "꼼꼼히" not in pre["content"] and pre["content"].startswith("[AI 초안·통화 기반]")
     assert d.structured["prefill_ready"] is True
     assert res.speaker_map == {"f0:A": "farmer", "f0:B": "consultant"}
     assert res.farmos_status == "ok" and res.usage["calls"] == 5 and res.model == "fake-llm"   # +verify_diary
@@ -70,7 +75,7 @@ async def test_grape_multi_crop_only_mentioned_crop_and_empty_diary(settings, fa
     res = await make_pipeline(settings, fake_llm("grape_multi_crop_no_work"), farmos_fake).run(tr, ctx)
     assert [(d.prdlst_code, d.status) for d in res.diaries] == [("0603MM", "EMPTY")]
     assert res.diaries[0].structured["prefill"] is None
-    assert "확인되지 않았습니다" in res.diaries[0].markdown
+    assert "확인되지 않았어요" in res.diaries[0].markdown
     assert "당도 18브릭스" in res.report.markdown          # 보고서는 채워짐
 
 
@@ -82,6 +87,7 @@ async def test_no_farmos_hints_only_partial(settings):
     assert d.prdlst_code == "0804MM" and d.status == "PARTIAL" and d.structured["prefill"] is None
     assert res.farmos_status == "disabled"
     assert "[ ] 관수 (표준 목록 조회 불가" in d.markdown
+    assert "언급 없음" not in d.markdown.split("## 주요 농작업")[1].split("## 기타 기록사항")[0]
 
 
 @pytest.mark.asyncio

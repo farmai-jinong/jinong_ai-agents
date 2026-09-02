@@ -57,7 +57,7 @@ build_crop_diary (작물 1건당 서브그래프):
 | `fetch_refs` | farmos 참조 조회 여부 | 규칙(전제 조건) | `nodes/crop_diary/fetch_refs.py` |
 | `map_facts` | 사실 → 표준 코드 | 규칙(매칭) | `mapping/matcher.py` · `mapping/severity.yaml` |
 | `disambiguate` | 애매한 항목 후보 선택 | **LLM** (후보 한정) | `prompts/disambiguate.system.md` |
-| `write_content` | 기타 기록사항 산문 | **LLM** | `prompts/diary_content.system.md` |
+| `write_content` | 기타 기록사항 산문 + 격려 한 줄(praise) | **LLM** | `prompts/diary_content.system.md` |
 | `render_diary` | 일지 status · prefill | 규칙 | `nodes/crop_diary/render_diary.py` |
 | `verify_diary` | 실질 내용 유무 (강등만) | **LLM** | `prompts/verify_diary.system.md` |
 | `build_report` | 보고서 서술 | **LLM** (실패 시 규칙) | `prompts/report.system.md` |
@@ -222,7 +222,12 @@ substring 매칭은 점수를 최소 90으로 본다. 확정에는 2위와의 **
 렌더하므로 제외. 체크 줄로 표현된 농작업도 **부가 서술(`detail`)이 있을 때만** 넣는다.
 섹션 배타성을 프롬프트 문장이 아니라 **입력 집합으로 보장**하는 설계다.
 
-**실패 시**: 사실 bullet 로 결정적 대체.
+**같은 호출이 `praise`(격려 한 줄)도 낸다.** 입력 JSON 의 `체크된_농작업`(체크 칸에 이미 있는 작업 이름)은
+content 가 아니라 praise 의 근거 전용이며, 프롬프트가 그렇게 지시한다. 규칙: 농가가 실제로 했다고 말한 일·관찰만
+근거, 존댓말, 이모지 1개, 40자 이내, 조언·권고 금지, 근거 없으면 `null`. 코드가 한 줄로 접고 마크다운 기호를
+벗기고 80자(`MAX_PRAISE_CHARS`)로 자른다. 추가 LLM 호출은 없다.
+
+**실패 시**: 사실 bullet 로 결정적 대체(`praise=None` → 렌더가 고정 문구로 채움).
 
 ### 2.10 `render_diary` — 일지 status 와 prefill
 
@@ -241,13 +246,21 @@ AP 백엔드 경로(`refs` 없음)는 코드가 확정돼도 prefill 이 나오�
 하나도 없을 때만 참이다.
 기존 일지(`diaryId`)가 있으면 기존 체크를 보존하고 `content` 를 이어붙인다.
 
+**마크다운 형식은 고정이다** (`render/templates/diary.md.j2` 하나, status 로만 내용을 비운다):
+맨 위 `> 📝 **통화 요약** · {CallFacts.one_line_summary}` / `> 💬 {praise}` 인용 블록(섹션 아님, prefill 에 안 들어감) →
+메타 표 → (기존 일지·작물 미확정 안내) → `## 주요 농작업 / 기타 기록사항 / 병해충 / 방제이력 / 농작업 사진 /
+투입 제품 / 향후 작업·확인 계획 / 근거 발화 / 참고` → 푸터. H1 제목은 없다. 비는 목록 섹션은 `- 언급 없음` **한 줄만**
+찍는다(항목이 하나라도 있으면 `언급 없음` 은 나오지 않는다). 격려 줄은 LLM 이 근거 있는 한 줄을 못 냈으면
+`FALLBACK_PRAISE`, EMPTY/UNRESOLVED 면 `EMPTY_PRAISE` 고정 문구. 통화 요약은 작물 공통(같은 통화의 여러 작물 일지에 같은 줄).
+
 ### 2.11 `verify_diary` — 빈 템플릿 걸러내기 (강등 전용)
 
 `render_diary` 의 규칙 판정은 "추출된 사실이 하나라도 있는가"만 본다. 그래서 잡담에서 관찰 1건이
 잘못 뽑히면 **모든 칸이 "언급 없음"인 빈 템플릿이 `OK` 로** 나간다. 이 노드는 **렌더된 초안을 사람이 보듯
 다시 읽고** 판정한다.
 
-**보는 것**: 작물명, 일지 날짜, **렌더된 마크다운 전문**, 기타 기록사항 본문. (사실 구조체가 아니라 결과물)
+**보는 것**: 작물명, 일지 날짜, **렌더된 마크다운**(상단 `> 📝/💬` 요약·격려 블록은 `strip_lead_quotes` 로 뗀 것 —
+통화 요약은 이 작물의 일지 내용이 아니므로 판정 근거에서 제외), 기타 기록사항 본문. (사실 구조체가 아니라 결과물)
 
 **기준 출처**: `prompts/verify_diary.system.md`.
 
@@ -255,7 +268,7 @@ AP 백엔드 경로(`refs` 없음)는 코드가 확정돼도 prefill 이 나오�
 - `verify_diary_enabled=false` 이거나 status 가 이미 `EMPTY`/`UNRESOLVED_CROP` 이면 **LLM 호출 자체를 건너뛴다**
 - 판정이 "내용 있음"이거나 **`confidence < 0.6`**(`verify_diary_min_confidence`)이면 **강등하지 않는다**
 - **강등만 하고 승격은 하지 않는다.** 판정이 애매하면 내용이 있는 쪽으로 기운다
-- 강등 시 빈 템플릿으로 다시 렌더하고 **prefill 을 거둔다**(농가 앱에 빈 초안을 밀어 넣지 않기 위해)
+- 강등 시 같은 템플릿을 `EMPTY` 로 다시 렌더(격려 줄은 `EMPTY_PRAISE`)하고 **prefill 을 거둔다**(농가 앱에 빈 초안을 밀어 넣지 않기 위해)
 - 실패는 fail-open — 규칙 판정을 유지하고 경고만 남긴다
 
 ### 2.12 `build_report` — 컨설팅 보고서
@@ -307,7 +320,7 @@ AP 백엔드 경로(`refs` 없음)는 코드가 확정돼도 prefill 이 나오�
 | `extract` | `nodes/extract_facts.py` | 녹취문 → 구조화 사실 |
 | `extract_merge` | `nodes/extract_facts.py` | 청크 요약·키워드 통합 |
 | `disambiguate` | `nodes/crop_diary/disambiguate.py` | 애매한 항목의 후보 선택 |
-| `diary_content` | `nodes/crop_diary/write_content.py` | 기타 기록사항 산문 |
+| `diary_content` | `nodes/crop_diary/write_content.py` | 기타 기록사항 산문 + 격려 한 줄 |
 | `verify_diary` | `nodes/crop_diary/verify_diary.py` | 일지 실질 내용 유무 |
 | `report` | `nodes/report.py` | 보고서 서술 |
 | `call_summary` · `call_summary_merge` | `agents/summarize.py` | 통화 단순요약 |

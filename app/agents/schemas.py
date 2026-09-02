@@ -181,6 +181,7 @@ class SummaryOut(_Strict):
 # --------------------------------------------------------------------------- narrative outputs (LLM)
 class DiaryContentOut(_Strict):
     content: str
+    praise: str | None          # 통화 사실에 근거한 격려 한 줄(이모지 1개) — 근거 없으면 null. 마크다운 상단 블록 전용, prefill 에는 안 들어간다
     evidence: Ev
 
 
@@ -370,6 +371,8 @@ class DiaryResult(BaseModel):
     prefill_ready: bool = False
     mapping: MappingReport = Field(default_factory=MappingReport)
     content: str = ""
+    summary_line: str = ""      # 통화 전체 한 문장 요약(CallFacts.one_line_summary) — 마크다운 상단 블록
+    praise: str = ""            # 격려 한 줄 — 마크다운 상단 블록(빈 일지는 고정 중립 문구)
     warnings: list[str] = Field(default_factory=list)
     evidence: Ev = Field(default_factory=list)
     verify: DiaryVerdictOut | None = None      # 검수 패스 판정(없으면 미실행/실패)

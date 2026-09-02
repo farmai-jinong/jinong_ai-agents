@@ -8,7 +8,7 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
 
-PROMPT_VERSION = "1"
+PROMPT_VERSION = "2"     # 2: diary_content 에 praise(격려 한 줄) 추가, 일지 상단 요약·격려 블록·고정 섹션(## 참고)
 _DIR = Path(__file__).parent
 
 _PREAMBLE = (

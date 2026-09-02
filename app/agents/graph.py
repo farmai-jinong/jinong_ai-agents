@@ -82,6 +82,7 @@ async def build_crop_diary(state: CropDiaryState, config) -> dict:  # type: igno
         out = await crop_graph().ainvoke(
             {"ctx": state["ctx"], "diary_date": state["diary_date"], "transcript": state["transcript"],
              "farm": state.get("farm"), "target": target, "crop_facts": state["crop_facts"],
+             "call_summary": state.get("call_summary") or "",
              "diaries": [], "errors": [], "usage": [], "warnings": []},
             config=config)
         return {"diaries": [out["diary"]], "errors": out.get("errors") or [], "usage": out.get("usage") or [],
@@ -96,12 +97,14 @@ async def build_crop_diary(state: CropDiaryState, config) -> dict:  # type: igno
 
 def fan_out_crops(state: PipelineState) -> list[Send]:
     sends: list[Send] = []
+    facts = state.get("facts")
+    call_summary = (facts.one_line_summary if facts else "").strip()
     for t in state.get("crop_targets") or []:
         key = t.prdlst_code or t.prdlst_nm
         cf = (state.get("crop_facts") or {}).get(key, CropFacts())
         sends.append(Send("build_crop_diary", {
             "ctx": state["ctx"], "diary_date": state["diary_date"], "transcript": state["transcript"],
-            "farm": state.get("farm"), "target": t, "crop_facts": cf}))
+            "farm": state.get("farm"), "target": t, "crop_facts": cf, "call_summary": call_summary}))
     return sends
 
 
