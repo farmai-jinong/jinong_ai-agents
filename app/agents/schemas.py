@@ -40,6 +40,7 @@ class NormalizedTranscript(BaseModel):
     n_files: int
     est_tokens: int
     duration_sec: float
+    dropped: list[str] = Field(default_factory=list)   # 물리 상한을 넘는 STT 의심 세그먼트 (경고용 메모)
 
     def by_tid(self, tid: int) -> Turn | None:
         if 0 <= tid < len(self.turns) and self.turns[tid].tid == tid:

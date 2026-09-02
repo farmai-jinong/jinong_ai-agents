@@ -9,14 +9,28 @@ from ._common import diary_date_for
 
 MERGE_GAP_SEC = 1.0
 MERGE_MAX_CHARS = 220
+# 세그먼트가 담을 수 있는 글자 수의 물리 상한(초당 14자 + 여유 8자). 한국어 발화는 빨라도 초당 5~7음절이라
+# 정상 발화는 절대 넘지 않고, STT 2-pass 가 0.3초 턴에 주입 용어 10개를 나열한 누출(45자)은 걸린다
+# (2026-09-03, docs/voice-eval-stt-postprocess-2026-09-02.md). STT 공급 경로가 바뀌어도 유효한 방어선.
+MAX_CHARS_PER_SEC = 14.0
+CHARS_SLACK = 8
+
+
+def implausible(text: str, dur_sec: float) -> bool:
+    n = len("".join(ch for ch in text if not ch.isspace()))
+    return dur_sec >= 0 and n > MAX_CHARS_PER_SEC * dur_sec + CHARS_SLACK
 
 
 def build_turns(state_raw, ) -> NormalizedTranscript:  # type: ignore[no-untyped-def]
     segs = sorted(state_raw.segments, key=lambda s: (s.file_index, s.start))
     turns: list[Turn] = []
+    dropped: list[str] = []
     for s in segs:
         text = (s.text or "").strip()
         if not text:
+            continue
+        if implausible(text, s.end - s.start):
+            dropped.append(f"{s.seg_id} {s.end - s.start:.1f}s {len(text)}자: {text[:40]}")
             continue
         if turns:
             last = turns[-1]
@@ -33,10 +47,12 @@ def build_turns(state_raw, ) -> NormalizedTranscript:  # type: ignore[no-untyped
     n_files = max([f.file_index for f in state_raw.files] + [s.file_index for s in segs] + [-1]) + 1
     duration = state_raw.total_duration_sec or (max((t.abs_end for t in turns), default=0.0))
     return NormalizedTranscript(turns=turns, n_files=max(n_files, 1),
-                                est_tokens=est_tokens(format_turns(turns, n_files)), duration_sec=duration)
+                                est_tokens=est_tokens(format_turns(turns, n_files)), duration_sec=duration,
+                                dropped=dropped)
 
 
 async def prepare_transcript(state: PipelineState, config) -> dict:  # type: ignore[no-untyped-def]
     nt = build_turns(state["raw"])
     return {"transcript": nt, "diary_date": diary_date_for(state["ctx"]),
-            "speaker_roles": None, "diaries": [], "errors": [], "usage": [], "warnings": []}
+            "speaker_roles": None, "diaries": [], "errors": [], "usage": [],
+            "warnings": [f"STT 의심 세그먼트 제거: {d}" for d in nt.dropped]}

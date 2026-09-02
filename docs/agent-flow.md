@@ -78,6 +78,10 @@ build_crop_diary (작물 1건당 서브그래프):
 합치는 조건은 **간격 < 1.0초**(`MERGE_GAP_SEC`) **이고 합친 길이 ≤ 220자**(`MERGE_MAX_CHARS`).
 turn 에는 전역 `tid` 가 붙고, 이후 모든 노드의 `evidence` 는 이 `tid` 를 가리킨다.
 
+- **물리 상한 방어(2026-09-03)**: 세그먼트 글자 수가 `14자/초 × 길이 + 8` 을 넘으면 STT 의심 세그먼트로 버리고
+  `warnings` 에 `STT 의심 세그먼트 제거: seg_N 0.3s 45자: …` 를 남긴다. `:8105` 2-pass 가 0.3초 턴에 주입 용어를 나열한
+  누출이 계기(`docs/voice-eval-stt-postprocess-2026-09-02.md`). 정상 발화는 초당 5~7음절이라 걸리지 않는다.
+
 ### 2.2 `load_farm_context` — 농가 작물 목록
 
 LLM 없음. **출처를 순서대로 강등**한다 (`nodes/farm_context.py`):

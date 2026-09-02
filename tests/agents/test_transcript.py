@@ -20,6 +20,18 @@ def test_merge_consecutive_same_speaker_and_global_tid():
     assert nt.turns[2].file_index == 1 and nt.n_files == 2
 
 
+def test_drop_physically_implausible_segment():
+    dump = "그을음병, 담배가루이, 온동네, 아리랑, 검객, 신청, 영신, 하우스, 라벨, 안나."
+    tr = MergedTranscript(call_id="c", segments=[
+        seg(0, "A", 49.04, 49.34, dump, 6),                                   # 0.3s / 45자 → 누출
+        seg(0, "A", 50.64, 54.12, "폭치면 날아오르는 하얀 벌레면 담배가루이 맞아요.", 7),  # 3.5s / 24자
+        seg(0, "B", 54.32, 54.80, "네, 알겠습니다", 8),                          # 0.5s / 7자
+        seg(0, "A", 20.92, 27.81, "수확은 매일 하지 오늘 새벽에도 닦고요 요즘 하루에 한 키 백 킬로씩 나와요.", 5)])
+    nt = build_turns(tr)
+    assert [t.seg_ids[0] for t in nt.turns] == ["seg_5", "seg_7", "seg_8"]
+    assert len(nt.dropped) == 1 and nt.dropped[0].startswith("seg_6 0.3s 47자")
+
+
 def test_no_merge_when_gap_large():
     tr = MergedTranscript(call_id="c", segments=[seg(0, "A", 0, 2, "가", 0), seg(0, "A", 5, 6, "나", 1)])
     assert len(build_turns(tr).turns) == 2
