@@ -112,6 +112,11 @@ class Settings(BaseSettings):
     # 백엔드 DTO 가 미지 필드를 거부(4xx)하면 0 으로 내려 끄면 된다 — 같은 값은 GET /v1/calls/{id}
     # 의 result.speaker_map 과 GET /v1/calls/{id}/transcript 에도 그대로 있다.
     callback_include_speaker_map: bool = True
+    # 통화요약 콜백(COMPLETED)·날짜별 agent-callback(COMPLETED)에 산출물 S3 키를 싣는다:
+    # diaries[]{prdlst_code, prdlst_nm, status, s3_key_md, s3_key_md_internal}, report{s3_key_md, s3_key_md_internal}.
+    # s3_key_md 는 근거 제거 전달용, s3_key_md_internal 은 근거 포함 정본(artifacts/internal/). 본문은 싣지 않는다.
+    # 백엔드 DTO 가 미지 필드를 거부하면 0 으로 끈다 — 같은 키는 GET 응답 result 에도 있다.
+    callback_include_artifact_keys: bool = True
 
     # --- worker ---------------------------------------------------------------
     worker_poll_sec: float = 5.0

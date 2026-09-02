@@ -186,6 +186,13 @@ async def test_summary_callback_completed(client, app, stt_mock, s3_env):
     assert "|" not in content                              # 표·서식 없음
     assert payload["engine_version"].startswith("jinong-summary-v1")
     assert "fail_reason" not in payload and "empty_reason" not in payload
+    # 산출물 S3 키(본문 없음): 전달용 s3_key_md + 근거 포함 정본 s3_key_md_internal
+    assert payload["diaries"] == [{"prdlst_code": "0804MM", "prdlst_nm": "딸기", "status": "OK",
+                                   "s3_key_md": "agents/voicecall/cb1/artifacts/diary/0804MM.md",
+                                   "s3_key_md_internal": "agents/voicecall/cb1/artifacts/internal/diary/0804MM.md"}]
+    assert payload["report"] == {"s3_key_md": "agents/voicecall/cb1/artifacts/report.md",
+                                 "s3_key_md_internal": "agents/voicecall/cb1/artifacts/internal/report.md"}
+    assert "markdown" not in json.dumps(payload)
 
     # (1) call_id 로 조회 — 일지·보고서·전사 키가 종전대로 노출된다
     body = (await client.get("/v1/calls/cb1")).json()
@@ -207,14 +214,21 @@ async def test_summary_callback_completed(client, app, stt_mock, s3_env):
             "agents/voicecall/cb1/transcript/merged.json",
             "agents/voicecall/cb1/transcript/merged.md",
             "agents/voicecall/cb1/artifacts/diary/0804MM.md",
+            "agents/voicecall/cb1/artifacts/internal/diary/0804MM.md",
             "agents/voicecall/cb1/artifacts/diary/0804MM.json",
             "agents/voicecall/cb1/artifacts/report.md",
+            "agents/voicecall/cb1/artifacts/internal/report.md",
             "agents/voicecall/cb1/artifacts/report.json",
             "agents/voicecall/cb1/artifacts/summary.md",
             "agents/voicecall/cb1/artifacts/summary.json",
             "agents/voicecall/cb1/artifacts/result.json"} <= keys
     stored = s3_env.get_object(Bucket=BUCKET, Key=res["summary"]["s3_key_md"])["Body"].read().decode()
     assert stored.strip() == content
+    pub = s3_env.get_object(Bucket=BUCKET, Key=diary["s3_key_md"])["Body"].read().decode()
+    internal = s3_env.get_object(Bucket=BUCKET, Key=diary["s3_key_md_internal"])["Body"].read().decode()
+    assert "## 근거 발화" not in pub and "## 근거 발화" in internal and pub == diary["markdown"]
+    snapshot = json.loads(s3_env.get_object(Bucket=BUCKET, Key=res["result_key"])["Body"].read())
+    assert snapshot["diaries"][0]["markdown_internal"] == internal and snapshot["diaries"][0]["s3_key_md_internal"] == diary["s3_key_md_internal"]
 
     # (4) artifact 엔드포인트로도 id 조회 가능
     r = await client.get("/v1/calls/cb1/artifacts/summary")
@@ -241,7 +255,8 @@ async def test_summary_callback_is_one_summary_regardless_of_crops(client, app, 
         async def run(self, transcript, ctx):
             def mk(code, nm):
                 return DiaryArtifact(prdlst_code=code, prdlst_nm=nm, diary_date="2026-08-26",
-                                     status="OK", markdown=f"# 영농일지 — {nm} (2026-08-26)\n\n본문\n")
+                                     status="OK", markdown=f"# 영농일지 — {nm} (2026-08-26)\n\n본문\n",
+                                     markdown_public=f"# 영농일지 — {nm} (2026-08-26)\n\n본문\n")
             return PipelineResult(diaries=[mk("0804MM", "딸기"), mk("0805MM", "파프리카")],
                                   report=None, model="fake", prompt_version="0")
 
@@ -314,6 +329,7 @@ async def test_summary_callback_empty_has_no_content(client, app):
     payload = json.loads(route.calls[0].request.content)
     assert payload["status"] == "EMPTY" and "content" not in payload
     assert payload["empty_reason"] == "NO_AUDIO"
+    assert "diaries" not in payload and "report" not in payload      # 산출물 키는 COMPLETED 에만
 
 
 async def test_summary_callback_empty_diaries_are_not_sent(client, app, stt_mock):
@@ -332,7 +348,8 @@ async def test_summary_callback_empty_diaries_are_not_sent(client, app, stt_mock
 
         async def run(self, transcript, ctx):
             d = DiaryArtifact(prdlst_code="0804MM", prdlst_nm="딸기", diary_date="2026-08-26",
-                              status="EMPTY", markdown="# 영농일지 — 딸기 (2026-08-26)\n\n## 주요 농작업\n- 언급 없음\n")
+                              status="EMPTY", markdown="# 영농일지 — 딸기 (2026-08-26)\n\n## 주요 농작업\n- 언급 없음\n",
+                              markdown_public="# 영농일지 — 딸기 (2026-08-26)\n\n## 주요 농작업\n- 언급 없음\n")
             return PipelineResult(diaries=[d], report=None, model="fake", prompt_version="0")
 
     restore = _enable_summary_callback(rt)
@@ -371,7 +388,8 @@ async def test_summary_callback_no_summary_folds_to_no_content(client, app, stt_
 
         async def run(self, transcript, ctx):
             d = DiaryArtifact(prdlst_code="0804MM", prdlst_nm="딸기", diary_date="2026-08-26",
-                              status="OK", markdown="# 영농일지 — 딸기 (2026-08-26)\n\n## 주요 농작업\n- 관수 2시간\n")
+                              status="OK", markdown="# 영농일지 — 딸기 (2026-08-26)\n\n## 주요 농작업\n- 관수 2시간\n",
+                              markdown_public="# 영농일지 — 딸기 (2026-08-26)\n\n## 주요 농작업\n- 관수 2시간\n")
             return PipelineResult(diaries=[d], report=None, model="fake", prompt_version="0")
 
     restore = _enable_summary_callback(rt)
@@ -471,7 +489,8 @@ class RolePipeline:
         roles = ["consultant", "farmer"]
         return PipelineResult(
             diaries=[DiaryArtifact(prdlst_code="0804MM", prdlst_nm="딸기", diary_date="2026-08-26",
-                                   status="OK", markdown="# 영농일지 — 딸기 (2026-08-26)\n\n본문\n")],
+                                   status="OK", markdown="# 영농일지 — 딸기 (2026-08-26)\n\n본문\n",
+                                   markdown_public="# 영농일지 — 딸기 (2026-08-26)\n\n본문\n")],
             report=None, model="fake", prompt_version="0",
             speaker_map={k: roles[i % 2] for i, k in enumerate(transcript.speakers)})
 
@@ -508,6 +527,28 @@ async def test_transcript_roles_unknown_when_pipeline_cannot_tell(client, app, s
     tr = (await client.get("/v1/calls/role2/transcript")).json()
     assert {s["role"] for s in tr["segments"]} == {"unknown"}
     assert set(tr["speaker_map"].values()) == {"unknown"}
+
+
+async def test_summary_callback_artifact_keys_can_be_disabled(client, app, stt_mock):
+    """CALLBACK_INCLUDE_ARTIFACT_KEYS=false → diaries/report 키 필드 자체가 빠진다(백엔드 DTO 가 미지 필드를 거부할 때)."""
+    import json
+
+    rt = app.state.rt
+    restore = _enable_summary_callback(rt)
+    rt.settings.callback_include_artifact_keys = False
+    try:
+        with respx.mock(assert_all_called=True) as router:
+            route = router.post(SUMMARY_HOOK).mock(return_value=httpx.Response(200))
+            await full_flow(client, "cbk1")
+            await rt.worker.drain()
+    finally:
+        rt.settings.callback_include_artifact_keys = True
+        restore()
+    payload = json.loads(route.calls[0].request.content)
+    assert payload["status"] == "COMPLETED" and "diaries" not in payload and "report" not in payload
+    # 끄더라도 GET 응답에는 키가 그대로 있다
+    res = (await client.get("/v1/calls/cbk1")).json()["result"]
+    assert res["diaries"][0]["s3_key_md_internal"].endswith("/artifacts/internal/diary/0804MM.md")
 
 
 async def test_summary_callback_carries_speaker_map(client, app, stt_mock):

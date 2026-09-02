@@ -60,14 +60,17 @@ class DiaryArtifact(BaseModel):
     prdlst_nm: str
     diary_date: str                    # yyyy-MM-dd
     status: DiaryStatus = "OK"
-    markdown: str
+    markdown: str                      # internal 변형 — 근거 포함 정본(S3 artifacts/internal/, 내부 저장용)
+    markdown_public: str               # public 변형 — 근거·코드·내부 메타 제거(S3 artifacts/diary/{code}.md, API/콜백 기본 전달용)
+    #   두 벌 모두 같은 구조화 데이터의 렌더 결과 — 폴백 없음(비어 있으면 근거가 새는 대신 검증에서 걸리게).
     structured: dict[str, Any] = Field(default_factory=dict)
     # structured = {schema_version, prefill: PutDiaryDTO|None, prefill_ready, mapping, gsNm,
     #               growingSeasonStartDe, existing_diary_id, warnings, evidence}
 
 
 class ReportArtifact(BaseModel):
-    markdown: str
+    markdown: str                      # internal(근거 포함)
+    markdown_public: str               # public(근거·화자 신뢰도·통화 ID·모델 버전 제거)
     structured: dict[str, Any] = Field(default_factory=dict)
     # structured = {summary, keywords, action_items, sections, speaker_map, needs_verification}
 

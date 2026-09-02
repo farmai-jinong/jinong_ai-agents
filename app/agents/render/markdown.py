@@ -1,12 +1,17 @@
 """Markdown 렌더 — Jinja2 템플릿 + 필터. 산출물 `##` 헤딩은 앱 화면 블록/동의서 §4 와 일치하며 항상 같은 집합으로 나온다.
-맨 위 `> 📝 통화 요약 / > 💬 격려` 인용 블록은 섹션이 아니다(앱 블록에 대응하지 않고 prefill 에도 들어가지 않는다)."""
+맨 위 `> 📝 통화 요약 / > 💬 격려` 인용 블록은 섹션이 아니다(앱 블록에 대응하지 않고 prefill 에도 들어가지 않는다).
+
+같은 구조화 데이터로 두 벌을 렌더한다(LLM 재호출·사후 파싱 없음):
+- `variant="internal"` — 근거 포함 정본(내부 저장용). 위 "고정 섹션 집합" 규칙과 judge/eval 이 보는 대상.
+- `variant="public"`  — 백엔드 기본 전달용 투영. `(근거: #N)`·`## 근거 발화`·`## 참고`·작물 코드·통화 ID·모델/프롬프트
+  버전을 뺀다. 판정 문구(`[표준 목록 미매핑]`, `※ 확인 필요` 등)와 동의서 §8 안내는 유지."""
 
 from __future__ import annotations
 
 from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -17,12 +22,16 @@ from ..tools.transcript import ROLE_KO, fmt_ts, role_label
 
 _TPL = Path(__file__).parent / "templates"
 KST = ZoneInfo("Asia/Seoul")
+Variant = Literal["internal", "public"]
 
 WHEN_KO = {"applied": "투입함", "planned": "투입 예정", "recommended": "권고됨", "unknown": "시점 불명",
            "today": "오늘", "ongoing": "계속", "past": "이전", "unknown_fw": "시점 불명"}
 
 
-def evref(ev: list[int] | None) -> str:
+def evref(ev: list[int] | None, show: bool = True) -> str:
+    """인라인 근거 표기 ` (근거: #2, #4)`. `show=False`(public 변형)면 빈 문자열."""
+    if not show:
+        return ""
     ev = [e for e in (ev or []) if isinstance(e, int)]
     return f" (근거: {', '.join(f'#{e}' for e in ev)})" if ev else ""
 
@@ -106,7 +115,7 @@ def _duration(sec: float) -> str:
 
 # --------------------------------------------------------------------------- diary
 def render_diary(d: DiaryResult, ctx: CallContext, transcript: NormalizedTranscript, crop_facts: CropFacts,
-                 *, model: str | None, prompt_version: str, now: datetime) -> str:
+                 *, model: str | None, prompt_version: str, now: datetime, variant: Variant = "internal") -> str:
     # EMPTY/UNRESOLVED_CROP 도 같은 템플릿 — 섹션 집합을 고정하고 status 로만 내용을 비운다
     template = "diary.md.j2"
     products = [p for p in crop_facts.products]
@@ -132,6 +141,7 @@ def render_diary(d: DiaryResult, ctx: CallContext, transcript: NormalizedTranscr
         d=d, m=d.mapping, call=ctx, call_when=call_when(ctx), products=products, plans=plans,
         prevention=prevention, unverified=unverified, cited=cited_turns(transcript, ev),
         generated_at=kst(now), model=model, prompt_version=prompt_version,
+        public=(variant == "public"), show_ev=(variant != "public"),
     )
 
 
@@ -150,7 +160,7 @@ def speaker_summary(sr: SpeakerRoleResult | None) -> str:
 
 def render_report(n: ReportNarrative, ctx: CallContext, transcript: NormalizedTranscript, *,
                   speaker_roles: SpeakerRoleResult | None, crops: list[str], warnings: list[str],
-                  model: str | None, prompt_version: str, now: datetime) -> str:
+                  model: str | None, prompt_version: str, now: datetime, variant: Variant = "internal") -> str:
     ev: list[int] = []
     for sec in (n.farm_status, n.issues, n.advice, n.farmer_actions, n.follow_ups):
         for b in sec:
@@ -164,4 +174,5 @@ def render_report(n: ReportNarrative, ctx: CallContext, transcript: NormalizedTr
         duration=_duration(transcript.duration_sec), n_files=transcript.n_files,
         speaker_summary=speaker_summary(speaker_roles), crops=crops, warnings=warnings,
         cited=cited_turns(transcript, ev), generated_at=kst(now), model=model, prompt_version=prompt_version,
+        public=(variant == "public"), show_ev=(variant != "public"),
     )

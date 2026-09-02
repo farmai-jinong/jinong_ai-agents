@@ -23,7 +23,7 @@ def hangul_ratio(text: str) -> float:
 def diary_to_artifact(d: DiaryResult) -> DiaryArtifact:
     return DiaryArtifact(
         prdlst_code=d.prdlst_code, prdlst_nm=d.prdlst_nm, diary_date=d.diary_date, status=d.status,
-        markdown=d.markdown,
+        markdown=d.markdown, markdown_public=d.markdown_public,
         structured={
             "schema_version": "1",
             "prefill": d.prefill.model_dump() if d.prefill else None,
@@ -75,7 +75,8 @@ def assemble(state: PipelineState, config) -> PipelineResult:  # type: ignore[no
             break
     return PipelineResult(
         diaries=[diary_to_artifact(d) for d in diaries],
-        report=ReportArtifact(markdown=report.markdown, structured=report.json_.model_dump()) if report else None,
+        report=ReportArtifact(markdown=report.markdown, markdown_public=report.markdown_public,
+                              structured=report.json_.model_dump()) if report else None,
         speaker_map=speaker_map, facts=facts.model_dump() if facts else None, warnings=warnings,
         usage=usage, model=model or deps.settings.llm_model, prompt_version=PROMPT_VERSION,
         farmos_status=(farm.status if farm else "disabled"),

@@ -110,7 +110,10 @@ async def build_report(state: PipelineState, config) -> dict:  # type: ignore[no
                     sections={"farm_status": n.farm_status, "issues": n.issues, "advice": n.advice,
                               "farmer_actions": n.farmer_actions, "follow_ups": n.follow_ups},
                     speaker_map=list(sr.files) if sr else [], needs_verification=needs)
-    md = render_report(n, ctx, nt, speaker_roles=sr, crops=crops, warnings=warnings + list(state.get("warnings") or [])[:5],
-                       model=getattr(deps.llm, "model_name", None) or deps.settings.llm_model,
-                       prompt_version=PROMPT_VERSION, now=deps.clock())
-    return {"report": ReportResult(markdown=md, json=rj), "usage": usage, "errors": errors, "warnings": warnings}
+    kw = dict(speaker_roles=sr, crops=crops, warnings=warnings + list(state.get("warnings") or [])[:5],
+              model=getattr(deps.llm, "model_name", None) or deps.settings.llm_model,
+              prompt_version=PROMPT_VERSION, now=deps.clock())
+    md = render_report(n, ctx, nt, variant="internal", **kw)
+    md_pub = render_report(n, ctx, nt, variant="public", **kw)
+    return {"report": ReportResult(markdown=md, markdown_public=md_pub, json=rj), "usage": usage, "errors": errors,
+            "warnings": warnings}

@@ -99,17 +99,19 @@ class DiaryView(BaseModel):
     prdlst_nm: str | None
     diary_date: str | None
     status: str | None = None
-    markdown: str | None = None
+    markdown: str | None = None              # 전달용(근거·코드·내부 메타 제거) — s3_key_md 의 본문
     structured: dict[str, Any] | None = None
     s3_key_md: str
     s3_key_json: str
+    s3_key_md_internal: str | None = None    # 근거 포함 정본(artifacts/internal/) — 본문은 인라인하지 않음, ?view=internal 로 조회
 
 
 class ReportView(BaseModel):
-    markdown: str | None = None
+    markdown: str | None = None              # 전달용 — s3_key_md 의 본문
     structured: dict[str, Any] | None = None
     s3_key_md: str
     s3_key_json: str
+    s3_key_md_internal: str | None = None
 
 
 class SummaryView(BaseModel):

@@ -176,6 +176,10 @@ async def test_list_and_artifact_endpoints(client, app, stt_mock):
 
     r = await client.get(f"/v1/daily-diaries/{DAILY['diary_id']}/artifacts/diary/{code}")
     assert r.status_code == 200 and r.text.startswith("> 📝") and "## 주요 농작업" in r.text
+    assert "## 근거 발화" not in r.text                                # 기본 view=public
+    r = await client.get(f"/v1/daily-diaries/{DAILY['diary_id']}/artifacts/diary/{code}", params={"view": "internal"})
+    assert r.status_code == 200 and "## 근거 발화" in r.text
+    assert detail["result"]["diaries"][0]["s3_key_md_internal"].endswith(f"/artifacts/internal/diary/{code}.md")
     r = await client.get(f"/v1/daily-diaries/{DAILY['diary_id']}/artifacts/diary/{code}", params={"format": "json"})
     assert r.status_code == 200 and r.json()["diary_date"] == "2026-08-20"
 

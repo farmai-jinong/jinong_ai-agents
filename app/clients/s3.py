@@ -62,11 +62,19 @@ class Keys:
     def diary_json(self, call_id: str, prdlst_code: str) -> str:
         return f"{self.base(call_id)}/artifacts/diary/{prdlst_code}.json"
 
+    # internal/ — 근거 포함 정본(내부 저장용). artifacts/diary/*.md·report.md 는 근거·코드·내부 메타를 뺀 전달용.
+    # prefix 만 환경별(prod agents/voicecall, dev agents/voicecall-dev)이고 그 아래 레이아웃은 동일하다.
+    def diary_md_internal(self, call_id: str, prdlst_code: str) -> str:
+        return f"{self.base(call_id)}/artifacts/internal/diary/{prdlst_code}.md"
+
     def report_md(self, call_id: str) -> str:
         return f"{self.base(call_id)}/artifacts/report.md"
 
     def report_json(self, call_id: str) -> str:
         return f"{self.base(call_id)}/artifacts/report.json"
+
+    def report_md_internal(self, call_id: str) -> str:
+        return f"{self.base(call_id)}/artifacts/internal/report.md"
 
     def summary_md(self, call_id: str) -> str:
         return f"{self.base(call_id)}/artifacts/summary.md"
@@ -95,6 +103,9 @@ class Keys:
 
     def daily_diary_json(self, diary_id: str, prdlst_code: str) -> str:
         return f"{self.daily_base(diary_id)}/artifacts/diary/{prdlst_code}.json"
+
+    def daily_diary_md_internal(self, diary_id: str, prdlst_code: str) -> str:
+        return f"{self.daily_base(diary_id)}/artifacts/internal/diary/{prdlst_code}.md"
 
     def daily_result_json(self, diary_id: str) -> str:
         return f"{self.daily_base(diary_id)}/artifacts/result.json"

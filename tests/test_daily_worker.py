@@ -44,8 +44,11 @@ async def test_daily_full_flow_artifacts_and_purge(client, app, stt_mock, s3_env
         arts = await repo.list_daily_artifacts(s, DAILY["diary_id"])
     assert dd.farm_access_token is None                              # terminal 시 purge
     kinds = sorted({a.kind for a in arts})
-    assert kinds == ["diary_json", "diary_md", "result_json", "transcript"]   # report 없음
+    assert kinds == ["diary_json", "diary_md", "diary_md_internal", "result_json", "transcript"]   # report 없음
     assert all(a.s3_key.startswith("agents/voicecall/daily/") for a in arts)
+    internal = [a for a in arts if a.kind == "diary_md_internal"][0]
+    assert internal.s3_key == f"agents/voicecall/daily/{DAILY['diary_id']}/artifacts/internal/diary/{internal.prdlst_code}.md"
+    assert "## 근거 발화" in internal.content and "## 근거 발화" not in [a for a in arts if a.kind == "diary_md"][0].content
 
     # 병합 전사: 통화 2건이 전역 파일 인덱스로 리베이스
     tr = (await client.get(f"/v1/daily-diaries/{DAILY['diary_id']}/transcript")).json()
@@ -77,6 +80,11 @@ async def test_daily_callback(client, app, stt_mock):
     assert payload["daily_diary_id"] == DAILY["diary_id"] and payload["status"] == "COMPLETED"
     assert payload["call_ids"] == ["c1", "c2"] and payload["diary_date"] == "2026-08-20"
     assert f"/v1/daily-diaries/{DAILY['diary_id']}" in payload["result_url"]
+    # 산출물 키(본문 없음) — daily 는 report 없음
+    assert "report" not in payload and len(payload["diaries"]) == 1
+    dk = payload["diaries"][0]
+    assert dk["s3_key_md"] == f"agents/voicecall/daily/{DAILY['diary_id']}/artifacts/diary/{dk['prdlst_code']}.md"
+    assert dk["s3_key_md_internal"] == f"agents/voicecall/daily/{DAILY['diary_id']}/artifacts/internal/diary/{dk['prdlst_code']}.md"
     body = (await client.get(f"/v1/daily-diaries/{DAILY['diary_id']}")).json()
     assert body["callback_status"] == "SENT"
 
@@ -137,7 +145,7 @@ async def test_daily_multiple_unresolved_crops_no_collision(client, app, stt_moc
         async def run(self, transcript, ctx):
             def mk(nm):
                 return DiaryArtifact(prdlst_code=None, prdlst_nm=nm, diary_date="2026-08-20",
-                                     status="PARTIAL", markdown=f"# 영농일지 — {nm}")
+                                     status="PARTIAL", markdown=f"# 영농일지 — {nm}", markdown_public=f"# 영농일지 — {nm}")
             return PipelineResult(diaries=[mk("벼"), mk("콩")], report=None,
                                   model="fake", prompt_version="0")
 

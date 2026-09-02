@@ -74,21 +74,26 @@ async def persist_result(rt: Runtime, s: AsyncSession, call: Call, result: Pipel
     for d in result.diaries:
         code = _artifact_code(d.prdlst_code, used_codes)
         kmd, kjs = keys.diary_md(call.call_id, code), keys.diary_json(call.call_id, code)
+        kint = keys.diary_md_internal(call.call_id, code)
         payload = {"prdlst_code": d.prdlst_code, "prdlst_nm": d.prdlst_nm, "diary_date": d.diary_date,
                    "status": d.status, **d.structured}
-        await add("diary_md", kmd, d.markdown, prdlst_code=code, prdlst_nm=d.prdlst_nm,
-                  diary_date=d.diary_date, diary_status=d.status)
+        meta = dict(prdlst_code=code, prdlst_nm=d.prdlst_nm, diary_date=d.diary_date, diary_status=d.status)
+        await add("diary_md", kmd, d.markdown_public, **meta)            # 전달용(근거·코드·내부 메타 제거)
+        await add("diary_md_internal", kint, d.markdown, **meta)         # 내부 저장용(근거 포함 정본)
         await add("diary_json", kjs, json.dumps(payload, ensure_ascii=False, indent=2, default=str),
-                  prdlst_code=code, prdlst_nm=d.prdlst_nm, diary_date=d.diary_date, diary_status=d.status,
-                  content_type="application/json; charset=utf-8")
-        result_snapshot["diaries"].append({**payload, "markdown": d.markdown, "s3_key_md": kmd, "s3_key_json": kjs})
+                  content_type="application/json; charset=utf-8", **meta)
+        result_snapshot["diaries"].append({**payload, "markdown": d.markdown_public, "markdown_internal": d.markdown,
+                                           "s3_key_md": kmd, "s3_key_md_internal": kint, "s3_key_json": kjs})
     if result.report is not None:
         kmd, kjs = keys.report_md(call.call_id), keys.report_json(call.call_id)
-        await add("report_md", kmd, result.report.markdown)
+        kint = keys.report_md_internal(call.call_id)
+        await add("report_md", kmd, result.report.markdown_public)
+        await add("report_md_internal", kint, result.report.markdown)
         await add("report_json", kjs, json.dumps(result.report.structured, ensure_ascii=False, indent=2, default=str),
                   content_type="application/json; charset=utf-8")
-        result_snapshot["report"] = {**result.report.structured, "markdown": result.report.markdown,
-                                     "s3_key_md": kmd, "s3_key_json": kjs}
+        result_snapshot["report"] = {**result.report.structured, "markdown": result.report.markdown_public,
+                                     "markdown_internal": result.report.markdown,
+                                     "s3_key_md": kmd, "s3_key_md_internal": kint, "s3_key_json": kjs}
     if summary is not None and summary.markdown.strip():
         kmd, kjs = keys.summary_md(call.call_id), keys.summary_json(call.call_id)
         payload = summary.model_dump(exclude={"markdown"})
@@ -133,14 +138,16 @@ async def persist_daily_result(rt: Runtime, s: AsyncSession, dd: DailyDiary, res
     for d in result.diaries:
         code = _artifact_code(d.prdlst_code, used_codes)
         kmd, kjs = keys.daily_diary_md(dd.diary_id, code), keys.daily_diary_json(dd.diary_id, code)
+        kint = keys.daily_diary_md_internal(dd.diary_id, code)
         payload = {"prdlst_code": d.prdlst_code, "prdlst_nm": d.prdlst_nm, "diary_date": d.diary_date,
                    "status": d.status, **d.structured}
-        await add("diary_md", kmd, d.markdown, prdlst_code=code, prdlst_nm=d.prdlst_nm,
-                  diary_date=d.diary_date, diary_status=d.status)
+        meta = dict(prdlst_code=code, prdlst_nm=d.prdlst_nm, diary_date=d.diary_date, diary_status=d.status)
+        await add("diary_md", kmd, d.markdown_public, **meta)
+        await add("diary_md_internal", kint, d.markdown, **meta)
         await add("diary_json", kjs, json.dumps(payload, ensure_ascii=False, indent=2, default=str),
-                  prdlst_code=code, prdlst_nm=d.prdlst_nm, diary_date=d.diary_date, diary_status=d.status,
-                  content_type="application/json; charset=utf-8")
-        result_snapshot["diaries"].append({**payload, "markdown": d.markdown, "s3_key_md": kmd, "s3_key_json": kjs})
+                  content_type="application/json; charset=utf-8", **meta)
+        result_snapshot["diaries"].append({**payload, "markdown": d.markdown_public, "markdown_internal": d.markdown,
+                                           "s3_key_md": kmd, "s3_key_md_internal": kint, "s3_key_json": kjs})
     kres = keys.daily_result_json(dd.diary_id)
     await add("result_json", kres, json.dumps(result_snapshot, ensure_ascii=False, indent=2, default=str),
               content_type="application/json; charset=utf-8")
@@ -148,6 +155,27 @@ async def persist_daily_result(rt: Runtime, s: AsyncSession, dd: DailyDiary, res
                                s3_key=transcript_key))
     await repo.replace_daily_artifacts(s, dd.diary_id, items)
     return items
+
+
+def artifact_keys(artifacts: list[Artifact] | list[DailyArtifact]) -> dict[str, Any]:
+    """콜백에 싣는 산출물 S3 키(본문 없음) — 저장된 행에서 그대로 읽는다(`unresolved-N` 재계산 없음).
+
+    `s3_key_md` = 전달용(근거 제거), `s3_key_md_internal` = 근거 포함 정본(`artifacts/internal/`). 버킷명은 싣지 않는다.
+    """
+    by_kind = {(a.kind, a.prdlst_code): a for a in artifacts}
+    diaries: list[dict[str, Any]] = []
+    for a in artifacts:
+        if a.kind != "diary_md":
+            continue
+        ai = by_kind.get(("diary_md_internal", a.prdlst_code))
+        diaries.append({"prdlst_code": _view_code(a.prdlst_code), "prdlst_nm": a.prdlst_nm, "status": a.diary_status,
+                        "s3_key_md": a.s3_key, "s3_key_md_internal": ai.s3_key if ai else None})
+    out: dict[str, Any] = {"diaries": diaries}
+    r = by_kind.get(("report_md", ""))
+    if r is not None:
+        ri = by_kind.get(("report_md_internal", ""))
+        out["report"] = {"s3_key_md": r.s3_key, "s3_key_md_internal": ri.s3_key if ri else None}
+    return out
 
 
 def build_result_view(call: Call, artifacts: list[Artifact], *, inline: bool = True) -> ResultView | None:
@@ -159,6 +187,7 @@ def build_result_view(call: Call, artifacts: list[Artifact], *, inline: bool = T
         if a.kind != "diary_md":
             continue
         js = by_kind.get(("diary_json", a.prdlst_code))
+        ai = by_kind.get(("diary_md_internal", a.prdlst_code))
         structured = None
         if inline and js and js.content:
             try:
@@ -170,11 +199,13 @@ def build_result_view(call: Call, artifacts: list[Artifact], *, inline: bool = T
             diary_date=a.diary_date, status=a.diary_status,
             markdown=a.content if inline else None, structured=structured,
             s3_key_md=a.s3_key, s3_key_json=js.s3_key if js else a.s3_key.replace(".md", ".json"),
+            s3_key_md_internal=ai.s3_key if ai else None,
         ))
     report = None
     rmd = by_kind.get(("report_md", ""))
     if rmd:
         rjs = by_kind.get(("report_json", ""))
+        ri = by_kind.get(("report_md_internal", ""))
         structured = None
         if inline and rjs and rjs.content:
             try:
@@ -182,7 +213,8 @@ def build_result_view(call: Call, artifacts: list[Artifact], *, inline: bool = T
             except ValueError:
                 structured = None
         report = ReportView(markdown=rmd.content if inline else None, structured=structured,
-                            s3_key_md=rmd.s3_key, s3_key_json=rjs.s3_key if rjs else rmd.s3_key.replace(".md", ".json"))
+                            s3_key_md=rmd.s3_key, s3_key_json=rjs.s3_key if rjs else rmd.s3_key.replace(".md", ".json"),
+                            s3_key_md_internal=ri.s3_key if ri else None)
     summary = None
     smd = by_kind.get(("summary_md", ""))
     if smd:
@@ -212,6 +244,7 @@ def build_daily_result_view(dd: DailyDiary, artifacts: list[DailyArtifact], *, i
         if a.kind != "diary_md":
             continue
         js = by_kind.get(("diary_json", a.prdlst_code))
+        ai = by_kind.get(("diary_md_internal", a.prdlst_code))
         structured = None
         if inline and js and js.content:
             try:
@@ -223,6 +256,7 @@ def build_daily_result_view(dd: DailyDiary, artifacts: list[DailyArtifact], *, i
             diary_date=a.diary_date, status=a.diary_status,
             markdown=a.content if inline else None, structured=structured,
             s3_key_md=a.s3_key, s3_key_json=js.s3_key if js else a.s3_key.replace(".md", ".json"),
+            s3_key_md_internal=ai.s3_key if ai else None,
         ))
     tr = by_kind.get(("transcript", ""))
     res = by_kind.get(("result_json", ""))

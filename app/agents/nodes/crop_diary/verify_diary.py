@@ -13,12 +13,11 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from ...deps import get_deps
 from ...llm import structured_call
-from ...prompts.loader import PROMPT_VERSION, load_system, render_user
-from ...render.markdown import render_diary
+from ...prompts.loader import load_system, render_user
 from ...schemas import DiaryResult, DiaryVerdictOut
 from ...state import CropDiaryState
 from .._common import err
-from .render_diary import EMPTY_PRAISE
+from .render_diary import EMPTY_PRAISE, render_both
 
 log = logging.getLogger(__name__)
 
@@ -62,8 +61,6 @@ async def verify_diary(state: CropDiaryState, config) -> dict:  # type: ignore[n
     d.prefill_ready = False
     d.praise = EMPTY_PRAISE
     d.warnings.append(f"검수: 실질 영농일지 내용 없음 — {out.reason}".strip().rstrip("—").strip())
-    d.markdown = render_diary(d, state["ctx"], state["transcript"], state["crop_facts"],
-                              model=getattr(deps.llm, "model_name", None) or deps.settings.llm_model,
-                              prompt_version=PROMPT_VERSION, now=deps.clock())
+    render_both(d, state, state["crop_facts"], deps)          # internal·public 둘 다 EMPTY 로 다시 렌더
     return {"diary": d, "usage": [trace.usage()],
             "warnings": [f"{d.prdlst_nm}: 검수에서 실질 내용 없음으로 판정 — EMPTY"]}

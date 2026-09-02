@@ -39,6 +39,10 @@ async def test_strawberry_full_run(settings, farmos_fake):
     # 상단 요약·격려 블록: 마크다운에는 있고 prefill(앱 일지 메모)에는 없다
     assert d.markdown.startswith("> 📝 **통화 요약** · ") and "> 💬 관수와 적엽까지 꼼꼼히 챙기셨네요 👍" in d.markdown
     assert "# 영농일지" not in d.markdown
+    # public 변형(전달용): 같은 내용, 근거·코드만 없다
+    assert d.markdown_public.startswith("> 📝 **통화 요약** · ") and "## 주요 농작업" in d.markdown_public
+    assert "(근거:" not in d.markdown_public and "## 근거 발화" not in d.markdown_public and "(0804MM)" not in d.markdown_public
+    assert "사파이어 액상수화제 → 잿빛곰팡이 · 2000배 (확인 필요)" in d.markdown_public
     assert "꼼꼼히" not in pre["content"] and pre["content"].startswith("[AI 초안·통화 기반]")
     assert d.structured["prefill_ready"] is True
     assert res.speaker_map == {"f0:A": "farmer", "f0:B": "consultant"}
@@ -49,6 +53,8 @@ async def test_strawberry_full_run(settings, farmos_fake):
     assert rep["sections"]["advice"][0]["needs_verification"] is True
     assert any("근거 없는 항목" in w for w in res.warnings)
     assert "## 컨설팅·권고 내용\n- [병해충관리] 사파이어 2000배 살포 ※ 확인 필요 (근거: #7)" in res.report.markdown
+    assert "## 컨설팅·권고 내용\n- [병해충관리] 사파이어 2000배 살포 ※ 확인 필요\n" in res.report.markdown_public
+    assert "## 근거 발화" not in res.report.markdown_public and "| 통화 ID |" not in res.report.markdown_public
 
 
 @pytest.mark.asyncio

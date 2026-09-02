@@ -15,10 +15,10 @@ from typing import Any
 from ..agents.interface import PipelineEmpty
 from ..clients.callback import send_callback
 from ..db import repo
-from ..db.models import Call, CallAudio, DailyDiary, utcnow
+from ..db.models import Call, CallAudio, DailyArtifact, DailyDiary, utcnow
 from ..runtime import Runtime
 from ..schemas.pipeline import CallContext, CallHints, Participant, PipelineResult
-from ..services.artifacts import persist_daily_result
+from ..services.artifacts import artifact_keys, persist_daily_result
 from ..services.results import utc
 from ..services.transcripts import apply_speaker_map, merge_calls, transcript_markdown
 
@@ -82,7 +82,8 @@ async def _finalize_daily(rt: Runtime, diary_id: str, *, status: str, error_code
         return dd
 
 
-async def _daily_callback(rt: Runtime, dd: DailyDiary) -> None:
+async def _daily_callback(rt: Runtime, dd: DailyDiary, artifacts: list[DailyArtifact] | None = None) -> None:
+    """날짜별 agent-callback — ID 통보. COMPLETED 에는 작물별 일지 S3 키(`diaries[]`, 전달용+내부용)만 덧붙인다."""
     if not (rt.settings.callback_enabled and dd.callback_url):
         return
     payload = {"daily_diary_id": dd.diary_id, "diary_date": dd.diary_date, "status": dd.status,
@@ -90,6 +91,8 @@ async def _daily_callback(rt: Runtime, dd: DailyDiary) -> None:
                "call_ids": list(dd.call_ids_json or []),
                "result_url": f"{rt.settings.public_base_url.rstrip('/')}/v1/daily-diaries/{dd.diary_id}",
                "generation_run": dd.generation_run}
+    if rt.settings.callback_include_artifact_keys and dd.status == "COMPLETED" and artifacts:
+        payload.update(artifact_keys(artifacts))          # daily 는 report 없음 → diaries[] 만
     ok, attempts = await send_callback(rt.settings, dd.callback_url, payload)
     async with rt.db.session() as s:
         d = await repo.get_daily(s, dd.diary_id)
@@ -187,9 +190,9 @@ async def run_daily_generate(rt: Runtime, diary_id: str) -> None:
     async with rt.db.session() as s:
         dd = await repo.get_daily(s, diary_id)
         assert dd is not None
-        await persist_daily_result(rt, s, dd, result, tkey)
+        arts = await persist_daily_result(rt, s, dd, result, tkey)
         await s.commit()
     d = await _finalize_daily(rt, diary_id, status="COMPLETED", model=result.model, warnings=all_warnings,
                               usage=result.usage or None, speaker_map=result.speaker_map)
     log.info("[%s] daily generation COMPLETED: %d diaries", diary_id, len(result.diaries))
-    await _daily_callback(rt, d)
+    await _daily_callback(rt, d, artifacts=arts)

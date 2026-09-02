@@ -36,8 +36,9 @@ CALL_STATES = ("OPEN", "ENDED")
 CALL_STATUSES = ("NONE", "PROCESSING", "COMPLETED", "EMPTY", "FAILED")
 GEN_STATES = ("IDLE", "QUEUED", "RUNNING")
 AUDIO_STATUSES = ("PENDING", "TRANSCRIBING", "TRANSCRIBED", "FAILED")
-ARTIFACT_KINDS = ("transcript", "diary_md", "diary_json", "report_md", "report_json",
-                  "summary_md", "summary_json", "result_json")
+# *_md = public(근거·코드·내부 메타 제거, 전달용) / *_md_internal = 근거 포함 정본(내부 저장용, S3 artifacts/internal/)
+ARTIFACT_KINDS = ("transcript", "diary_md", "diary_md_internal", "diary_json", "report_md", "report_md_internal",
+                  "report_json", "summary_md", "summary_json", "result_json")
 
 
 class Call(Base):
@@ -221,7 +222,7 @@ class DailyArtifact(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     diary_id: Mapped[str] = mapped_column(ForeignKey("daily_diaries.diary_id", ondelete="CASCADE"), nullable=False)
     generation_run: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    kind: Mapped[str] = mapped_column(String(32), nullable=False)             # transcript|diary_md|diary_json|result_json
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)             # transcript|diary_md|diary_md_internal|diary_json|result_json
     prdlst_code: Mapped[str] = mapped_column(String(32), default="", nullable=False)
     prdlst_nm: Mapped[str | None] = mapped_column(String(128))
     diary_date: Mapped[str | None] = mapped_column(String(10))

@@ -9,56 +9,61 @@
 | 일시 | {{ call_when or "-" }} |
 | 통화 길이 | {{ duration }} (녹음 파일 {{ n_files }}개) |
 | 참여자 | 농가: {{ farmer_name or "-" }} / 컨설턴트: {{ consultant_name or "-" }} |
+{% if not public %}
 | 화자 식별 | {{ speaker_summary }} |
+{% endif %}
 | 작물 | {{ crops | join(", ") if crops else "언급 없음" }} |
 | 키워드 | {{ n.keywords | join(", ") if n.keywords else "-" }} |
+{% if not public %}
 | 통화 ID | {{ call.call_id }} |
+{% endif %}
 
 ## 농가·농장·작물 현황
 {% for b in n.farm_status %}
-- {{ b.text }}{% if b.needs_verification %} ※ 확인 필요{% endif %}{{ b.evidence | evref }}
+- {{ b.text }}{% if b.needs_verification %} ※ 확인 필요{% endif %}{{ b.evidence | evref(show_ev) }}
 {% else %}
 - 언급 없음
 {% endfor %}
 
 ## 주요 문의·문제사항
 {% for b in n.issues %}
-- {{ b.text }}{% if b.needs_verification %} ※ 확인 필요{% endif %}{{ b.evidence | evref }}
+- {{ b.text }}{% if b.needs_verification %} ※ 확인 필요{% endif %}{{ b.evidence | evref(show_ev) }}
 {% else %}
 - 언급 없음
 {% endfor %}
 
 ## 컨설팅·권고 내용
 {% for b in n.advice %}
-- {{ b.text }}{% if b.needs_verification %} ※ 확인 필요{% endif %}{{ b.evidence | evref }}
+- {{ b.text }}{% if b.needs_verification %} ※ 확인 필요{% endif %}{{ b.evidence | evref(show_ev) }}
 {% else %}
 - 언급 없음
 {% endfor %}
 
 ## 농가 조치사항
 {% for b in n.farmer_actions %}
-- {{ b.text }}{% if b.needs_verification %} ※ 확인 필요{% endif %}{{ b.evidence | evref }}
+- {{ b.text }}{% if b.needs_verification %} ※ 확인 필요{% endif %}{{ b.evidence | evref(show_ev) }}
 {% else %}
 - 언급 없음
 {% endfor %}
 
 ## 후속 확인·상담 계획
 {% for b in n.follow_ups %}
-- {{ b.text }}{{ b.evidence | evref }}
+- {{ b.text }}{{ b.evidence | evref(show_ev) }}
 {% endfor %}
 {% for a in n.action_items %}
-- ({{ a.owner | owner_ko }}) {{ a.text }}{% if a.due_hint %} — {{ a.due_hint }}{% endif %}{{ a.evidence | evref }}
+- ({{ a.owner | owner_ko }}) {{ a.text }}{% if a.due_hint %} — {{ a.due_hint }}{% endif %}{{ a.evidence | evref(show_ev) }}
 {% endfor %}
 {% if not n.follow_ups and not n.action_items %}
 - 언급 없음
 {% endif %}
-{% if warnings %}
+{% if warnings and not public %}
 
 ## 참고
 {% for w in warnings %}
 - {{ w }}
 {% endfor %}
 {% endif %}
+{% if not public %}
 
 ## 근거 발화
 {% for t in cited %}
@@ -66,6 +71,7 @@
 {% else %}
 - (없음)
 {% endfor %}
+{% endif %}
 
 ---
-_AI 초안 — 컨설턴트 확인 후 확정. 농약·비료·안전 관련 내용은 제품 라벨·공식 정보·관계 법령을 재확인하세요(동의서 §8). 생성: {{ generated_at }}, 모델 {{ model or "-" }}, 프롬프트 v{{ prompt_version }}_
+_AI 초안 — 컨설턴트 확인 후 확정. 농약·비료·안전 관련 내용은 제품 라벨·공식 정보·관계 법령을 재확인하세요(동의서 §8). 생성: {{ generated_at }}{% if not public %}, 모델 {{ model or "-" }}, 프롬프트 v{{ prompt_version }}{% endif %}_

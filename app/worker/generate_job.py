@@ -11,10 +11,10 @@ from ..agents.interface import PipelineEmpty
 from ..agents.summarize import summary_from_report
 from ..clients.callback import send_callback
 from ..db import repo
-from ..db.models import Call, utcnow
+from ..db.models import Artifact, Call, utcnow
 from ..runtime import Runtime
 from ..schemas.pipeline import CallContext, CallHints, CallSummaryResult, DiaryArtifact, Participant, PipelineResult
-from ..services.artifacts import persist_result
+from ..services.artifacts import artifact_keys, persist_result
 from ..services.results import utc
 from ..services.transcripts import apply_speaker_map, merge_transcripts, transcript_markdown
 
@@ -100,11 +100,13 @@ async def build_summary(rt: Runtime, transcript, ctx: CallContext, result: Pipel
 
 
 async def _summary_callback(rt: Runtime, call: Call, result: PipelineResult | None = None,
-                            summary_md: str | None = None) -> None:
+                            summary_md: str | None = None, artifacts: list[Artifact] | None = None) -> None:
     """백엔드 통화요약 콜백 — content 는 **통화 단순요약**(불릿).
 
-    영농일지·컨설팅 보고서는 싣지 않는다. 일지는 `GET /v1/calls/{id}` 의 `result.diaries[]`,
+    영농일지·컨설팅 보고서 **본문**은 싣지 않는다. 일지는 `GET /v1/calls/{id}` 의 `result.diaries[]`,
     전사는 `/transcript` 로 조회한다 — 이 콜백 도착이 그 결과가 준비됐다는 신호를 겸한다.
+    COMPLETED 에는 산출물 S3 키(`diaries[]`/`report`, 전달용 + 근거 포함 내부용)만 같이 싣는다
+    (`CALLBACK_INCLUDE_ARTIFACT_KEYS`).
     """
     st = rt.settings
     if not (st.callback_enabled and st.summary_callback_url):
@@ -133,6 +135,9 @@ async def _summary_callback(rt: Runtime, call: Call, result: PipelineResult | No
     # 이번 실행의 결과가 있을 때만 — 이른 종료(NO_AUDIO/STT_FAILED)에서는 직전 run 의 값이 남아 있을 수 있다.
     if st.callback_include_speaker_map and result is not None and call.speaker_map_json:
         payload["speaker_map"] = dict(call.speaker_map_json)
+    # 산출물 키 — 이번 실행에서 저장된 행 기준, COMPLETED 에만(EMPTY/FAILED 는 직전 run 의 산출물이 남아 있을 수 있다).
+    if st.callback_include_artifact_keys and status == "COMPLETED" and artifacts:
+        payload.update(artifact_keys(artifacts))
     ok, attempts = await send_callback(rt.settings, st.summary_callback_url, payload)
     async with rt.db.session() as s:
         c = await repo.get_call(s, call.call_id)
@@ -238,10 +243,10 @@ async def run_generate(rt: Runtime, call_id: str) -> None:
     async with rt.db.session() as s:
         call = await repo.get_call(s, call_id)
         assert call is not None
-        await persist_result(rt, s, call, result, tkey, summary=summary)
+        arts = await persist_result(rt, s, call, result, tkey, summary=summary)
         await s.commit()
     c = await _finalize(rt, call_id, status="COMPLETED", model=result.model, warnings=all_warnings,
                         usage=result.usage or None, speaker_map=result.speaker_map)
     log.info("[%s] generation COMPLETED: %d diaries, report=%s", call_id, len(result.diaries), result.report is not None)
     # 산출물 S3 저장(persist_result) 이 끝난 뒤에만 콜백 — 백엔드가 조회할 때 키가 이미 존재한다.
-    await _summary_callback(rt, c, result, summary.markdown if summary else None)
+    await _summary_callback(rt, c, result, summary.markdown if summary else None, artifacts=arts)

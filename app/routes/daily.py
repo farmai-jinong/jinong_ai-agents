@@ -20,7 +20,7 @@ from ..schemas.daily import (
 from ..services.artifacts import UNRESOLVED
 from ..services.daily import DailyDiaryService
 from ..services.results import daily_detail, daily_list_item
-from .calls import _artifact_response
+from .calls import _artifact_response, artifact_kind
 
 router = APIRouter(prefix="/v1/daily-diaries", tags=["daily-diaries"], dependencies=[Depends(require_api_key)])
 
@@ -95,9 +95,10 @@ async def get_daily_transcript(diary_id: str, request: Request) -> Response:
 
 
 @router.get("/{diary_id}/artifacts/diary/{prdlst_code}")
-async def get_daily_diary_artifact(diary_id: str, prdlst_code: str, request: Request, format: str = "md") -> Response:
+async def get_daily_diary_artifact(diary_id: str, prdlst_code: str, request: Request, format: str = "md",
+                                   view: str = "public") -> Response:
     rt = _rt(request)
-    kind = "diary_json" if format == "json" else "diary_md"
+    kind = artifact_kind("diary", format, view)
     code = prdlst_code or UNRESOLVED
     async with rt.db.session() as s:
         art = await repo.get_daily_artifact(s, diary_id, kind, code)

@@ -57,6 +57,9 @@ async def test_own_bucket_roundtrip(storage, tmp_path):
     key = storage.keys.result_json("c1")
     assert await storage.put_json(key, {"ok": True, "n": 1}) == key
     assert (tmp_path / "storage" / "agents/voicecall/c1/artifacts/result.json").is_file()
+    kint = storage.keys.diary_md_internal("c1", "0804MM")
+    await storage.put_text(kint, "# internal")
+    assert (tmp_path / "storage" / "agents/voicecall/c1/artifacts/internal/diary/0804MM.md").is_file()
 
     assert await storage.get_json(key) == {"ok": True, "n": 1}
     assert b'"ok": true' in await storage.get_bytes(BUCKET, key)

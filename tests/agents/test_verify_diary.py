@@ -34,6 +34,7 @@ async def test_verdict_empty_downgrades_and_rerenders(settings, farmos_fake):
     d = res.diaries[0]
     assert d.status == "EMPTY"
     assert EMPTY_TEMPLATE_LINE in d.markdown
+    assert EMPTY_TEMPLATE_LINE in d.markdown_public and "## 근거 발화" not in d.markdown_public   # 강등은 두 벌 다 다시 렌더
     body = strip_lead_quotes(d.markdown)
     assert "사파이어" not in body                              # 원래 초안이 남아 있지 않다(상단 통화 요약 줄은 예외)
     assert d.markdown.startswith("> 📝 **통화 요약** · ") and "다음 통화도 응원할게요" in d.markdown   # 요약 유지, 격려는 중립 문구

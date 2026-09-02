@@ -117,10 +117,21 @@ async def get_transcript(call_id: str, request: Request) -> Response:
     return JSONResponse(content=body)
 
 
+def artifact_kind(base: str, format: str, view: str) -> str:
+    """artifact 조회 kind — `format=json` 이면 view 무시. `view=public`(기본, 근거 제거) | `internal`(근거 포함 정본)."""
+    if format == "json":
+        return f"{base}_json"
+    if view == "public":
+        return f"{base}_md"
+    if view == "internal":
+        return f"{base}_md_internal"
+    raise ApiError("INVALID_VIEW", "view must be 'public' or 'internal'", 400)
+
+
 @router.get("/{call_id}/artifacts/report")
-async def get_report(call_id: str, request: Request, format: str = "md") -> Response:
+async def get_report(call_id: str, request: Request, format: str = "md", view: str = "public") -> Response:
     rt = _rt(request)
-    kind = "report_json" if format == "json" else "report_md"
+    kind = artifact_kind("report", format, view)
     async with rt.db.session() as s:
         art = await repo.get_artifact(s, call_id, kind)
     if art is None:
@@ -141,9 +152,9 @@ async def get_summary(call_id: str, request: Request, format: str = "md") -> Res
 
 
 @router.get("/{call_id}/artifacts/diary/{prdlst_code}")
-async def get_diary(call_id: str, prdlst_code: str, request: Request, format: str = "md") -> Response:
+async def get_diary(call_id: str, prdlst_code: str, request: Request, format: str = "md", view: str = "public") -> Response:
     rt = _rt(request)
-    kind = "diary_json" if format == "json" else "diary_md"
+    kind = artifact_kind("diary", format, view)
     code = prdlst_code or UNRESOLVED
     async with rt.db.session() as s:
         art = await repo.get_artifact(s, call_id, kind, code)

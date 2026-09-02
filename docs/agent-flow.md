@@ -253,6 +253,13 @@ AP 백엔드 경로(`refs` 없음)는 코드가 확정돼도 prefill 이 나오�
 찍는다(항목이 하나라도 있으면 `언급 없음` 은 나오지 않는다). 격려 줄은 LLM 이 근거 있는 한 줄을 못 냈으면
 `FALLBACK_PRAISE`, EMPTY/UNRESOLVED 면 `EMPTY_PRAISE` 고정 문구. 통화 요약은 작물 공통(같은 통화의 여러 작물 일지에 같은 줄).
 
+**두 벌 렌더 (`render_both`)**: 같은 `DiaryResult` 로 `variant="internal"`(위 고정 형식 그대로 — `DiaryResult.markdown`, 검수·평가·
+judge 가 보는 정본, S3 `artifacts/internal/`)과 `variant="public"`(`DiaryResult.markdown_public`, 백엔드 기본 전달용 —
+S3 `artifacts/diary/{code}.md`, API `markdown`)을 렌더한다. public 은 `(근거: #N)`·`## 근거 발화`·`## 참고`·작물 코드·
+`| 통화 |` 행·푸터의 모델/프롬프트 버전만 뺀 투영이고 항목·판정 문구·§8 안내는 같다. 보고서(`build_report`)도 동일하게 두 벌
+(public 은 추가로 `| 화자 식별 |`(신뢰도)·`| 통화 ID |` 행 제외). LLM 재호출·사후 파싱 없음 — 근거는 템플릿의 `evref` 필터와
+`## 근거 발화` 블록 두 곳에서만 나오므로 렌더 인자 하나로 갈린다.
+
 ### 2.11 `verify_diary` — 빈 템플릿 걸러내기 (강등 전용)
 
 `render_diary` 의 규칙 판정은 "추출된 사실이 하나라도 있는가"만 본다. 그래서 잡담에서 관찰 1건이

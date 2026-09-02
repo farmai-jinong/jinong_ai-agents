@@ -8,7 +8,7 @@
 1. `POST /v1/calls` — 전화 시작(call_id, 참가자, 농가 JWT)
 2. `POST /v1/calls/{call_id}/audio` — 녹음파일 수신(S3 bucket/key, 통화당 여러 개) → 즉시 게이트웨이 화자분리 STT
 3. `POST /v1/calls/{call_id}/end` — 전화 종료 → 202, 전사가 모두 모이면 백그라운드 생성
-4. `GET /v1/calls/{call_id}` — 상태(`PROCESSING|COMPLETED|EMPTY|FAILED`) 와 결과: 작물별 `{prdlst_code, prdlst_nm, markdown, structured(prefill), s3_key}` + 보고서
+4. `GET /v1/calls/{call_id}` — 상태(`PROCESSING|COMPLETED|EMPTY|FAILED`) 와 결과: 작물별 `{prdlst_code, prdlst_nm, markdown(전달용), structured(prefill), s3_key_md, s3_key_md_internal(근거 포함 정본)}` + 보고서
 5. (선택) `POST /v1/daily-diaries` — 하루 통화가 여러 건이면 terminal 된 call_id 목록으로 **날짜별 영농일지**(멀티콜 병합, 일지만·보고서 없음)를 트리거 → `GET /v1/daily-diaries/{diary_id}`
 
 자세한 계약은 `docs/api-reference.md`, 구조는 `docs/architecture.md`, 배포는 `docs/ops.md`.

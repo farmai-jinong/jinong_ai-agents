@@ -45,6 +45,33 @@ def test_diary_headings_order_and_footer():
     assert "`#2`" in md and "`#4`" in md
 
 
+PUBLIC_DIARY_HEADINGS = DIARY_HEADINGS[:-2]     # public 변형은 근거 발화·참고가 빠진다
+
+
+def test_diary_public_variant_strips_evidence_codes_and_meta():
+    """public(전달용)은 같은 데이터에서 근거·코드·내부 메타만 빠진다 — 판정 문구·섹션 순서·§8 안내는 그대로."""
+    tr, ctx = load_call("strawberry_botrytis")
+    nt = build_turns(tr)
+    rep = MappingReport(farmworks=[MappedItem(item_id="fw0", family="farmwork", source="관수", status="matched", code="1", name="관수", evidence=[4])],
+                        pests=[MappedItem(item_id="p0", family="pest", source="잿빛곰팡이", status="unmatched", evidence=[2])])
+    d = DiaryResult(prdlst_code="0804MM", prdlst_nm="딸기", diary_date="2026-08-19", status="OK",
+                    mapping=rep, content="테스트", evidence=[2, 4], warnings=["잿빛곰팡이: 근거 없음"])
+    d.summary_line, d.praise = "요약", "👍"
+    kw = dict(model="m", prompt_version="1", now=NOW)
+    internal = render_diary(d, ctx, nt, CropFacts(), **kw)
+    public = render_diary(d, ctx, nt, CropFacts(), variant="public", **kw)
+    assert internal == render_diary(d, ctx, nt, CropFacts(), variant="internal", **kw)   # 기본값은 internal
+    # 빠지는 것
+    for gone in ("(근거:", "## 근거 발화", "## 참고", "(0804MM)", "| 통화 |", "모델 m", "프롬프트 v1", "`#2`"):
+        assert gone in internal and gone not in public, gone
+    # 남는 것
+    for kept in ("> 📝 **통화 요약** · 요약", "> 💬 👍", "| 작물 | 딸기 |", "- [x] 관수\n", "[표준 목록 미매핑]",
+                 "## 농작업 사진", "AI 초안 — 농가 확인 후 저장", "(동의서 §8)", "생성: "):
+        assert kept in public, kept
+    assert _ordered(public, PUBLIC_DIARY_HEADINGS) and "## 근거 발화" not in public
+    assert not public.rstrip().endswith("\n\n---") and "\n\n\n" not in public          # 블록 제거 자리에 빈 줄이 겹치지 않는다
+
+
 def test_diary_empty_template():
     tr, ctx = load_call("grape_multi_crop_no_work")
     nt = build_turns(tr)
@@ -55,6 +82,8 @@ def test_diary_empty_template():
     assert "확인되지 않았어요" in md and "## 주요 농작업\n- 언급 없음" in md
     assert _ordered(md, DIARY_HEADINGS)                                  # 빈 일지도 같은 섹션 집합
     assert "## 근거 발화\n- (없음)" in md and "## 참고\n- 없음" in md
+    pub = render_diary(d, ctx, nt, CropFacts(), model=None, prompt_version="1", now=NOW, variant="public")
+    assert "확인되지 않았어요" in pub and _ordered(pub, PUBLIC_DIARY_HEADINGS) and "## 근거 발화" not in pub
 
 
 def test_diary_no_mention_never_coexists_with_items():
@@ -80,6 +109,12 @@ def test_report_headings_and_verification_mark():
     assert _ordered(md, REPORT_HEADINGS)
     assert "※ 확인 필요" in md and "(컨설턴트) 방문 — 화요일" in md and "| 화자 식별 | 미식별 |" in md
     assert "## 농가·농장·작물 현황\n- 언급 없음" in md
+    pub = render_report(n, ctx, nt, speaker_roles=None, crops=["딸기"], warnings=["근거 없는 항목 1건 제외"],
+                        model="m", prompt_version="1", now=NOW, variant="public")
+    for gone in ("(근거:", "## 근거 발화", "## 참고", "| 화자 식별 |", "| 통화 ID |", "프롬프트 v1", "`#7`"):
+        assert gone not in pub, gone
+    assert _ordered(pub, REPORT_HEADINGS[:-1]) and "※ 확인 필요" in pub and "(컨설턴트) 방문 — 화요일" in pub
+    assert pub.startswith("# 컨설팅 보고서 — 2026-08-19 김철수 농가") and "(동의서 §8)" in pub and "\n\n\n" not in pub
 
 
 def test_build_prefill_merges_existing():

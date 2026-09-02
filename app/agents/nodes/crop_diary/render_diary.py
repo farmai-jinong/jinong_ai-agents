@@ -118,6 +118,13 @@ async def render_diary_node(state: CropDiaryState, config) -> dict:  # type: ign
                     prefill_ready=prefill_ready, mapping=rep, content=content_text, warnings=warnings,
                     summary_line=state.get("call_summary") or "", praise=praise,
                     evidence=collect_evidence(rep, content.evidence if content else [], cf))
-    d.markdown = render_diary(d, state["ctx"], state["transcript"], cf, model=getattr(deps.llm, "model_name", None) or deps.settings.llm_model,
-                              prompt_version=PROMPT_VERSION, now=deps.clock())
+    render_both(d, state, cf, deps)
     return {"diary": d, "diaries": [d]}
+
+
+def render_both(d: DiaryResult, state: CropDiaryState, cf, deps) -> None:  # type: ignore[no-untyped-def]
+    """같은 DiaryResult 로 internal(근거 포함)·public(내용만) 두 벌을 렌더한다 — LLM 재호출·사후 파싱 없음."""
+    kw = dict(model=getattr(deps.llm, "model_name", None) or deps.settings.llm_model,
+              prompt_version=PROMPT_VERSION, now=deps.clock())
+    d.markdown = render_diary(d, state["ctx"], state["transcript"], cf, variant="internal", **kw)
+    d.markdown_public = render_diary(d, state["ctx"], state["transcript"], cf, variant="public", **kw)

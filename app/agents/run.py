@@ -160,10 +160,12 @@ async def amain(args: argparse.Namespace) -> int:
         (out_dir / "facts.json").write_text(json.dumps(result.facts, ensure_ascii=False, indent=1), encoding="utf-8")
     for d in result.diaries:
         stem = d.prdlst_code or d.prdlst_nm
-        (out_dir / f"diary_{stem}.md").write_text(d.markdown, encoding="utf-8")
+        (out_dir / f"diary_{stem}.md").write_text(d.markdown, encoding="utf-8")                  # internal(근거 포함)
+        (out_dir / f"diary_{stem}.public.md").write_text(d.markdown_public, encoding="utf-8")    # 전달용
         (out_dir / f"diary_{stem}.json").write_text(json.dumps(d.structured, ensure_ascii=False, indent=1), encoding="utf-8")
     if result.report:
         (out_dir / "report.md").write_text(result.report.markdown, encoding="utf-8")
+        (out_dir / "report.public.md").write_text(result.report.markdown_public, encoding="utf-8")
         (out_dir / "report.json").write_text(json.dumps(result.report.structured, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"== {ctx.call_id} → {out_dir}")
     print(f"diaries: {[(d.prdlst_code, d.prdlst_nm, d.status) for d in result.diaries]}")

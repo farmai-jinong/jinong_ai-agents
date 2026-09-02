@@ -87,10 +87,12 @@ Body(선택) `{"ended_at": "...", "duration_sec": 900}` → `202` (`state=ENDED,
                  "structured": {"prefill": {"diaryId": null, "diaryDate": "2026-08-19", "prdlstCode": "0804MM", "...": "PutDiaryDTO"},
                                 "prefill_ready": true, "mapping": {...}, "gsNm": "…", "warnings": []},
                  "s3_key_md": "agents/voicecall/<id>/artifacts/diary/0804MM.md",
-                 "s3_key_json": "agents/voicecall/<id>/artifacts/diary/0804MM.json"}],
+                 "s3_key_json": "agents/voicecall/<id>/artifacts/diary/0804MM.json",
+                 "s3_key_md_internal": "agents/voicecall/<id>/artifacts/internal/diary/0804MM.md"}],
     "report": {"markdown": "# 컨설팅 보고서 …", "structured": {"summary": "…", "keywords": [], "action_items": [], "sections": {}},
                "s3_key_md": "agents/voicecall/<id>/artifacts/report.md",
-               "s3_key_json": "agents/voicecall/<id>/artifacts/report.json"},
+               "s3_key_json": "agents/voicecall/<id>/artifacts/report.json",
+               "s3_key_md_internal": "agents/voicecall/<id>/artifacts/internal/report.md"},
     "summary": {"markdown": "- 주제: 딸기 잿빛곰팡이병 방제 상담\n- 조치: 환기 관리 권고\n- 후속: 화요일 방문 예정",
                 "structured": {"topic": "…", "actions": ["…"], "follow_ups": ["…"], "model": "…", "source": "llm"},
                 "s3_key_md": "agents/voicecall/<id>/artifacts/summary.md",
@@ -105,6 +107,11 @@ Body(선택) `{"ended_at": "...", "duration_sec": 900}` → `202` (`state=ENDED,
 - `result` 는 `COMPLETED` 일 때만. `diaries[]` 는 통화에서 다룬 **작물별** 1건씩(`prdlst_code` = farmos 품목코드; 확정 불가 시 `null`, S3 키는 `unresolved` — 한 결과에 미확정이 여럿이면 두 번째부터 `unresolved-2`, `unresolved-3` …). `status` ∈ `OK|PARTIAL|EMPTY|UNRESOLVED_CROP` (`EMPTY` 는 규칙 판정 + 검수 LLM 패스가 실질 내용 없음으로 본 경우; 판정 근거는 `structured.verify`).
 - 에이전트는 farmos 에 **저장하지 않는다**. `structured.prefill` 은 앱 `PUT /m/diary` 의 `fields` 와 같은 모양의 초안 — 농가 확인 후 저장용.
 - 마크다운 본문이 `RESULT_INLINE_MAX_KB` 를 넘으면 인라인 생략(S3 키만).
+- **마크다운은 두 벌**이다. `markdown`/`s3_key_md` 는 **전달용(public)** — `(근거: #N)` 인라인 근거, `## 근거 발화`, `## 참고`,
+  작물 코드 `(0804MM)`, 통화 ID 행, 모델·프롬프트 버전을 뺀 본문(보고서는 화자 식별 신뢰도·통화 ID 행도 뺀다).
+  `s3_key_md_internal` 은 **근거 포함 정본(internal)** 으로 `…/artifacts/internal/` 아래에 저장되며 응답에 본문은 인라인하지
+  않는다 — 필요하면 artifact 엔드포인트에 `?view=internal`. 두 벌은 같은 구조화 데이터의 렌더 결과라 내용(항목·판정 문구
+  `[표준 목록 미매핑]`·`※ 확인 필요` 등)은 동일하다. `.json`(`structured`, prefill 포함)은 한 벌뿐이다.
 
 ## 산출물 · 목록 · 재생성
 
@@ -112,8 +119,8 @@ Body(선택) `{"ended_at": "...", "duration_sec": 900}` → `202` (`state=ENDED,
 |---|---|---|
 | GET | `/v1/calls/{id}/transcript` | 병합 전사 JSON(`MergedTranscript`, 화자 역할 포함). 미준비 `404 NOT_READY` |
 | GET | `/v1/calls/{id}/artifacts/summary[?format=json]` | 통화 단순요약 md / JSON (콜백 `content` 와 동일) |
-| GET | `/v1/calls/{id}/artifacts/report[?format=json]` | 보고서 `text/markdown` / JSON |
-| GET | `/v1/calls/{id}/artifacts/diary/{prdlst_code}[?format=json]` | 작물별 영농일지 md / JSON (`unresolved`, 다건이면 `unresolved-2` … 가능) |
+| GET | `/v1/calls/{id}/artifacts/report[?format=json][&view=public\|internal]` | 보고서 `text/markdown` / JSON. `view` 기본 `public`(근거 제거), `internal` 은 근거 포함 정본; `format=json` 이면 무시. 그 외 값 `400 INVALID_VIEW` |
+| GET | `/v1/calls/{id}/artifacts/diary/{prdlst_code}[?format=json][&view=public\|internal]` | 작물별 영농일지 md / JSON (`unresolved`, 다건이면 `unresolved-2` … 가능). `view` 규칙 동일 |
 | GET | `/v1/calls?status=&state=&limit=50&cursor=` | 운영용 목록 `{items:[{call_id,state,status,updated_at,stt_progress}], next_cursor}` (`limit` 1..200, 기본 50) |
 | POST | `/v1/calls/{id}/regenerate` | `{"retranscribe": false, "reason": "…", "farm_access_token": "…"}` → `202`. 토큰을 주면 purge 된 농가 JWT 재공급(daily 와 동일 계약). `409 CALL_NOT_ENDED` / `409 ALREADY_PROCESSING`. 산출물 같은 S3 키에 덮어쓰기, `generation.run` +1 |
 | GET | `/healthz` | 무인증 `{status: "ok"\|"degraded", version, worker:{running,pending_stt,pending_gen,pending_daily}}`. DB ping 실패 시 `status:"degraded"` 이고 `pending_*` 는 모두 `null` |
@@ -193,7 +200,7 @@ STT 화자 글자(`A`/`B`…)는 **그 요청 안의 등장 순서**일 뿐이�
 |---|---|---|
 | GET | `/v1/daily-diaries/{diary_id}[?inline=false]` | 상태/결과 (`DailyDiaryDetail` — `result.diaries` 만, report 없음) |
 | GET | `/v1/daily-diaries/{diary_id}/transcript` | 병합 전사 JSON. 미준비 `404 NOT_READY` |
-| GET | `/v1/daily-diaries/{diary_id}/artifacts/diary/{prdlst_code}[?format=json]` | 작물별 일지 md / JSON |
+| GET | `/v1/daily-diaries/{diary_id}/artifacts/diary/{prdlst_code}[?format=json][&view=public\|internal]` | 작물별 일지 md / JSON (`view` 규칙은 통화와 동일) |
 | GET | `/v1/daily-diaries?diary_date=&status=&limit=50&cursor=` | 목록 `{items:[{diary_id,diary_date,status,updated_at}], next_cursor}` (`limit` 1..200, 기본 50) |
 | POST | `/v1/daily-diaries/{diary_id}/regenerate` | `{"farm_access_token": "…", "reason": "…"}` → `202`. `409 ALREADY_PROCESSING` / `404 DAILY_NOT_FOUND`. 같은 S3 키 덮어쓰기, `generation.run` +1 |
 
@@ -228,8 +235,13 @@ terminal 시 (형식은 통화 콜백과 동일한 전송 규칙):
 {"daily_diary_id": "daily_u1_20260820", "diary_date": "2026-08-20", "status": "COMPLETED", "error": null,
  "call_ids": ["c1", "c2", "c3"],
  "result_url": "https://jinong-stt-report-generation.jinongservice.co.kr/v1/daily-diaries/daily_u1_20260820",
- "generation_run": 1}
+ "generation_run": 1,
+ "diaries": [{"prdlst_code": "0804MM", "prdlst_nm": "딸기", "status": "OK",
+              "s3_key_md": "agents/voicecall/daily/daily_u1_20260820/artifacts/diary/0804MM.md",
+              "s3_key_md_internal": "agents/voicecall/daily/daily_u1_20260820/artifacts/internal/diary/0804MM.md"}]}
 ```
+
+`diaries[]`(산출물 S3 키, 본문 없음)는 `COMPLETED` 에만 붙는다(`CALLBACK_INCLUDE_ARTIFACT_KEYS`; report 는 daily 에 없다).
 
 ## 콜백
 
@@ -253,6 +265,17 @@ terminal 시 (형식은 통화 콜백과 동일한 전송 규칙):
   `generation.warnings` 에 경고를 남긴다 — 통화 상태는 `COMPLETED` 를 유지한다.
 - 같은 `(call_id, summary_type)` 은 백엔드에서 UPSERT — 재생성 시 덮어쓰기.
 - `CallCreateRequest.callback_url` 은 스키마상 유지되지만 **통화 단위 발사에는 쓰지 않는다**(날짜별 전용).
+- **`COMPLETED` 에는 산출물 S3 키를 같이 싣는다**(`CALLBACK_INCLUDE_ARTIFACT_KEYS`, 기본 켬; 본문은 싣지 않는다):
+  ```json
+  "diaries": [{"prdlst_code": "0804MM", "prdlst_nm": "딸기", "status": "OK",
+               "s3_key_md": "agents/voicecall/<id>/artifacts/diary/0804MM.md",
+               "s3_key_md_internal": "agents/voicecall/<id>/artifacts/internal/diary/0804MM.md"}],
+  "report": {"s3_key_md": "agents/voicecall/<id>/artifacts/report.md",
+             "s3_key_md_internal": "agents/voicecall/<id>/artifacts/internal/report.md"}
+  ```
+  `s3_key_md` 는 전달용(근거 제거), `s3_key_md_internal` 은 근거 포함 정본 — `GET /v1/calls/{id}` 의 `result` 와 같은 값.
+  키는 `jinong-agri-stt` 버킷 기준이고 prefix 는 환경별(prod `agents/voicecall/`, dev `agents/voicecall-dev/`).
+  `EMPTY`/`FAILED` 에는 싣지 않는다. 백엔드 DTO 가 미지 필드를 거부하면 `CALLBACK_INCLUDE_ARTIFACT_KEYS=false`.
 
 **날짜별 일지 — agent-callback**: `POST /v1/daily-diaries` body 의 `callback_url` 로, terminal 마다 마스터 ID만 알린다. 백엔드는 이 콜백을 받고 `GET /v1/daily-diaries/{id}?inline=true` 로 `diaries[]`(작물별 1건)를 가져가 저장한다.
 

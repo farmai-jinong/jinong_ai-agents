@@ -217,13 +217,15 @@ Body 선택: `{"retranscribe": false, "reason": "...", "farm_access_token": "<�
         "evidence": [3, 5, 7, 9, 102, 103, 104, 234, 240, 371, 397, 399]
       },
       "s3_key_md": "agents/voicecall/smoke-20260821-33min/artifacts/diary/unresolved.md",
-      "s3_key_json": "agents/voicecall/smoke-20260821-33min/artifacts/diary/unresolved.json"
+      "s3_key_json": "agents/voicecall/smoke-20260821-33min/artifacts/diary/unresolved.json",
+      "s3_key_md_internal": "agents/voicecall/smoke-20260821-33min/artifacts/internal/diary/unresolved.md"
     }, {
       "prdlst_code": null, "prdlst_nm": "양파", "diary_date": "2026-08-21", "status": "EMPTY",
       "markdown": "…(언급만 되고 기록할 내용이 없는 작물 — 빈 골격 450자)",
       "structured": {"…": "위와 동일 모양, mapping/evidence 비어 있음"},
       "s3_key_md": "agents/voicecall/smoke-20260821-33min/artifacts/diary/unresolved-2.md",
-      "s3_key_json": "agents/voicecall/smoke-20260821-33min/artifacts/diary/unresolved-2.json"
+      "s3_key_json": "agents/voicecall/smoke-20260821-33min/artifacts/diary/unresolved-2.json",
+      "s3_key_md_internal": "agents/voicecall/smoke-20260821-33min/artifacts/internal/diary/unresolved-2.md"
     }],
     "report": {
       "markdown": "# 컨설팅 보고서 — 2026-08-21 …(총 4,313자)",
@@ -242,7 +244,8 @@ Body 선택: `{"retranscribe": false, "reason": "...", "farm_access_token": "<�
         "needs_verification": ["…약효/혼용 관련 항목 7건…"]
       },
       "s3_key_md": "agents/voicecall/smoke-20260821-33min/artifacts/report.md",
-      "s3_key_json": "agents/voicecall/smoke-20260821-33min/artifacts/report.json"
+      "s3_key_json": "agents/voicecall/smoke-20260821-33min/artifacts/report.json",
+      "s3_key_md_internal": "agents/voicecall/smoke-20260821-33min/artifacts/internal/report.md"
     },
     "result_key": "agents/voicecall/smoke-20260821-33min/artifacts/result.json"
   },
@@ -262,6 +265,12 @@ Body 선택: `{"retranscribe": false, "reason": "...", "farm_access_token": "<�
 - **저희는 farmos에 저장하지 않습니다.** `structured.prefill`은 앱 `PUT /m/diary`의 `fields`와 같은
   모양의 **초안**이고, 농가가 앱에서 확인 후 저장하는 용도입니다.
 - markdown 본문이 512KB를 넘으면 인라인이 생략됩니다(`markdown: null`) — S3 키 또는 §3.6으로 조회.
+- **마크다운은 두 벌입니다** (2026-09-02 변경). `markdown`/`s3_key_md`는 **전달용** — 앱·화면에 그대로 쓰는 본문으로,
+  근거 표기 `(근거: #N)`·`## 근거 발화`(전사 인용)·`## 참고`(내부 경고)·작물 코드 `(0804MM)`·통화 ID 행·모델/프롬프트
+  버전이 **빠져 있습니다**(보고서는 화자 식별 신뢰도 행도 뺍니다). 항목·판정 문구(`[표준 목록 미매핑]`, `※ 확인 필요`,
+  `※ 라벨·PLS 확인 필요`)와 동의서 §8 안내는 그대로입니다. **근거가 다 들어간 정본**은 `s3_key_md_internal`
+  (`…/artifacts/internal/…`)에 따로 저장되며 응답에 본문은 싣지 않습니다 — 필요하면 §3.6 엔드포인트에 `?view=internal`.
+  `structured`(prefill 포함)·`.json`은 한 벌 그대로입니다.
 - `farm_access_token`은 이 응답을 포함해 어떤 응답에도 포함되지 않습니다.
 - 미존재 통화: `404 CALL_NOT_FOUND`.
 
@@ -270,8 +279,8 @@ Body 선택: `{"retranscribe": false, "reason": "...", "farm_access_token": "<�
 | 메서드 | 경로 | 설명 |
 |---|---|---|
 | GET | `/v1/calls/{id}/transcript` | 병합 전사 JSON. 세그먼트마다 `role`(농가/컨설턴트) 포함 — §3.6.1. 미준비 시 `404 NOT_READY` |
-| GET | `/v1/calls/{id}/artifacts/report?format=md\|json` | 컨설팅 보고서 (기본 `text/markdown`) |
-| GET | `/v1/calls/{id}/artifacts/diary/{prdlst_code}?format=md\|json` | 작물별 영농일지. 미확정 작물은 `{prdlst_code}` 자리에 `unresolved`(다건이면 `unresolved-2` …) |
+| GET | `/v1/calls/{id}/artifacts/report?format=md\|json&view=public\|internal` | 컨설팅 보고서 (기본 `text/markdown`). `view` 기본 `public`(전달용, 근거 제거), `internal`은 근거 포함 정본. `format=json`이면 `view` 무시, 그 외 값은 `400 INVALID_VIEW` |
+| GET | `/v1/calls/{id}/artifacts/diary/{prdlst_code}?format=md\|json&view=public\|internal` | 작물별 영농일지(`view` 규칙 동일). 미확정 작물은 `{prdlst_code}` 자리에 `unresolved`(다건이면 `unresolved-2` …) |
 | GET | `/v1/calls?status=&state=&limit=50&cursor=` | 운영/디버그용 목록 |
 | GET | `/healthz` | 무인증 헬스체크 `{status: "ok"\|"degraded", version, worker: {running, pending_stt, pending_gen, pending_daily}}` — DB 이상 시 `degraded` + `pending_*` 는 `null` |
 
@@ -365,7 +374,7 @@ STT가 붙이는 화자 글자 `A`/`B`는 **그 녹음에서 먼저 말한 순�
 |---|---|---|
 | GET | `/v1/daily-diaries/{diary_id}?inline=false` | 상태/결과 폴링 (§3.5와 같은 요령) |
 | GET | `/v1/daily-diaries/{diary_id}/transcript` | 병합 전사 JSON. 미준비 시 `404 NOT_READY` |
-| GET | `/v1/daily-diaries/{diary_id}/artifacts/diary/{prdlst_code}?format=md\|json` | 작물별 일지 (미확정 작물은 `unresolved`, 다건이면 `unresolved-2` …) |
+| GET | `/v1/daily-diaries/{diary_id}/artifacts/diary/{prdlst_code}?format=md\|json&view=public\|internal` | 작물별 일지 (`view` 규칙은 §3.6과 동일; 미확정 작물은 `unresolved`, 다건이면 `unresolved-2` …) |
 | GET | `/v1/daily-diaries?diary_date=&status=&limit=50&cursor=` | 목록 (커서 규칙은 §3.6과 동일) |
 | POST | `/v1/daily-diaries/{diary_id}/regenerate` | `{"farm_access_token": "<새 JWT>", "reason": "..."}` → `202` |
 
@@ -391,11 +400,13 @@ STT가 붙이는 화자 글자 `A`/`B`는 **그 녹음에서 먼저 말한 순�
        "markdown": "> 📝 **통화 요약** · … …(총 5,600자 내외)",
        "structured": {"…": "통화별 diaries[].structured 와 동일 모양"},
        "s3_key_md": "agents/voicecall/daily/daily-smoke-20260821/artifacts/diary/unresolved.md",
-       "s3_key_json": "agents/voicecall/daily/daily-smoke-20260821/artifacts/diary/unresolved.json"},
+       "s3_key_json": "agents/voicecall/daily/daily-smoke-20260821/artifacts/diary/unresolved.json",
+       "s3_key_md_internal": "agents/voicecall/daily/daily-smoke-20260821/artifacts/internal/diary/unresolved.md"},
       {"prdlst_code": null, "prdlst_nm": "콩", "diary_date": "2026-08-21", "status": "EMPTY",
        "markdown": "…(빈 골격)", "structured": {"…": "…"},
        "s3_key_md": "agents/voicecall/daily/daily-smoke-20260821/artifacts/diary/unresolved-2.md",
-       "s3_key_json": "agents/voicecall/daily/daily-smoke-20260821/artifacts/diary/unresolved-2.json"}
+       "s3_key_json": "agents/voicecall/daily/daily-smoke-20260821/artifacts/diary/unresolved-2.json",
+       "s3_key_md_internal": "agents/voicecall/daily/daily-smoke-20260821/artifacts/internal/diary/unresolved-2.md"}
     ],
     "result_key": "agents/voicecall/daily/daily-smoke-20260821/artifacts/result.json"
   },
@@ -484,9 +495,21 @@ terminal 사유 (`status` + `error.code`):
   "status": "COMPLETED",
   "content": "- 주제: 딸기 잿빛곰팡이병 방제 상담\n- 조치: 환기 관리 권고 / 병든 과실 제거\n- 후속: 화요일 방문 예정",
   "engine_version": "jinong-summary-v1/gemini-3.5-flash",
-  "speaker_map": {"f0:A": "consultant", "f0:B": "farmer"}
+  "speaker_map": {"f0:A": "consultant", "f0:B": "farmer"},
+  "diaries": [{"prdlst_code": "0804MM", "prdlst_nm": "딸기", "status": "OK",
+               "s3_key_md": "agents/voicecall/20260819_Qmf1D0X/artifacts/diary/0804MM.md",
+               "s3_key_md_internal": "agents/voicecall/20260819_Qmf1D0X/artifacts/internal/diary/0804MM.md"}],
+  "report": {"s3_key_md": "agents/voicecall/20260819_Qmf1D0X/artifacts/report.md",
+             "s3_key_md_internal": "agents/voicecall/20260819_Qmf1D0X/artifacts/internal/report.md"}
 }
 ```
+
+- **`diaries[]`·`report`는 선택 필드입니다** (2026-09-02 추가, `COMPLETED`에만) — 산출물의 **S3 키만** 담고 본문은
+  없습니다. `s3_key_md`는 전달용(근거 제거) 마크다운, `s3_key_md_internal`은 근거 포함 정본(`artifacts/internal/`)의
+  키이며 `GET /v1/calls/{call_id}` `result`의 값과 같습니다. 키는 `jinong-agri-stt` 버킷 기준이고 prefix는 환경별
+  (개발 `agents/voicecall-dev/`, 운영 `agents/voicecall/`; §6). **DTO에서 무시하셔도 되고**, 미지 필드를 거부하는
+  설정이면 알려주세요 — 저희 스위치(`CALLBACK_INCLUDE_ARTIFACT_KEYS`)로 즉시 뺍니다. `prdlst_code`는 미확정이면
+  `null`(키는 `unresolved…`). MinIO 를 직접 읽지 않으셔도 됩니다 — 같은 본문을 §3.6 엔드포인트(`?view=internal`)로 받을 수 있습니다.
 
 - **`speaker_map`은 선택 필드입니다** (2026-08-31 추가) — 화자 글자 `A`/`B` 중 누가 농가인지의 추정
   결과입니다(§3.6.1). **DTO에서 무시하셔도 됩니다.** 다만 미지 필드를 거부(4xx)하는 설정이면
@@ -552,9 +575,15 @@ terminal 사유 (`status` + `error.code`):
   "error": null,
   "call_ids": ["20260819_Qmf1D0X", "20260819_Rx2kP9Y"],
   "result_url": "https://jinong-stt-report-generation.jinongservice.co.kr/v1/daily-diaries/daily_18_u123_20260819",
-  "generation_run": 1
+  "generation_run": 1,
+  "diaries": [{"prdlst_code": "0804MM", "prdlst_nm": "딸기", "status": "OK",
+               "s3_key_md": "agents/voicecall/daily/daily_18_u123_20260819/artifacts/diary/0804MM.md",
+               "s3_key_md_internal": "agents/voicecall/daily/daily_18_u123_20260819/artifacts/internal/diary/0804MM.md"}]
 }
 ```
+
+- `diaries[]`는 선택 필드(2026-09-02 추가, `COMPLETED`에만)로 §5.1과 같은 모양의 **S3 키만** 담습니다(daily는 `report` 없음).
+  중복 제거 키나 필수 처리에는 넣지 마시고, 미지 필드를 거부하는 설정이면 알려주세요(`CALLBACK_INCLUDE_ARTIFACT_KEYS`).
 
 - 콜백을 받으신 뒤 `GET /v1/daily-diaries/{daily_diary_id}?inline=true`로 `result.diaries[]`를 가져가
   저장하시면 됩니다(`result_url` 조회에도 `AGENT_API_KEY` 인증 필요). 마크다운이 길어져도 콜백이 가볍고
@@ -585,13 +614,16 @@ terminal 사유 (`status` + `error.code`):
 agents/voicecall/{call_id}/call.json                        시작/종료 스냅샷
 agents/voicecall/{call_id}/stt/{NN}-{hash}.json             STT 원본 응답
 agents/voicecall/{call_id}/transcript/merged.json | .md     병합 전사
-agents/voicecall/{call_id}/artifacts/diary/{prdlst_code}.md | .json   (미확정: unresolved.*)
-agents/voicecall/{call_id}/artifacts/report.md | .json
-agents/voicecall/{call_id}/artifacts/result.json            전체 스냅샷 (generation_run 포함)
+agents/voicecall/{call_id}/artifacts/diary/{prdlst_code}.md | .json   전달용 일지(.md 는 근거·코드·내부 메타 제거) (미확정: unresolved.*)
+agents/voicecall/{call_id}/artifacts/internal/diary/{prdlst_code}.md  근거 포함 정본(내부 저장용)
+agents/voicecall/{call_id}/artifacts/report.md | .json                전달용 보고서
+agents/voicecall/{call_id}/artifacts/internal/report.md               근거 포함 정본
+agents/voicecall/{call_id}/artifacts/result.json            전체 스냅샷 (generation_run·양쪽 마크다운·키 포함)
 
 agents/voicecall/daily/{diary_id}/daily.json                트리거 스냅샷
 agents/voicecall/daily/{diary_id}/transcript/merged.json | .md        멀티콜 병합 전사
 agents/voicecall/daily/{diary_id}/artifacts/diary/{prdlst_code}.md | .json
+agents/voicecall/daily/{diary_id}/artifacts/internal/diary/{prdlst_code}.md
 agents/voicecall/daily/{diary_id}/artifacts/result.json     (report 없음)
 ```
 
@@ -602,12 +634,17 @@ agents/voicecall/daily/{diary_id}/artifacts/result.json     (report 없음)
 - **날짜별 집계는 `daily/{diary_id}/`로 분리** — `diary_id`가 `call_id` 네임스페이스와 충돌하지 않습니다.
 - **작물별 일지 파일명은 `{prdlst_code}`** (팜스올 작물 코드). 작물 미확정이면 `unresolved.*`,
   미확정 작물이 여러 건이면 `unresolved-2.*`, `unresolved-3.*` … 로 늘어납니다.
-- `agents/voicecall/` prefix는 고정입니다. 이후 보이스톡 외 산출물이 생기면 같은 버킷의
-  `agents/<용도>/`로 나란히 확장하며, 기존 키는 바뀌지 않습니다.
+- **prefix는 환경별입니다** — 운영 `agents/voicecall/`, 개발(7013 인스턴스) `agents/voicecall-dev/`. 그 아래 레이아웃은
+  두 환경이 완전히 같습니다. 응답·콜백의 키는 항상 그 환경의 prefix를 포함한 전체 키이므로 조합하지 마시고 그대로 쓰세요.
+  이후 보이스톡 외 산출물이 생기면 같은 버킷의 `agents/<용도>/`로 나란히 확장하며, 기존 키는 바뀌지 않습니다.
+- `artifacts/internal/` 아래는 **근거 포함 정본**(전사 인용·근거 번호·내부 경고·모델 버전 포함)입니다. 농가·컨설턴트
+  화면에는 `artifacts/diary/*.md`·`artifacts/report.md`(전달용)를 쓰시고, internal 은 검토·감사·문의 대응용으로만 참조해 주세요.
 - API 응답의 `s3_key_md` / `s3_key_json` / `transcript_key` / `result_key`는 **이 버킷
   (`jinong-agri-stt`) 기준 키**입니다 (응답에 버킷명은 포함되지 않습니다).
 - 재생성 시 같은 키에 덮어씁니다 — 실행별 이력이 필요하면 `result.json`의 `generation_run`을 참고하세요.
-- 직접 S3 조회 대신 §3.6 artifact 엔드포인트 사용을 권장합니다(권한 협의 불필요).
+- 직접 S3 조회 대신 §3.6 artifact 엔드포인트 사용을 권장합니다(권한 협의 불필요). **`s3_key_md_internal`로 MinIO를 직접
+  읽으시려면 `jinong-agri-stt` 버킷 읽기 권한이 백엔드 계정에 필요합니다** — 현재는 부여돼 있지 않으니(전용 사용자만 쓰기)
+  필요하시면 MinIO 관리자와 협의해 주세요. 권한 없이도 `?view=internal`로 같은 본문을 받을 수 있습니다.
 
 ## 7. 제한 · 타이밍
 

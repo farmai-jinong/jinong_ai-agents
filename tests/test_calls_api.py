@@ -62,7 +62,11 @@ async def test_end_and_get_flow(client, app, stt_mock):
     assert res["diaries"][0]["prdlst_code"] == "0804MM"
     assert res["diaries"][0]["markdown"].startswith("> 📝") and "## 주요 농작업" in res["diaries"][0]["markdown"]
     assert res["diaries"][0]["s3_key_md"] == "agents/voicecall/c3/artifacts/diary/0804MM.md"
-    assert res["report"]["markdown"].startswith("# 컨설팅 보고서")
+    # 기본 전달용(markdown / s3_key_md)에는 근거가 없고, 근거 포함 정본은 internal 키로만 가리킨다
+    assert "## 근거 발화" not in res["diaries"][0]["markdown"] and "(0804MM)" not in res["diaries"][0]["markdown"]
+    assert res["diaries"][0]["s3_key_md_internal"] == "agents/voicecall/c3/artifacts/internal/diary/0804MM.md"
+    assert res["report"]["markdown"].startswith("# 컨설팅 보고서") and "## 근거 발화" not in res["report"]["markdown"]
+    assert res["report"]["s3_key_md_internal"] == "agents/voicecall/c3/artifacts/internal/report.md"
     assert res["transcript_key"] == "agents/voicecall/c3/transcript/merged.json"
     assert "secret" not in r.text
     # inline=false → 본문 생략
@@ -73,6 +77,17 @@ async def test_end_and_get_flow(client, app, stt_mock):
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/markdown")
     r = await client.get("/v1/calls/c3/artifacts/diary/0804MM?format=json")
     assert r.status_code == 200 and r.json()["prdlst_code"] == "0804MM"
+    # view=internal → 근거 포함 정본 (기본 view=public 은 근거 없음)
+    r = await client.get("/v1/calls/c3/artifacts/diary/0804MM")
+    assert r.status_code == 200 and "## 근거 발화" not in r.text
+    r = await client.get("/v1/calls/c3/artifacts/diary/0804MM?view=internal")
+    assert r.status_code == 200 and "## 근거 발화" in r.text and r.headers["content-type"].startswith("text/markdown")
+    r = await client.get("/v1/calls/c3/artifacts/report?view=internal")
+    assert r.status_code == 200 and "## 근거 발화" in r.text
+    r = await client.get("/v1/calls/c3/artifacts/diary/0804MM?view=bogus")
+    assert r.status_code == 400 and r.json()["detail"]["code"] == "INVALID_VIEW"
+    r = await client.get("/v1/calls/c3/artifacts/diary/0804MM?format=json&view=bogus")   # json 은 view 무시
+    assert r.status_code == 200
     r = await client.get("/v1/calls/c3/transcript")
     assert r.status_code == 200 and len(r.json()["segments"]) == 4
     # 목록

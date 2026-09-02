@@ -65,17 +65,23 @@ kafka-gateway ──POST /v1/calls ──▶ ⑧ agent ──GET s3://bucket/key
   agents/voicecall/{call_id}/call.json
   agents/voicecall/{call_id}/stt/{NN}-{sha8}.json          # 게이트웨이 raw 응답
   agents/voicecall/{call_id}/transcript/merged.json|.md
-  agents/voicecall/{call_id}/artifacts/diary/{prdlst_code}.md|.json
+  agents/voicecall/{call_id}/artifacts/diary/{prdlst_code}.md|.json      # .md = 전달용(public, 근거·코드·내부 메타 제거)
+  agents/voicecall/{call_id}/artifacts/internal/diary/{prdlst_code}.md   # 근거 포함 정본(internal, 내부 저장용)
   agents/voicecall/{call_id}/artifacts/report.md|.json
+  agents/voicecall/{call_id}/artifacts/internal/report.md
   agents/voicecall/{call_id}/artifacts/summary.md|.json     # 통화 단순요약(콜백 content)
-  agents/voicecall/{call_id}/artifacts/result.json
+  agents/voicecall/{call_id}/artifacts/result.json          # markdown(public)·markdown_internal·양쪽 키 모두 포함
   agents/voicecall/daily/{diary_id}/daily.json             # 트리거 스냅샷
   agents/voicecall/daily/{diary_id}/transcript/merged.json|.md
   agents/voicecall/daily/{diary_id}/artifacts/diary/{prdlst_code}.md|.json
+  agents/voicecall/daily/{diary_id}/artifacts/internal/diary/{prdlst_code}.md
   agents/voicecall/daily/{diary_id}/artifacts/result.json  # report 없음
   ```
   키 규칙은 `app/clients/s3.py:Keys` 에만 있다. daily 는 `daily/` 하위로 분리해 call_id 네임스페이스와
-  충돌하지 않는다. 입력 오디오는 복사하지 않는다.
+  충돌하지 않는다. 입력 오디오는 복사하지 않는다. prefix 는 환경별(dev 는 `agents/voicecall-dev/`)이고 그 아래 레이아웃은 같다.
+  마크다운 두 벌(`*_md` = public, `*_md_internal` = internal)은 같은 구조화 데이터를 `render_diary/render_report(variant=…)` 로
+  두 번 렌더한 것이다 — LLM 재호출도 사후 파싱도 없다. API `markdown`/`s3_key_md` 와 콜백 키는 public, internal 은
+  `s3_key_md_internal` 과 `?view=internal` 로만 노출된다.
 
 ## 조회 표면 (요약)
 
