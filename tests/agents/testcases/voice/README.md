@@ -23,7 +23,7 @@
   하단에 발화→기대 추출 매핑 표와 "정답에 새면 안 되는 잡담" 목록.
 - `expected_diary.md` — 정답 영농일지. `app/agents/render/templates/diary.md.j2` 섹션 구조와 동일해
   실산출 `diary_<code>.md`와 나란히 diff/비교 가능. `(근거: #N)`은 녹음 전사에 따라 달라지므로 생략.
-  맨 위 `> 📝 통화 요약 / > 💬 격려` 인용 블록과 맨 아래 `## 참고` 는 채점 제외(플레이스홀더). H1 제목은 없다.
+  첫 줄 H1 `# 영농일지 — 작물 (날짜)`, 그 아래 `> 📝 통화 요약 / > 💬 격려` 인용 블록, 맨 아래 `## 참고` 는 채점 제외(플레이스홀더).
   작물명은 `| 작물 | 이름 (코드) |` 표 행에서 읽는다(`voice_eval/cases.py`).
 - `expect.json` — `app/agents/eval.py`의 recall 기대치와 동일 스키마:
   `{"farmworks": [..], "pests": [["이름","기대단계"], ..], "products": [..], "diary_status": {..}}`.

@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -24,13 +25,23 @@ log = logging.getLogger(__name__)
 SKIP_STATUSES = ("EMPTY", "UNRESOLVED_CROP")
 
 
+LEAD_QUOTE_PREFIXES = ("> 📝", "> 💬")
+
+
 def strip_lead_quotes(markdown: str) -> str:
-    """상단 `> 📝 요약 / > 💬 격려` 인용 블록을 떼어낸다 — 통화 요약·격려는 이 작물의 일지 내용이 아니므로 판정 근거에서 뺀다."""
-    lines = markdown.splitlines()
-    i = 0
-    while i < len(lines) and lines[i].startswith(">"):
-        i += 1
-    return "\n".join(lines[i:]).lstrip("\n")
+    """H1 아래 `> 📝 요약 / > 💬 격려` 인용 블록을 떼어낸다 — 통화 요약·격려는 이 작물의 일지 내용이 아니므로 판정 근거에서 뺀다.
+
+    첫 `## ` 섹션 앞 머리말 구간에서 그 두 줄만 제거한다. H1·메타 표·`> 이 날짜에 기존 일지…` 안내는 그대로 둔다.
+    """
+    out: list[str] = []
+    in_head = True
+    for ln in markdown.splitlines():
+        if in_head and ln.startswith("## "):
+            in_head = False
+        if in_head and ln.startswith(LEAD_QUOTE_PREFIXES):
+            continue
+        out.append(ln)
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(out)).lstrip("\n")
 
 
 async def verify_diary(state: CropDiaryState, config) -> dict:  # type: ignore[no-untyped-def]

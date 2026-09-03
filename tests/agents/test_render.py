@@ -34,8 +34,7 @@ def test_diary_headings_order_and_footer():
     d.summary_line = "딸기 잿빛곰팡이 초기 발생 상담"
     d.praise = "적엽까지 꼼꼼히 챙기셨네요 👍"
     md = render_diary(d, ctx, nt, CropFacts(), model="m", prompt_version="1", now=NOW)
-    assert md.startswith("> 📝 **통화 요약** · 딸기 잿빛곰팡이 초기 발생 상담\n> 💬 적엽까지 꼼꼼히 챙기셨네요 👍\n\n| 항목 | 값 |")
-    assert "# 영농일지" not in md
+    assert md.startswith("# 영농일지 — 딸기 (2026-08-19)\n\n> 📝 **통화 요약** · 딸기 잿빛곰팡이 초기 발생 상담\n> 💬 적엽까지 꼼꼼히 챙기셨네요 👍\n\n| 항목 | 값 |")
     assert _ordered(md, DIARY_HEADINGS)
     assert "- [x] 관수 (근거: #4)" in md and "- [ ] 런너정리 (신규 후보" in md and "런너제거" in md
     assert "언급 없음" not in md.split("## 기타 기록사항")[0]          # 항목이 있으면 '언급 없음' 은 안 나온다
@@ -78,7 +77,7 @@ def test_diary_empty_template():
     d = DiaryResult(prdlst_code="0603MM", prdlst_nm="포도", diary_date="2026-08-19", status="EMPTY")
     d.praise = "다음 통화도 응원할게요 🌱"
     md = render_diary(d, ctx, nt, CropFacts(), model=None, prompt_version="1", now=NOW)
-    assert md.startswith("> 📝 **통화 요약** · (요약 없음)\n> 💬 다음 통화도 응원할게요 🌱")
+    assert md.startswith("# 영농일지 — ") and "\n\n> 📝 **통화 요약** · (요약 없음)\n> 💬 다음 통화도 응원할게요 🌱" in md
     assert "확인되지 않았어요" in md and "## 주요 농작업\n- 언급 없음" in md
     assert _ordered(md, DIARY_HEADINGS)                                  # 빈 일지도 같은 섹션 집합
     assert "## 근거 발화\n- (없음)" in md and "## 참고\n- 없음" in md
