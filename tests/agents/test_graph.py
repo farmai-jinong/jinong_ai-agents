@@ -37,8 +37,8 @@ async def test_strawberry_full_run(settings, farmos_fake):
     assert "## 방제이력\n- 언급 없음" in d.markdown
     assert "사파이어 액상수화제 → 잿빛곰팡이 · 2000배 (확인 필요)" in d.markdown
     # 상단 요약·격려 블록: 마크다운에는 있고 prefill(앱 일지 메모)에는 없다
-    assert d.markdown.startswith("> 📝 **통화 요약** · ") and "> 💬 관수와 적엽까지 꼼꼼히 챙기셨네요 👍" in d.markdown
-    assert "# 영농일지" not in d.markdown
+    assert d.markdown.startswith("# 영농일지 — 딸기 (") and "\n\n> 📝 **통화 요약** · " in d.markdown \
+        and "> 💬 관수와 적엽까지 꼼꼼히 챙기셨네요 👍" in d.markdown
     assert "꼼꼼히" not in pre["content"] and pre["content"].startswith("[AI 초안·통화 기반]")
     assert d.structured["prefill_ready"] is True
     assert res.speaker_map == {"f0:A": "farmer", "f0:B": "consultant"}
