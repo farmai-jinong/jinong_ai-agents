@@ -80,6 +80,7 @@ def assemble(state: PipelineState, config) -> PipelineResult:  # type: ignore[no
         speaker_map=speaker_map, facts=facts.model_dump() if facts else None, warnings=warnings,
         usage=usage, model=model or deps.settings.llm_model, prompt_version=PROMPT_VERSION,
         farmos_status=(farm.status if farm else "disabled"),
+        term_fix=state.get("term_fix"),
     )
 
 

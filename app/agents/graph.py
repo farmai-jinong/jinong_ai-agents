@@ -1,6 +1,6 @@
 """LangGraph 조립 — 메인 그래프 + 작물별 서브그래프(Send fan-out).
 
-START → prepare_transcript → {load_farm_context, assign_speaker_roles} → extract_facts → select_crops
+START → prepare_transcript → {load_farm_context, assign_speaker_roles, correct_terms} → extract_facts → select_crops
       → Send("build_crop_diary")×N ‖ build_report → finalize → END
 """
 
@@ -38,6 +38,7 @@ from .nodes.speaker_roles import assign_speaker_roles
 from .prompts.loader import PROMPT_VERSION
 from .schemas import CropFacts, DiaryResult
 from .state import CropDiaryState, PipelineState
+from .term_fix.node import correct_terms
 
 log = logging.getLogger(__name__)
 
@@ -114,6 +115,7 @@ def build_graph(checkpointer: Any = None):  # type: ignore[no-untyped-def]
     g.add_node("prepare_transcript", prepare_transcript)
     g.add_node("load_farm_context", load_farm_context)
     g.add_node("assign_speaker_roles", assign_speaker_roles)
+    g.add_node("correct_terms", correct_terms)
     g.add_node("extract_facts", extract_facts)
     g.add_node("select_crops", select_crops)
     g.add_node("build_crop_diary", build_crop_diary)
@@ -122,7 +124,8 @@ def build_graph(checkpointer: Any = None):  # type: ignore[no-untyped-def]
     g.add_edge(START, "prepare_transcript")
     g.add_edge("prepare_transcript", "load_farm_context")
     g.add_edge("prepare_transcript", "assign_speaker_roles")
-    g.add_edge(["load_farm_context", "assign_speaker_roles"], "extract_facts")
+    g.add_edge("prepare_transcript", "correct_terms")
+    g.add_edge(["load_farm_context", "assign_speaker_roles", "correct_terms"], "extract_facts")
     g.add_edge("extract_facts", "select_crops")
     g.add_conditional_edges("select_crops", fan_out_crops, ["build_crop_diary"])
     g.add_edge("select_crops", "build_report")

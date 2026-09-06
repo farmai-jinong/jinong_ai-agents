@@ -10,10 +10,17 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 
-from ..stt_score import norm_chars
+_NONWORD = re.compile(r"[^0-9A-Za-z가-힣]+")
+
+
+def norm_chars(text: str) -> str:
+    """NFKC → 한글/영숫자만 → 소문자 (voice_eval.stt_score.norm_chars 와 같은 규칙)."""
+    return _NONWORD.sub("", unicodedata.normalize("NFKC", text)).lower()
 
 DOMAIN_CATEGORIES = ("pesticide_brand", "pest", "disease", "company")
 CATEGORY_LABEL = {"pesticide_brand": "농약·자재 상표", "pest": "해충", "disease": "병", "company": "회사"}
@@ -110,3 +117,10 @@ def load_catalog(path: Path, stopwords: Path | None = None,
             if key and key not in cat._by_norm:
                 cat._by_norm[key] = t
     return cat
+
+
+@lru_cache(maxsize=4)
+def get_catalog(path: str, stopwords: str = "") -> Catalog:
+    """프로세스당 1회 적재(런타임 노드용). 불용어 경로가 비면 카탈로그 옆 `stopwords_v3top5k.txt` 를 쓴다."""
+    sw = Path(stopwords) if stopwords else Path(path).with_name("stopwords_v3top5k.txt")
+    return load_catalog(Path(path), sw if sw.exists() else None)

@@ -26,12 +26,12 @@ from typing import Any
 
 from ....clients.llm import make_chat_model
 from ....config import Settings
+from ...term_fix.apply import apply_corrections, join_text
+from ...term_fix.catalog import Catalog, load_catalog
+from ...term_fix.run import propose
+from ...term_fix.schemas import TermCorrection
 from ...tools.fake_llm import FakeChatModel
 from ..cases import TESTCASES
-from .apply import apply_corrections, join_text
-from .catalog import Catalog, load_catalog
-from .run import propose
-from .schemas import TermCorrection
 from .score import ArmScore, score_arm
 
 log = logging.getLogger("voice_eval.term_fix")

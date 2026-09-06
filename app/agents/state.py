@@ -32,6 +32,7 @@ class PipelineState(TypedDict, total=False):
     raw: MergedTranscript
     diary_date: str
     transcript: NormalizedTranscript
+    term_fix: dict[str, Any] | None             # correct_terms 노드 메타(적용 내역·지연) — 비활성이면 None
     speaker_roles: SpeakerRoleResult | None
     farm: FarmContext
     facts: CallFacts

@@ -80,6 +80,14 @@ class Settings(BaseSettings):
     # 일지 검수 패스 — 렌더된 초안을 독립 LLM 이 다시 보고 실질 내용이 없으면 EMPTY 로 강등(작물당 1콜)
     verify_diary_enabled: bool = True
     verify_diary_min_confidence: float = 0.6   # 확신이 이 값 미만이면 강등하지 않는다
+    # STT 용어 오청 복구(app/agents/term_fix) — 전사 turn + 카탈로그(품종 제외)를 LLM 에 주고 치환 목록만 받아 결정적으로
+    # 적용한다(통화당 1콜, ~22k 토큰). 카탈로그는 jinong_gpu/stt-serve/catalog/catalog.jsonl 을 경로로 읽는다(복사 금지).
+    # 근거·판정: docs/stt-term-fix-2026-09-06.md. 기본 off — 카탈로그 경로가 비어도 off.
+    term_fix_enabled: bool = False
+    term_fix_catalog_path: str = ""
+    term_fix_stopwords_path: str = ""          # 비우면 카탈로그 옆 stopwords_v3top5k.txt
+    term_fix_min_confidence: float = 0.8
+    term_fix_max_per_segment: int = 3
 
     # --- 평가 하네스 judge (app/agents/voice_eval; 런타임 서비스와 무관) ----------
     # 파이프라인과 다른 모델로 채점한다 — 같은 모델이 자기 산출물을 채점하면 점수가 후해진다.

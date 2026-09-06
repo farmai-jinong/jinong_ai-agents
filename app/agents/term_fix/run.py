@@ -10,12 +10,12 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from ...llm import CallTrace, structured_call
-from ...prompts.loader import load_system, render_user
+from ..llm import CallTrace, structured_call
+from ..prompts.loader import load_system, render_user
 from .catalog import Catalog
 from .schemas import TermCorrection, TermFixOut
 
-log = logging.getLogger("voice_eval.term_fix")
+log = logging.getLogger("term_fix")
 CHUNK_SEGMENTS = 90
 
 

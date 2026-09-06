@@ -11,8 +11,7 @@ import re
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from ..stt_score import norm_chars
-from .catalog import Catalog
+from .catalog import Catalog, norm_chars
 from .schemas import TermCorrection
 
 _HAS_WORD = re.compile(r"[가-힣A-Za-z]")

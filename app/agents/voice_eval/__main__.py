@@ -18,6 +18,7 @@ import json
 import logging
 import shutil
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -95,10 +96,15 @@ async def stage_pipeline(case: VoiceCase, out: Path, settings: Settings,
             ctx.farm_access_token = None
         deps = Deps(settings=settings, llm=llm, farmos_factory=farmos_factory, prompt_version=PROMPT_VERSION,
                     dump_dir=str(out) if args.dump_prompts else None)
+        t0 = time.perf_counter()
         try:
             result = await LangGraphPipeline(settings, deps).run(transcript, ctx)
         except PipelineEmpty as e:
             raise RuntimeError(f"PipelineEmpty: {e}") from e
+        (out / "timing.json").write_text(json.dumps(
+            {"pipeline_s": round(time.perf_counter() - t0, 1), "term_fix": result.term_fix,
+             "usage": {k: v for k, v in result.usage.items() if k != "by_call"}}, ensure_ascii=False, indent=1),
+            encoding="utf-8")
         result_path.write_text(result.model_dump_json(indent=1), encoding="utf-8")
         if result.facts:
             (out / "facts.json").write_text(json.dumps(result.facts, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -110,7 +116,11 @@ async def stage_pipeline(case: VoiceCase, out: Path, settings: Settings,
         result = PipelineResult(**json.loads(result_path.read_text(encoding="utf-8")))
 
     diary = metrics._diary_for(result, case.prdlst_code)
-    return metrics.score(case, result), (diary.markdown if diary else "")
+    scored = metrics.score(case, result)
+    timing = out / "timing.json"
+    if timing.exists():
+        scored["timing"] = json.loads(timing.read_text(encoding="utf-8"))
+    return scored, (diary.markdown if diary else "")
 
 
 # --------------------------------------------------------------------------- stage 3: judge

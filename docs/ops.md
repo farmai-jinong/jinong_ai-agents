@@ -198,7 +198,9 @@ cat docs/eval-journal.md && git log --oneline eval/auto-tune
 ### 4.4 용어 오청 복구 실험 (LLM 사후 교정, 오프라인)
 
 `:8105` 리트리버(자모 편집거리)가 못 잡는 오청(`하반→파밤나방`, `세츠→엑설트`)을 전사 완료본 + 카탈로그(품종 제외 ~4.1k)로
-LLM 이 치환 목록만 내게 해서 복구하는지 재는 하네스 — 파이프라인에는 배선돼 있지 않다(`docs/stt-term-fix-2026-09-06.md`).
+LLM 이 치환 목록만 내게 해서 복구한다(`docs/stt-term-fix-2026-09-06.md`). 런타임은 `app/agents/term_fix/` 의 `correct_terms`
+노드(`prepare_transcript` 뒤, 화자역할 노드와 병렬) — **기본 off**, `TERM_FIX_ENABLED=true` + `TERM_FIX_CATALOG_PATH` 로 켠다.
+켜면 통화당 LLM 1콜(~22k 토큰), wall +1.5~2초. 원 전사(`raw`·transcript API)는 불변, 치환 내역은 결과 `term_fix` 메타.
 
 ```bash
 python -m app.agents.voice_eval.term_fix --fixtures ~/dev/jinong/jinong_gpu/stt-serve/fixtures/ctx_replay \

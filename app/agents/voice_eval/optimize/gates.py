@@ -27,6 +27,8 @@ ALLOWLIST = [
 # allowlist 와 겹쳐도 무조건 금지. 채점 하네스·정답·테스트는 최적화 대상이지 수단이 아니다.
 DENYLIST = [
     "app/agents/prompts/judge_diary.*",
+    "app/agents/prompts/term_fix.*",          # STT 교정 프롬프트 — 일지 셀 튜닝 대상이 아니다(stt 원인 셀은 애초에 제외)
+    "app/agents/term_fix/*",
     "app/agents/voice_eval/*",
     "app/agents/voice_eval/**",
     "tests/*",

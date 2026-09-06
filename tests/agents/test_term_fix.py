@@ -8,11 +8,11 @@ from pathlib import Path
 import pytest
 
 from app.agents.prompts.loader import load_system, render_user
+from app.agents.term_fix.apply import apply_corrections, join_text
+from app.agents.term_fix.catalog import load_catalog, strip_legal
+from app.agents.term_fix.schemas import TermCorrection
 from app.agents.tools.fake_llm import FakeChatModel, detect_kind
 from app.agents.voice_eval.term_fix import __main__ as cli
-from app.agents.voice_eval.term_fix.apply import apply_corrections, join_text
-from app.agents.voice_eval.term_fix.catalog import load_catalog, strip_legal
-from app.agents.voice_eval.term_fix.schemas import TermCorrection
 from app.agents.voice_eval.term_fix.score import score_arm
 
 CATALOG_LINES = [

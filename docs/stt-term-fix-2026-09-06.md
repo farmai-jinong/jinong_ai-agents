@@ -15,7 +15,7 @@
 어절만 발음·문맥이 맞는 카탈로그 용어로 바꾸는 치환 목록** 을 내게 했다. 두 리포 어디에도 시도 기록이 없는 접근이다.
 게이트웨이 `terms.correct` 의 fuzzy 치환이 모든 임계에서 악화된 것은 자모 규칙의 결과라 반증이 아니다.
 
-## 무엇을 만들었나 — `app/agents/voice_eval/term_fix/`
+## 무엇을 만들었나 — `app/agents/term_fix/`(런타임: catalog·apply·run·schemas) + `app/agents/voice_eval/term_fix/`(채점·CLI)
 
 | 파일 | 역할 |
 |---|---|
@@ -94,15 +94,62 @@ LLM 은 파이프라인과 같은 `gemini-3.5-flash`(Vertex). 테스트 `tests/a
   LLM 비용 ~93 통화 × 22k 토큰으로 돌릴 수 있다. `jinong_gpu` 쪽 사람 결정.
 - 동의서 §7(외부 처리 금지): 이 호출도 Gemini 다. 파이프라인이 이미 Gemini 라 추가 위반은 아니지만 `LLM_PROVIDER=jinong`
   전환 시 같이 전환된다. 22k 토큰 프롬프트를 게이트웨이 vLLM(exaone45)이 같은 정밀도로 처리하는지는 별도 확인.
-- 파이프라인 배선(계획 2단계)은 **하지 않았다**. 배선한다면 `prepare_transcript` 뒤 `correct_terms` 노드, 기본 off, 치환 내역을
-  internal 변형 근거에 `원문 '세츠' → '엑설트'` 로 노출. 그 전에 (1) 카탈로그 밖 후보 허용 여부, (2) 2,354 세트 수치, (3) judge×3 로
-  faithfulness 비하락 확인이 필요하다.
+- 파이프라인 배선은 아래 "정식 배선 측정" 절 — `correct_terms` 노드로 넣고 기본 off 로 두었다.
+
+## 정식 배선 측정 (2026-09-07) — 파이프라인 안에서 on/off, 영농일지 judge×3 + 지연
+
+`app/agents/term_fix/node.py` 의 `correct_terms` 를 `prepare_transcript` 뒤에 `load_farm_context`·`assign_speaker_roles` 와
+**병렬**로 넣었다(둘 다 교정된 용어가 필요 없고, LLM 1콜이 화자역할 LLM 콜과 겹쳐 지연이 숨는다). `TERM_FIX_ENABLED`(기본 off)
++ `TERM_FIX_CATALOG_PATH`. API 로 나가는 원 전사(`raw`)는 불변이고 LLM 이 보는 turn 텍스트만 바뀐다. 치환 내역은 결과
+`term_fix` 메타(`applied[]`·`rejected[]`·`elapsed_s`·토큰)에 실린다. 실패하면 원문 그대로 진행하고 경고만 남긴다.
+
+같은 5건을 네 팔로 짝지어 돌렸다(전사는 캐시, 파이프라인 + judge×3 을 같은 시각에 재실행): 1패스(8/27 `:8102` 직행 stt.json)와
+2패스(9/3 `:8105` 수정본 stt.json) 각각 off/on. `out/voice-eval-termfix-{1pass,2pass}-{off,on}/`.
+
+| 지표 | 1pass off | 1pass **on** | 2pass off | 2pass **on** |
+|---|---:|---:|---:|---:|
+| 종합점수 | 0.9033 | 0.9050 | 0.9117 | 0.8983 |
+| judge 축평균 | 4.333 | 4.333 | 4.267 | 4.267 |
+| coverage | 3.60 | **4.00** | 3.40 | **4.20** |
+| faithfulness | 4.40 | 4.40 | 4.20 | 4.00 |
+| classification | 3.40 | 2.80 | 3.40 | 2.80 |
+| severity / chatter / format | 5.0 / 5.0 / 4.6 | 4.8 / 5.0 / 5.0 | 5.0 / 5.0 / 4.6 | 4.6 / 5.0 / 5.0 |
+| 기대 추출 재현율 | 0.900 | **0.950** | 0.950 | 0.950 |
+| 발생단계 정확도 | 1.000 | 0.933 | 1.000 | 0.933 |
+| stt 귀속 감점 | 1 | **0** | 0 | 0 |
+| extraction missing 항목 수 | 29 | **17** | 19 | 17 |
+| 치환 적용(5건) | — | 16 | — | 16 |
+| 파이프라인 토큰(5건) | 276,820 | 385,098 (+39%) | 272,922 | 384,205 (+41%) |
+| 파이프라인 wall 평균(초/통화) | 17.6 | **19.4 (+1.8)** | 17.8 | **19.3 (+1.5)** |
+| `correct_terms` 노드 자체(초) | — | 3.8 | — | 4.0 |
+
+**성능.** 종합점수 변화(+0.002 / −0.013)는 judge 노이즈 밴드(0.02) 안이다 — 같은 2패스 전사를 9/3 에 쟀을 때 0.8883, 오늘 off 팔이
+0.9117 로 채점 드리프트만 0.023 이다. 노이즈 밖에서 일관되게 움직인 것은 세 가지다: (1) **coverage 가 두 팔 모두 올랐다**(+0.4 / +0.8)
+— 상표가 맞게 적히면 추출이 `stt_uncertainties` 로 빼놓지 않고 제품·방제이력에 싣는다(extraction missing 29→17, 재현율 .90→.95);
+(2) 1패스의 stt 귀속 감점 1(`피커먼 애벌레`)이 0 이 됐다; (3) classification 이 두 팔 모두 3.4→2.8 로 떨어졌는데, 항목을 대조하면
+같은 지적(`아줄기`·`에이플` 권고됨 처리, `마쿠피카`·`나노아이` `[기타]`, `이리응애` `[기타]`)이 표현만 바뀐 것이 대부분이고, 새로
+생긴 것은 두 종류다 — planting 발생단계 1건(실행마다 흔들리는 축, 9/3 문서와 동일)과 **2패스 `아줄기→아미스타`**(대본은 "아졸계 약",
+LLM 이 계열명을 특정 상표로 굳혔고 judge 가 hallucinated 로 잡았다; faithfulness 4.2→4.0 의 원인). 신뢰도 0.8·0.85 에서 통과한
+치환이라 하한을 0.9 로 올리면 사라지지만 `세츠→엑설트`(0.85)도 같이 잃는다. 1패스 팔에는 이런 오탐이 없었다.
+
+**속도.** 통화당 **+1.5~1.8초**(17.6→19.4초, 약 10%). 노드 자체는 3.8~4.0초지만 화자역할 노드와 병렬이라 대부분 숨는다.
+직렬로 두면 +4초. 토큰은 통화당 약 +22k(카탈로그 14k 포함)로 파이프라인 전체의 +40%. 비교: `:8105` 2패스는 같은 통화에 검색 61~137초
++ 재전사 40~117초를 더한다(9/3 문서).
+
+**결론.** 배선은 동작하고 지연 비용은 작다(+2초). 일지 품질은 coverage·재현율에서 이득, 종합점수는 노이즈 안. 위험은 "계열명 →
+특정 상표" 과잉 특정과 카탈로그 구멍(`이리응애→긴털이리응애`)이다. 기본값은 계속 off. 켜려면 (1) 1패스 전사 위에서(`:8105` 대체),
+(2) 카탈로그에 `이리응애`·`가루이`·`나노아이` 같은 구멍 보강, (3) 프롬프트에 "계열·성분명(아졸계·스트로빈계)은 상표로 바꾸지 않는다"
+규칙 추가 후 재측정. 기록 편의로 개별 케이스 결과는 `out/voice-eval-termfix-*/<case>/timing.json`·`judge.json`.
 
 ## 재현
 
 ```bash
 python -m app.agents.voice_eval.term_fix --fixtures ~/dev/jinong/jinong_gpu/stt-serve/fixtures/ctx_replay \
   --out out/term-fix-20260906 --sweep 0.7,0.8,0.9,0.95        # 캐시된 제안으로 재채점(LLM 없음); --force 로 재호출
-pytest -q tests/agents/test_term_fix.py
+pytest -q tests/agents/test_term_fix.py tests/agents/test_term_fix_node.py
+# 정식 배선 on/off (전사 캐시 stt.json 을 out/voice-eval-termfix-<arm>/<case>/ 에 두고)
+python -m app.agents.voice_eval --out out/voice-eval-termfix-1pass-off --judge-repeat 3 --no-gate
+TERM_FIX_ENABLED=true TERM_FIX_CATALOG_PATH=~/dev/jinong/jinong_gpu/stt-serve/catalog/catalog.jsonl \
+  python -m app.agents.voice_eval --out out/voice-eval-termfix-1pass-on --judge-repeat 3 --no-gate
 ```
-산출물 `out/term-fix-20260906/`(report.md · summary.json · 케이스별 proposals/result.json · 프롬프트 덤프). 운영 변경 없음.
+산출물 `out/term-fix-20260906/`(오프라인), `out/voice-eval-termfix-*/`(배선 on/off, timing.json 포함). 운영 `.env` 변경 없음(기본 off).

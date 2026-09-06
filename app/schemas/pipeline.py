@@ -96,3 +96,4 @@ class PipelineResult(BaseModel):
     model: str | None = None
     prompt_version: str | None = None
     farmos_status: str = "disabled"                              # ok | partial | unavailable | disabled
+    term_fix: dict[str, Any] | None = None                       # STT 용어 교정 메타 {applied[], n_rejected, elapsed_s, ...} — 비활성이면 None
