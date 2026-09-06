@@ -1,0 +1,14 @@
+## 통화 정보
+{% if crops %}- 대상 작물: {{ crops | join(", ") }}
+{% else %}- 대상 작물: (미상 — 녹취문에서 추정)
+{% endif %}
+{% if note %}- {{ note }}
+{% endif %}
+
+## 녹취문 (발화 번호 · 화자 · 텍스트)
+{% for s in segments %}
+#{{ s.id }} [{{ s.speaker }}] {{ s.text }}
+{% endfor %}
+
+## 용어 카탈로그 (replacement 는 이 안의 표기만 허용)
+{{ catalog }}

@@ -195,6 +195,20 @@ cat docs/eval-journal.md && git log --oneline eval/auto-tune
   자동 적용하지 않는다.
 - 기록은 `docs/eval-journal.md`(사람) + `docs/eval-journal.jsonl`(기계 — 재개·쿨다운·플래토 판정의 상태 소스).
 
+### 4.4 용어 오청 복구 실험 (LLM 사후 교정, 오프라인)
+
+`:8105` 리트리버(자모 편집거리)가 못 잡는 오청(`하반→파밤나방`, `세츠→엑설트`)을 전사 완료본 + 카탈로그(품종 제외 ~4.1k)로
+LLM 이 치환 목록만 내게 해서 복구하는지 재는 하네스 — 파이프라인에는 배선돼 있지 않다(`docs/stt-term-fix-2026-09-06.md`).
+
+```bash
+python -m app.agents.voice_eval.term_fix --fixtures ~/dev/jinong/jinong_gpu/stt-serve/fixtures/ctx_replay \
+  --out out/term-fix --sweep 0.7,0.8,0.9      # 케이스·팔별 제안 캐시 → 가드·채점만 바꾸면 LLM 없이 재채점, --force 로 재호출
+```
+
+- 카탈로그는 `jinong_gpu/stt-serve/catalog/catalog.jsonl` 을 경로로 읽는다(`--catalog` 또는 env `TERM_CATALOG_PATH`), 복사하지 않는다.
+- 판정 = 핵심어 recall·exact 인식률 비하락 ∧ 치환 precision ≥ 0.8 ∧ CER 악화 케이스 0. CER 은 참고치(표기 규약 상쇄).
+- 남는 오탐은 전부 카탈로그 구멍(정답 용어가 없어 LLM 이 가장 가까운 항목을 고름) — 카탈로그 보강이 선행 조건.
+
 ## 5. 대안: 같은 호스트에서 게이트웨이 내부 호출
 
 기본은 공개 HTTPS(`STT_BASE_URL=https://jinong-stt.jinongservice.co.kr`). 헤어핀을 피하려면 두 compose 를 같은 docker network 에

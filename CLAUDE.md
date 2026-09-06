@@ -53,7 +53,7 @@ app/clients/          s3 (boto3 via to_thread + Keys), storage (Protocol + build
 app/services/         calls (start/audio/end/regenerate transitions, idempotency), daily (날짜별 멀티콜 트리거/재생성), transcripts (merge + merge_calls + apply_speaker_map: 생성 후 농가/컨설턴트 역할 되먹임), artifacts (persist), results (views)
 app/worker/           runner (poll+wake, semaphores), stt_job, generate_job, daily_job (날짜별 집계 생성), recovery (startup reset, deadline sweep)
 app/routes/           health, calls (/v1/calls/*), daily (/v1/daily-diaries/* — 백엔드 트리거 날짜별 영농일지)
-app/agents/           LangGraph pipeline: interface.py (contract), fake.py, graph.py + state/schemas/llm/deps, nodes/mapping/prompts/render (crop subgraph ends with `verify_diary` — an independent LLM pass that demotes a hollow draft to EMPTY; render emits two variants from the same structured data — `internal` with evidence → S3 `artifacts/internal/`, `public` without evidence/codes/meta → API `markdown`, callback keys), summarize.py (call summary for the backend callback — independent of the diary pipeline), tools/ (fake_farmos·fake_llm·transcript), run.py (dry-run CLI), eval.py, voice_eval/ (실녹음 평가 하네스: STT 정확도 + 영농일지 LLM judge + 회귀 게이트, optimize/ = 평가 결과로 프롬프트·매핑을 고치는 자가 개선 루프)
+app/agents/           LangGraph pipeline: interface.py (contract), fake.py, graph.py + state/schemas/llm/deps, nodes/mapping/prompts/render (crop subgraph ends with `verify_diary` — an independent LLM pass that demotes a hollow draft to EMPTY; render emits two variants from the same structured data — `internal` with evidence → S3 `artifacts/internal/`, `public` without evidence/codes/meta → API `markdown`, callback keys), summarize.py (call summary for the backend callback — independent of the diary pipeline), tools/ (fake_farmos·fake_llm·transcript), run.py (dry-run CLI), eval.py, voice_eval/ (실녹음 평가 하네스: STT 정확도 + 영농일지 LLM judge + 회귀 게이트, optimize/ = 평가 결과로 프롬프트·매핑을 고치는 자가 개선 루프, term_fix/ = STT 용어 오청을 카탈로그+LLM 치환 목록으로 복구하는 오프라인 실험 — 미배선)
 app/schemas/          calls (API), daily (daily-diaries API), transcript (MergedTranscript), pipeline (CallContext/PipelineResult contract)
 tests/                pytest-asyncio + respx (STT/farmos) + moto (S3), FakePipeline; tests/agents/ for the pipeline, tests/agents/testcases/voice/ (대본·정답·임계값 — 녹음은 리포지토리 밖)
 deploy/               deploy.sh (rsync + remote compose), nginx vhost, letsencrypt cert/renew
@@ -71,6 +71,7 @@ STORAGE_IMPL=local ./scripts/run_local.sh && ./scripts/e2e_local.sh <audio>   # 
 python -m app.agents.run --transcript tests/agents/fixtures/calls/<fixture>.json --out out/   # pipeline dry-run
 python -m app.agents.voice_eval --audio-dir ~/Downloads/recordings   # 실녹음 5건 평가 → out/voice-eval/report.md (ops.md §4.2)
 python -m app.agents.voice_eval.optimize --max-iters 3       # 자가 개선 루프 → docs/eval-journal.md, eval/auto-tune (ops.md §4.3)
+python -m app.agents.voice_eval.term_fix --fixtures ~/dev/jinong/jinong_gpu/stt-serve/fixtures/ctx_replay   # STT 용어 오청 LLM 교정 실험 (ops.md §4.4)
 ./deploy/deploy.sh                          # prod → jinong_aws_office :7003 (see docs/ops.md for first-time DNS/TLS/.env)
 ./deploy/deploy.sh dev                      # dev  → same host, apps/jinong_ai-agents-dev :7013 (ops.md §7)
 ```
