@@ -125,6 +125,10 @@ class Settings(BaseSettings):
     # s3_key_md 는 근거 제거 전달용, s3_key_md_internal 은 근거 포함 정본(artifacts/internal/). 본문은 싣지 않는다.
     # 백엔드 DTO 가 미지 필드를 거부하면 0 으로 끈다 — 같은 키는 GET 응답 result 에도 있다.
     callback_include_artifact_keys: bool = True
+    # GET 응답에 인라인하는 `markdown` 과 artifact 엔드포인트의 기본 `view` — "public"(근거·코드·내부 메타 제거, 전달용)
+    # 또는 "internal"(근거 포함 정본). S3 에는 두 벌이 항상 저장되고 `s3_key_md`/`s3_key_md_internal` 키는 그대로다.
+    # 운영(prod)은 백엔드가 두 벌 전환을 받기 전까지 "internal"(이전 응답과 동일 본문) — docs/ops.md §7.
+    api_markdown_view: str = "public"
 
     # --- worker ---------------------------------------------------------------
     worker_poll_sec: float = 5.0

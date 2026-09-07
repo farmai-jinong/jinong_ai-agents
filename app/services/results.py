@@ -48,7 +48,8 @@ def progress_of(audio: list[CallAudio]) -> SttProgress:
     return p
 
 
-async def call_detail(s: AsyncSession, call: Call, *, inline: bool = True, note: str | None = None) -> CallDetail:
+async def call_detail(s: AsyncSession, call: Call, *, inline: bool = True, note: str | None = None,
+                      view: str = "public") -> CallDetail:
     audio = await repo.list_audio(s, call.call_id)
     artifacts = await repo.list_artifacts(s, call.call_id)
     return CallDetail(
@@ -63,7 +64,7 @@ async def call_detail(s: AsyncSession, call: Call, *, inline: bool = True, note:
                                   model=call.generation_model, warnings=list(call.generation_warnings_json or []),
                                   usage=call.usage_json),
         error=ErrorView(code=call.error_code, message=call.error_message) if call.error_code else None,
-        result=build_result_view(call, artifacts, inline=inline),
+        result=build_result_view(call, artifacts, inline=inline, view=view),
         callback_status=call.callback_status,
     )
 
@@ -80,7 +81,7 @@ def list_item(call: Call) -> CallListItem:
 
 
 async def daily_detail(s: AsyncSession, dd: DailyDiary, *, inline: bool = True,
-                       note: str | None = None) -> DailyDiaryDetail:
+                       note: str | None = None, view: str = "public") -> DailyDiaryDetail:
     artifacts = await repo.list_daily_artifacts(s, dd.diary_id)
     return DailyDiaryDetail(
         diary_id=dd.diary_id, diary_date=dd.diary_date, status=dd.status,
@@ -92,7 +93,7 @@ async def daily_detail(s: AsyncSession, dd: DailyDiary, *, inline: bool = True,
                                   model=dd.generation_model, warnings=list(dd.generation_warnings_json or []),
                                   usage=dd.usage_json),
         error=ErrorView(code=dd.error_code, message=dd.error_message) if dd.error_code else None,
-        result=build_daily_result_view(dd, artifacts, inline=inline),
+        result=build_daily_result_view(dd, artifacts, inline=inline, view=view),
         callback_status=dd.callback_status,
     )
 

@@ -249,6 +249,7 @@ prod 와 나란히 두는 값:
 | `S3_PREFIX` (같은 `jinong-agri-stt` 버킷·같은 MinIO 사용자) | `agents/voicecall` | `agents/voicecall-dev` |
 | `/srv` 운영 디렉터리(로그·인증서) | `/srv/jinong-agent` | `/srv/jinong-agent-dev` |
 | `AGENT_API_KEY` | 기존 | 별도 발급 → 백엔드팀 dev 설정 |
+| 두 벌 산출물 노출(2026-09-07) | `API_MARKDOWN_VIEW=internal` + `CALLBACK_INCLUDE_ARTIFACT_KEYS=false` — 응답 `markdown`·콜백 payload 가 두 벌 이전과 동일(S3 에는 두 벌 저장, `s3_key_md_internal` 키만 추가) | 기본값(`public` / `true`) — 백엔드가 전환을 받으면 prod 에서 두 줄 제거 |
 | `STT_API_KEY`·MinIO 키·`CALLBACK_API_KEY`·SA 키·백엔드 URL | 기존 | **재사용**(게이트웨이 재기동 없이 시작; 게이트웨이 `GATEWAY_API_KEY` 에 dev 전용 키를 추가하면 그때 교체) |
 
 ### 7.1 부트스트랩 (DNS 없이 가능)

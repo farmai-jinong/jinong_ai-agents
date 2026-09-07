@@ -178,7 +178,14 @@ def artifact_keys(artifacts: list[Artifact] | list[DailyArtifact]) -> dict[str, 
     return out
 
 
-def build_result_view(call: Call, artifacts: list[Artifact], *, inline: bool = True) -> ResultView | None:
+def _inline_md(public: Artifact | DailyArtifact, internal: Artifact | DailyArtifact | None, view: str) -> str | None:
+    """인라인 `markdown` 본문 — `view="internal"` 이면 근거 포함 정본(없으면 public 으로 폴백: 두 벌 이전 run)."""
+    src = internal if (view == "internal" and internal is not None) else public
+    return src.content
+
+
+def build_result_view(call: Call, artifacts: list[Artifact], *, inline: bool = True,
+                      view: str = "public") -> ResultView | None:
     if call.status != "COMPLETED":
         return None
     by_kind: dict[tuple[str, str], Artifact] = {(a.kind, a.prdlst_code): a for a in artifacts}
@@ -197,7 +204,7 @@ def build_result_view(call: Call, artifacts: list[Artifact], *, inline: bool = T
         diaries.append(DiaryView(
             prdlst_code=_view_code(a.prdlst_code), prdlst_nm=a.prdlst_nm,
             diary_date=a.diary_date, status=a.diary_status,
-            markdown=a.content if inline else None, structured=structured,
+            markdown=_inline_md(a, ai, view) if inline else None, structured=structured,
             s3_key_md=a.s3_key, s3_key_json=js.s3_key if js else a.s3_key.replace(".md", ".json"),
             s3_key_md_internal=ai.s3_key if ai else None,
         ))
@@ -212,7 +219,7 @@ def build_result_view(call: Call, artifacts: list[Artifact], *, inline: bool = T
                 structured = json.loads(rjs.content)
             except ValueError:
                 structured = None
-        report = ReportView(markdown=rmd.content if inline else None, structured=structured,
+        report = ReportView(markdown=_inline_md(rmd, ri, view) if inline else None, structured=structured,
                             s3_key_md=rmd.s3_key, s3_key_json=rjs.s3_key if rjs else rmd.s3_key.replace(".md", ".json"),
                             s3_key_md_internal=ri.s3_key if ri else None)
     summary = None
@@ -235,7 +242,8 @@ def build_result_view(call: Call, artifacts: list[Artifact], *, inline: bool = T
                       result_key=res.s3_key if res else None)
 
 
-def build_daily_result_view(dd: DailyDiary, artifacts: list[DailyArtifact], *, inline: bool = True) -> DailyResultView | None:
+def build_daily_result_view(dd: DailyDiary, artifacts: list[DailyArtifact], *, inline: bool = True,
+                            view: str = "public") -> DailyResultView | None:
     if dd.status != "COMPLETED":
         return None
     by_kind: dict[tuple[str, str], DailyArtifact] = {(a.kind, a.prdlst_code): a for a in artifacts}
@@ -254,7 +262,7 @@ def build_daily_result_view(dd: DailyDiary, artifacts: list[DailyArtifact], *, i
         diaries.append(DiaryView(
             prdlst_code=_view_code(a.prdlst_code), prdlst_nm=a.prdlst_nm,
             diary_date=a.diary_date, status=a.diary_status,
-            markdown=a.content if inline else None, structured=structured,
+            markdown=_inline_md(a, ai, view) if inline else None, structured=structured,
             s3_key_md=a.s3_key, s3_key_json=js.s3_key if js else a.s3_key.replace(".md", ".json"),
             s3_key_md_internal=ai.s3_key if ai else None,
         ))

@@ -85,6 +85,18 @@ async def test_end_and_get_flow(client, app, stt_mock):
     assert r.status_code == 200 and "## 근거 발화" in r.text and r.headers["content-type"].startswith("text/markdown")
     r = await client.get("/v1/calls/c3/artifacts/report?view=internal")
     assert r.status_code == 200 and "## 근거 발화" in r.text
+    # API_MARKDOWN_VIEW=internal (prod) → 인라인 markdown·artifact 기본 view 가 근거 포함 정본, 키는 그대로, 명시 view 는 우선
+    app.state.rt.settings.api_markdown_view = "internal"
+    try:
+        res = (await client.get("/v1/calls/c3")).json()["result"]
+        assert "## 근거 발화" in res["diaries"][0]["markdown"] and "## 근거 발화" in res["report"]["markdown"]
+        assert res["diaries"][0]["s3_key_md"] == "agents/voicecall/c3/artifacts/diary/0804MM.md"
+        r = await client.get("/v1/calls/c3/artifacts/diary/0804MM")
+        assert r.status_code == 200 and "## 근거 발화" in r.text
+        r = await client.get("/v1/calls/c3/artifacts/report?view=public")
+        assert r.status_code == 200 and "## 근거 발화" not in r.text
+    finally:
+        app.state.rt.settings.api_markdown_view = "public"
     r = await client.get("/v1/calls/c3/artifacts/diary/0804MM?view=bogus")
     assert r.status_code == 400 and r.json()["detail"]["code"] == "INVALID_VIEW"
     r = await client.get("/v1/calls/c3/artifacts/diary/0804MM?format=json&view=bogus")   # json 은 view 무시

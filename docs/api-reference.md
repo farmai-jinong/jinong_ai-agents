@@ -112,6 +112,8 @@ Body(선택) `{"ended_at": "...", "duration_sec": 900}` → `202` (`state=ENDED,
   `s3_key_md_internal` 은 **근거 포함 정본(internal)** 으로 `…/artifacts/internal/` 아래에 저장되며 응답에 본문은 인라인하지
   않는다 — 필요하면 artifact 엔드포인트에 `?view=internal`. 두 벌은 같은 구조화 데이터의 렌더 결과라 내용(항목·판정 문구
   `[표준 목록 미매핑]`·`※ 확인 필요` 등)은 동일하다. `.json`(`structured`, prefill 포함)은 한 벌뿐이다.
+  인라인 `markdown` 과 artifact 엔드포인트의 **기본 view 는 인스턴스 설정 `API_MARKDOWN_VIEW`**(기본 `public`)를 따른다 —
+  **운영(prod)은 `internal`** 로 두어 백엔드가 두 벌 전환을 받기 전까지 이전과 같은 근거 포함 본문을 돌려준다(S3 키는 동일).
 
 ## 산출물 · 목록 · 재생성
 
@@ -119,7 +121,7 @@ Body(선택) `{"ended_at": "...", "duration_sec": 900}` → `202` (`state=ENDED,
 |---|---|---|
 | GET | `/v1/calls/{id}/transcript` | 병합 전사 JSON(`MergedTranscript`, 화자 역할 포함). 미준비 `404 NOT_READY` |
 | GET | `/v1/calls/{id}/artifacts/summary[?format=json]` | 통화 단순요약 md / JSON (콜백 `content` 와 동일) |
-| GET | `/v1/calls/{id}/artifacts/report[?format=json][&view=public\|internal]` | 보고서 `text/markdown` / JSON. `view` 기본 `public`(근거 제거), `internal` 은 근거 포함 정본; `format=json` 이면 무시. 그 외 값 `400 INVALID_VIEW` |
+| GET | `/v1/calls/{id}/artifacts/report[?format=json][&view=public\|internal]` | 보고서 `text/markdown` / JSON. `view` 는 `public`(근거 제거) / `internal`(근거 포함 정본), 생략 시 `API_MARKDOWN_VIEW`(dev `public`, prod `internal`); `format=json` 이면 무시. 그 외 값 `400 INVALID_VIEW` |
 | GET | `/v1/calls/{id}/artifacts/diary/{prdlst_code}[?format=json][&view=public\|internal]` | 작물별 영농일지 md / JSON (`unresolved`, 다건이면 `unresolved-2` … 가능). `view` 규칙 동일 |
 | GET | `/v1/calls?status=&state=&limit=50&cursor=` | 운영용 목록 `{items:[{call_id,state,status,updated_at,stt_progress}], next_cursor}` (`limit` 1..200, 기본 50) |
 | POST | `/v1/calls/{id}/regenerate` | `{"retranscribe": false, "reason": "…", "farm_access_token": "…"}` → `202`. 토큰을 주면 purge 된 농가 JWT 재공급(daily 와 동일 계약). `409 CALL_NOT_ENDED` / `409 ALREADY_PROCESSING`. 산출물 같은 S3 키에 덮어쓰기, `generation.run` +1 |
@@ -276,6 +278,7 @@ terminal 시 (형식은 통화 콜백과 동일한 전송 규칙):
   `s3_key_md` 는 전달용(근거 제거), `s3_key_md_internal` 은 근거 포함 정본 — `GET /v1/calls/{id}` 의 `result` 와 같은 값.
   키는 `jinong-agri-stt` 버킷 기준이고 prefix 는 환경별(prod `agents/voicecall/`, dev `agents/voicecall-dev/`).
   `EMPTY`/`FAILED` 에는 싣지 않는다. 백엔드 DTO 가 미지 필드를 거부하면 `CALLBACK_INCLUDE_ARTIFACT_KEYS=false`.
+  **운영(prod)은 백엔드가 이 필드를 받기로 하기 전까지 `false`** — 콜백 payload 가 이전과 동일하다(ops.md §7).
 
 **날짜별 일지 — agent-callback**: `POST /v1/daily-diaries` body 의 `callback_url` 로, terminal 마다 마스터 ID만 알린다. 백엔드는 이 콜백을 받고 `GET /v1/daily-diaries/{id}?inline=true` 로 `diaries[]`(작물별 1건)를 가져가 저장한다.
 

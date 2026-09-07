@@ -40,7 +40,7 @@ async def _detail_response(rt: Runtime, diary_id: str, status_code: int, note: s
         dd = await repo.get_daily(s, diary_id)
         if dd is None:
             raise ApiError("DAILY_NOT_FOUND", f"daily diary {diary_id} not found", 404)
-        detail = await daily_detail(s, dd, inline=inline, note=note)
+        detail = await daily_detail(s, dd, inline=inline, note=note, view=rt.settings.api_markdown_view)
     return JSONResponse(status_code=status_code, content=json.loads(detail.model_dump_json()))
 
 
@@ -96,9 +96,9 @@ async def get_daily_transcript(diary_id: str, request: Request) -> Response:
 
 @router.get("/{diary_id}/artifacts/diary/{prdlst_code}")
 async def get_daily_diary_artifact(diary_id: str, prdlst_code: str, request: Request, format: str = "md",
-                                   view: str = "public") -> Response:
+                                   view: str | None = None) -> Response:
     rt = _rt(request)
-    kind = artifact_kind("diary", format, view)
+    kind = artifact_kind(rt, "diary", format, view)
     code = prdlst_code or UNRESOLVED
     async with rt.db.session() as s:
         art = await repo.get_daily_artifact(s, diary_id, kind, code)
