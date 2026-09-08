@@ -32,11 +32,17 @@ from ...term_fix.run import propose
 from ...term_fix.schemas import TermCorrection
 from ...tools.fake_llm import FakeChatModel
 from ..cases import TESTCASES
-from .score import ArmScore, score_arm
+from .score import ArmScore, micro_cer, paired_boot, score_arm
 
 log = logging.getLogger("voice_eval.term_fix")
 DEFAULT_CATALOG = Path.home() / "dev/jinong/jinong_gpu/stt-serve/catalog/catalog.jsonl"
-PRECISION_MIN = 0.8
+PRECISION_MIN = 0.8                 # 대본 세트(케이스 평균) 판정용
+
+# 실통화 세트(발생 단위) 사전 등록 판정 기준 — 돌리기 전에 못박은 값이다. 근거는 docs/stt-term-fix-calls-*.md
+MICRO_RECALL_MIN = 0.90             # 도메인 용어 발생 recall (base 좌표 .8071)
+PRECISION_LENIENT_MIN = 0.90        # 치환 precision(lenient)
+CER_CI_MAX = 0.0033                 # 공백제거 CER 페어드 CI 상한(회귀 감시 — 이득은 기대하지 않는다)
+BOOT_ITERS = 10000
 
 
 # --------------------------------------------------------------------------- 입력
@@ -51,8 +57,14 @@ def load_fixtures(d: Path, names: list[str] | None) -> list[dict[str, Any]]:
     return out
 
 
-def case_meta(name: str) -> tuple[dict[str, Any], list[str]]:
-    """expect.json(핵심어 family 판정용)과 작물 힌트 — 테스트케이스 디렉터리가 없으면 빈 값."""
+def case_meta(name: str, fx: dict[str, Any] | None = None) -> tuple[dict[str, Any], list[str]]:
+    """expect.json(핵심어 family 판정용)과 작물 힌트.
+
+    픽스처가 `expect`·`crops` 를 직접 실어 오면 그것을 쓴다 — 실통화 세트(`import_calls`)에는 테스트케이스
+    디렉터리가 없다. 핵심어는 호출부가 `fx["expect_keywords"]` 에서 직접 읽는다.
+    """
+    if fx is not None and (fx.get("expect") or fx.get("crops")):
+        return dict(fx.get("expect") or {}), list(fx.get("crops") or [])
     d = TESTCASES / name
     expect: dict[str, Any] = {}
     crops: list[str] = []
@@ -79,7 +91,7 @@ async def proposals_for(llm: Any, fx: dict[str, Any], base: str, catalog: Catalo
     cache = out_dir / name / f"{base}.proposals.json"
     if cache.exists() and not args.force:
         return json.loads(cache.read_text(encoding="utf-8"))
-    _, crops = case_meta(name)
+    _, crops = case_meta(name, fx)
     t0 = time.perf_counter()
     corrections, traces = await propose(llm, list(fx[base]["segments"]), catalog, crops=crops,
                                         name=f"term_fix_{name}_{base}", mode=args.mode,
@@ -96,17 +108,17 @@ async def proposals_for(llm: Any, fx: dict[str, Any], base: str, catalog: Catalo
 
 def score_fixture(fx: dict[str, Any], base: str, prop: dict[str, Any], catalog: Catalog, *,
                   min_confidence: float, max_per_segment: int) -> tuple[ArmScore, ArmScore, list[dict[str, Any]]]:
-    expect, _ = case_meta(fx["case"])
+    expect, _ = case_meta(fx["case"], fx)
     reference = fx["reference"]
     keywords = list(fx.get("expect_keywords") or [])
     segments = list(fx[base]["segments"])
-    base_score = score_arm(base, join_text(segments), reference, keywords, expect)
+    base_score = score_arm(base, join_text(segments), reference, keywords, expect, segments=segments)
     proposals = [TermCorrection(**c) for c in prop["corrections"]]
     fixed, applied = apply_corrections(segments, proposals, catalog, min_confidence=min_confidence,
                                        max_per_segment=max_per_segment)
     fix_score = score_arm(f"{base}+fix", join_text(fixed), reference, keywords, expect, applied,
                           prompt_tokens=prop.get("prompt_tokens", 0), completion_tokens=prop.get("completion_tokens", 0),
-                          elapsed_s=prop.get("elapsed_s", 0.0))
+                          elapsed_s=prop.get("elapsed_s", 0.0), segments=fixed)
     changed = [{"id": i, "before": segments[i].get("text"), "after": s.get("text")}
                for i, s in enumerate(fixed) if s.get("text") != segments[i].get("text")]
     return base_score, fix_score, changed
@@ -118,7 +130,11 @@ def row_of(case: str, base: str, b: ArmScore, f: ArmScore) -> dict[str, Any]:
             "base_cer": b.cer, "fix_cer": f.cer, "n_applied": f.n_applied, "n_rejected": f.n_rejected,
             "tp": f.tp, "fp": f.fp, "neutral": f.neutral, "tp_variant": f.tp_variant, "corrections": f.corrections,
             "prompt_tokens": f.prompt_tokens, "completion_tokens": f.completion_tokens,
-            "elapsed_s": f.elapsed_s, "keywords_fix": f.keywords}
+            "elapsed_s": f.elapsed_s, "keywords_fix": f.keywords, "keywords_base": b.keywords,
+            "ref_chars": b.ref_chars, "base_edits": b.edits, "fix_edits": f.edits,
+            "base_occ_total": b.occ_total, "base_occ_hit": b.occ_hit, "base_occ_exact": b.occ_exact,
+            "fix_occ_total": f.occ_total, "fix_occ_hit": f.occ_hit, "fix_occ_exact": f.occ_exact,
+            "occ_base": b.occurrences, "occ_fix": f.occurrences}
 
 
 def make_llm(args: argparse.Namespace) -> Any:
@@ -139,7 +155,8 @@ def _fmt(x: float | None) -> str:
     return "—" if x is None else f"{x:.4f}"
 
 
-def verdict(rows: list[dict[str, Any]], base: str, min_confidence: float | None = None) -> dict[str, Any]:
+def verdict(rows: list[dict[str, Any]], base: str, min_confidence: float | None = None,
+            iters: int = BOOT_ITERS) -> dict[str, Any]:
     rs = [r for r in rows if r["base"] == base]
     if not rs:
         return {}
@@ -151,17 +168,55 @@ def verdict(rows: list[dict[str, Any]], base: str, min_confidence: float | None 
     strict = round(tp / (tp + fp), 4) if tp + fp else None
     lenient = round((tp + tv) / (tp + tv + fp), 4) if tp + tv + fp else None
     worse = [r["case"] for r in rs if r["fix_cer"] > r["base_cer"]]
-    # recall 은 fuzzy(≥85) 를 인정해 기준선이 이미 0.97~1.0 이라 '상승' 을 요구하면 천장에 막힌다 → 비하락 + exact 상승 또는 TP>0
-    ok = (mean_fix >= mean_base and exact_fix >= exact_base and (lenient is not None and lenient >= PRECISION_MIN)
-          and not worse and tp + tv > 0)
+    occ = {k: sum(r.get(k, 0) for r in rs) for k in
+           ("base_occ_total", "base_occ_hit", "base_occ_exact", "fix_occ_total", "fix_occ_hit", "fix_occ_exact")}
+    n_occ = occ["base_occ_total"]
+    micro = {"occurrences": n_occ,
+             "recall_base": round(occ["base_occ_hit"] / n_occ, 4) if n_occ else None,
+             "recall_fix": round(occ["fix_occ_hit"] / n_occ, 4) if n_occ else None,
+             "exact_base": round(occ["base_occ_exact"] / n_occ, 4) if n_occ else None,
+             "exact_fix": round(occ["fix_occ_exact"] / n_occ, 4) if n_occ else None,
+             "cer_base": micro_cer([r["base_edits"] for r in rs], [r["ref_chars"] for r in rs]),
+             "cer_fix": micro_cer([r["fix_edits"] for r in rs], [r["ref_chars"] for r in rs]),
+             "boot": paired_boot([r["base_edits"] for r in rs], [r["fix_edits"] for r in rs],
+                                 [r["ref_chars"] for r in rs], iters=iters) if iters else None}
+    # 판정 단위는 세트가 정한다. 발생 단위 골드가 있으면(실통화) micro, 없으면(대본 5건) 케이스 평균.
+    if n_occ:
+        # 사전 등록 기준 — recall ≥ MICRO_RECALL_MIN ∧ precision(lenient) ≥ PRECISION_LENIENT_MIN
+        #                 ∧ 공백제거 CER 페어드 CI 상한 < CER_CI_MAX
+        hi = (micro["boot"] or {}).get("hi")
+        ok = ((micro["recall_fix"] or 0) >= MICRO_RECALL_MIN
+              and (lenient is not None and lenient >= PRECISION_LENIENT_MIN)
+              and (hi is None or hi < CER_CI_MAX)
+              and (micro["recall_fix"] or 0) >= (micro["recall_base"] or 0))
+    else:
+        # recall 은 fuzzy(≥85) 를 인정해 기준선이 이미 0.97~1.0 이라 '상승' 을 요구하면 천장에 막힌다 → 비하락 + exact 상승 또는 TP>0
+        ok = (mean_fix >= mean_base and exact_fix >= exact_base and (lenient is not None and lenient >= PRECISION_MIN)
+              and not worse and tp + tv > 0)
     return {"base": base, "min_confidence": min_confidence,
             "mean_recall_base": round(mean_base, 4), "mean_recall_fix": round(mean_fix, 4),
             "mean_exact_base": round(exact_base, 4), "mean_exact_fix": round(exact_fix, 4),
             "mean_cer_base": round(sum(r["base_cer"] for r in rs) / len(rs), 4),
             "mean_cer_fix": round(sum(r["fix_cer"] for r in rs) / len(rs), 4),
+            "n_cases": len(rs), "micro": micro,
             "n_applied": sum(r["n_applied"] for r in rs), "tp": tp, "fp": fp, "tp_variant": tv,
             "neutral": sum(r["neutral"] for r in rs), "precision": strict, "precision_lenient": lenient,
             "cer_worse_cases": worse, "pass": ok}
+
+
+def catalog_queue(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """`replacement_not_in_catalog` 로 거부된 제안 = 카탈로그 구멍 후보. 빈도순으로 모은다."""
+    agg: dict[str, dict[str, Any]] = {}
+    for r in rows:
+        for c in r["corrections"]:
+            if c.get("status") != "rejected" or c.get("why") != "replacement_not_in_catalog":
+                continue
+            q = agg.setdefault(c["replacement"], {"replacement": c["replacement"], "n": 0, "category": c.get("category"),
+                                                  "originals": [], "reason": c.get("reason", "")})
+            q["n"] += 1
+            if c["original"] not in q["originals"]:
+                q["originals"].append(c["original"])
+    return sorted(agg.values(), key=lambda q: (-q["n"], q["replacement"]))
 
 
 def write_report(out_dir: Path, rows: list[dict[str, Any]], verdicts: list[dict[str, Any]],
@@ -177,12 +232,24 @@ def write_report(out_dir: Path, rows: list[dict[str, Any]], verdicts: list[dict[
                   f"| CER 평균 | {v['mean_cer_base']:.4f} | {v['mean_cer_fix']:.4f} |",
                   f"| 치환 TP / TP-이형 / FP / neutral | — | {v['tp']} / {v['tp_variant']} / {v['fp']} / {v['neutral']} |",
                   f"| 치환 precision strict / lenient(≥{PRECISION_MIN}) | — | {_fmt(v['precision'])} / {_fmt(v['precision_lenient'])} |",
-                  f"| CER 악화 케이스 | — | {', '.join(v['cer_worse_cases']) or '없음'} |", "",
-                  "| 케이스 | recall 기준→fix | exact 기준→fix | CER 기준→fix | 적용/거부 | TP/이형/FP | 토큰(in/out) | 초 |",
+                  f"| CER 악화 케이스 | — | {', '.join(v['cer_worse_cases']) or '없음'} |", ""]
+        m = v.get("micro") or {}
+        if m.get("occurrences"):
+            b = m.get("boot") or {}
+            lines += [f"### 발생 단위(micro) — 사전 등록 판정 좌표 · 골드 발생 {m['occurrences']}건", "",
+                      "| 지표 | 기준 | +fix | 사전 등록 기준 |", "|---|---:|---:|---|",
+                      f"| 도메인 용어 recall(exact+fuzzy) | {_fmt(m['recall_base'])} | {_fmt(m['recall_fix'])} | ≥ {MICRO_RECALL_MIN} |",
+                      f"| 도메인 용어 exact | {_fmt(m['exact_base'])} | {_fmt(m['exact_fix'])} | 비하락 |",
+                      f"| 치환 precision(lenient) | — | {_fmt(v['precision_lenient'])} | ≥ {PRECISION_LENIENT_MIN} |",
+                      f"| CER(공백제거, micro) | {_fmt(m['cer_base'])} | {_fmt(m['cer_fix'])} | — |",
+                      f"| Δ CER 페어드 CI95 | — | {b.get('delta', '—')} [{b.get('lo', '—')}, {b.get('hi', '—')}] | 상한 < +{CER_CI_MAX} |", ""]
+        lines += ["| 케이스 | recall 기준→fix | exact 기준→fix | CER 기준→fix | 적용/거부 | TP/이형/FP | 토큰(in/out) | 초 |",
                   "|---|---|---|---|---:|---|---|---:|"]
         for r in rows:
             if r["base"] != v["base"]:
                 continue
+            if m.get("occurrences") and not (r.get("base_occ_total") or r["n_applied"] or r["n_rejected"]):
+                continue        # 실통화 세트: 골드도 제안도 없는 통화는 표에서 뺀다(84통화 중 다수)
             lines.append(f"| {r['case']} | {r['base_recall']:.3f}→{r['fix_recall']:.3f} | "
                          f"{r['base_exact']:.3f}→{r['fix_exact']:.3f} | "
                          f"{r['base_cer']:.4f}→{r['fix_cer']:.4f} | {r['n_applied']}/{r['n_rejected']} | "
@@ -208,13 +275,28 @@ def write_report(out_dir: Path, rows: list[dict[str, Any]], verdicts: list[dict[
                          f"{v['mean_cer_base']:.4f}→{v['mean_cer_fix']:.4f} | {', '.join(v['cer_worse_cases']) or '없음'} | "
                          f"{'PASS' if v['pass'] else 'FAIL'} |")
         lines.append("")
+    queue = catalog_queue(rows)
+    if queue:
+        lines += ["## 카탈로그 후보 큐", "",
+                  "LLM 이 냈지만 `replacement_not_in_catalog` 로 거부된 치환 — 카탈로그에 그 표기가 없어서 못 고친 것들이다. "
+                  "빈도순. `jinong_gpu` 카탈로그 보강 입력으로 쓴다(`catalog_queue.tsv` 동일 내용).", "",
+                  "| 후보 표기 | 횟수 | 카테고리(LLM) | 원문 예시 | 근거 |", "|---|---:|---|---|---|"]
+        for q in queue:
+            lines.append(f"| {q['replacement']} | {q['n']} | {q['category'] or ''} | "
+                         f"{', '.join(q['originals'][:4])} | {q['reason'][:70]} |")
+        lines.append("")
     lines += ["## 읽는 법", "",
               "- recall 은 대본에 실제 발화된 핵심어(expect_keywords)의 exact/fuzzy 인식률(`stt_score.match_keyword`).",
               "- TP = 바꾼 표기가 대본에 있고 원문 표기는 없음 · TP-이형 = 바꾼 표기가 대본에 exact 로는 없지만 자모 fuzzy(≥85)로는 있음"
               "(잿빛곰팡이병 ↔ '잿빛곰팡이') · FP = 대본에 없음 · neutral = 원문·치환 둘 다 대본에 있음.",
               "- exact 인식률 = fuzzy 를 빼고 exact 만 인정한 핵심어 인식률 — 매핑 단계가 실제로 덕 보는 지표.",
               "- precision strict = TP/(TP+FP), lenient = (TP+이형)/(TP+이형+FP). 판정은 lenient 기준(표기 규약은 이 실험의 대상이 아님).",
-              "- CER 은 참고치(공백·구두점 제거, 표기 규약 상쇄가 남는다). 판정 = recall·exact 비하락 ∧ TP+이형>0 ∧ lenient≥0.8 ∧ CER 악화 케이스 0.", ""]
+              "- CER 은 참고치(공백·구두점 제거 = `jinong_gpu` 의 결정 좌표인 공백제거 CER). 표기 규약 상쇄가 남는다.",
+              f"- **판정 단위는 세트가 정한다.** 발생 단위 골드가 실린 세트(실통화)는 micro 표가 판정이다"
+              f"(recall ≥ {MICRO_RECALL_MIN} ∧ lenient ≥ {PRECISION_LENIENT_MIN} ∧ ΔCER CI 상한 < +{CER_CI_MAX} ∧ recall 비하락). "
+              f"골드가 통화 단위뿐인 대본 세트는 케이스 평균으로 판정한다(recall·exact 비하락 ∧ TP+이형>0 ∧ lenient≥{PRECISION_MIN} ∧ CER 악화 0).",
+              "- micro recall 은 발화별 골드를 그 발화 텍스트에 대고 잰다 — 같은 용어를 5번 말했는데 1번 놓친 것도 보인다"
+              "(통화 단위 매칭은 못 본다).", ""]
     (out_dir / "report.md").write_text("\n".join(lines), encoding="utf-8")
 
 
@@ -254,9 +336,24 @@ async def amain(args: argparse.Namespace, llm: Any | None = None) -> int:
     sweep = [v for t in thresholds for v in (verdict(sweep_rows[t], b, t) for b in arms) if v]
     (out_dir / "summary.json").write_text(json.dumps(
         {"rows": rows, "verdicts": verdicts, "sweep": sweep, "catalog_terms": len(catalog),
+         "catalog_queue": catalog_queue(rows),
          "args": {k: str(v) for k, v in vars(args).items()}}, ensure_ascii=False, indent=1), encoding="utf-8")
+    queue = catalog_queue(rows)
+    with (out_dir / "catalog_queue.tsv").open("w", encoding="utf-8") as fh:
+        fh.write("replacement\tn\tcategory\toriginals\treason\n")
+        for q in queue:
+            fh.write(f"{q['replacement']}\t{q['n']}\t{q['category'] or ''}\t{'|'.join(q['originals'])}\t{q['reason']}\n")
     write_report(out_dir, rows, verdicts, sweep, catalog, args)
     for v in verdicts + sweep:
+        m = v.get("micro") or {}
+        if m.get("occurrences"):
+            b = m.get("boot") or {}
+            print(f"[{v['base']} conf≥{v['min_confidence']}] micro n={m['occurrences']}  "
+                  f"recall {_fmt(m['recall_base'])}→{_fmt(m['recall_fix'])}  exact {_fmt(m['exact_base'])}→{_fmt(m['exact_fix'])}  "
+                  f"CER {_fmt(m['cer_base'])}→{_fmt(m['cer_fix'])} Δ{b.get('delta')} [{b.get('lo')},{b.get('hi')}]  "
+                  f"TP/이형/FP {v['tp']}/{v['tp_variant']}/{v['fp']}  precision {_fmt(v['precision'])}/{_fmt(v['precision_lenient'])}  "
+                  f"→ {'PASS' if v['pass'] else 'FAIL'}")
+            continue
         print(f"[{v['base']} conf≥{v['min_confidence']}] recall {v['mean_recall_base']:.4f}→{v['mean_recall_fix']:.4f}  "
               f"exact {v['mean_exact_base']:.4f}→{v['mean_exact_fix']:.4f}  "
               f"CER {v['mean_cer_base']:.4f}→{v['mean_cer_fix']:.4f}  TP/이형/FP {v['tp']}/{v['tp_variant']}/{v['fp']}  "

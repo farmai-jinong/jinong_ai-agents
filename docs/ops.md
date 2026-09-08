@@ -208,8 +208,26 @@ python -m app.agents.voice_eval.term_fix --fixtures ~/dev/jinong/jinong_gpu/stt-
 ```
 
 - 카탈로그는 `jinong_gpu/stt-serve/catalog/catalog.jsonl` 을 경로로 읽는다(`--catalog` 또는 env `TERM_CATALOG_PATH`), 복사하지 않는다.
-- 판정 = 핵심어 recall·exact 인식률 비하락 ∧ 치환 precision ≥ 0.8 ∧ CER 악화 케이스 0. CER 은 참고치(표기 규약 상쇄).
-- 남는 오탐은 전부 카탈로그 구멍(정답 용어가 없어 LLM 이 가장 가까운 항목을 고름) — 카탈로그 보강이 선행 조건.
+- 판정 단위는 세트가 정한다. 대본 5건처럼 통화 단위 골드만 있는 세트는 **케이스 평균**(recall·exact 비하락 ∧ 치환
+  precision(lenient) ≥ 0.8 ∧ CER 악화 케이스 0), 픽스처가 발화별 골드(`segment["gold"]`)를 실어 오는 세트는
+  **발생 단위(micro)** — recall ≥ 0.90 ∧ precision(lenient) ≥ 0.90 ∧ 공백제거 CER 페어드 CI 상한 < +0.0033.
+  CER 은 어느 쪽에서도 판정이 아니다(표기 규약 상쇄).
+- 남는 오탐은 대개 카탈로그 구멍(정답 용어가 없어 LLM 이 가장 가까운 항목을 고름) — 리포트의 **카탈로그 후보 큐**
+  (`catalog_queue.tsv`)가 그 목록이고, `jinong_gpu` 카탈로그 보강 입력이다.
+
+**실통화 세트(jinong-call 92통화 2,354발화) 반입** — `jinong_gpu` 원격에서 통화를 되짜맞추고 골드를 정제한다:
+
+```bash
+python -m app.agents.voice_eval.term_fix.import_calls --out out/term-fix-calls
+python -m app.agents.voice_eval.term_fix --fixtures out/term-fix-calls/fixtures/base --arms pass1 \
+  --provider gemini --min-confidence 0.8 --sweep 0.7,0.9,0.95 --out out/term-fix-calls-base
+```
+
+- 덤프 행에 `audio_path` 가 없어 `i` ↔ arrow row index 로 조인한다 — `dump.ref == arrow.text` 2,354/2,354 를
+  스스로 검증하고 어긋나면 중단한다. `rows.json` 캐시가 있으면 ssh 없이 재조립된다.
+- 골드 정제: `bias_positives` 538건 중 품종 246(부분문자열 오탐)·회사 152(표기 규약)를 빼고 **도메인 140건**만
+  `expect_keywords`·발화별 `gold` 로 쓴다. 정제본은 `jinong-call-gold-domain.jsonl`(jinong_gpu stt-043 입력).
+- 팔은 `base`(agents 실경로 좌표, 도메인 recall .8071) / `champ`(승격 FT 참고팔, .9429) 두 벌이 나온다.
 
 ## 5. 대안: 같은 호스트에서 게이트웨이 내부 호출
 
