@@ -235,6 +235,20 @@ python -m app.agents.voice_eval.term_fix --fixtures out/term-fix-calls/fixtures/
 - 학습 풀(`jinong-call-train`, 337통화 585발생)도 같은 방식으로 반입한다 — base 는 그 통화를 학습하지
   않았으므로 0-shot 전사로 유효하다. **챔피언 계열 성적은 거기서 읽으면 안 된다(암기).**
 
+**하네스를 돌리기 전에** — 자원·서빙·좌표를 한 번에 확인한다:
+
+```bash
+python -m app.agents.voice_eval.term_fix.preflight --calls 421 --decode
+```
+
+원격 GPU 여유·디스크·서빙 4종(:8100/:8102/:8104/:8105) 헬스·카탈로그, 로컬 디스크·자격증명(LLM 실호출 1건),
+그리고 통화 수를 실측 단가(통화당 21.8k tok · 2.7초)로 환산해 준다. 종료코드 0=진행 가능 / 1=경고 / 2=막힘.
+
+**좌표를 붙여 둘 것** (`term_fix/coordinate.py`). 이 하네스가 크게 틀린 두 번이 전부 좌표였다 —
+① `deploy-*-k10-*` 오라클 팔을 base 로 착각 ② `:8102` 가 승격 체크포인트를 안 타고 있던 것.
+`probe_serving()`/`serving_coordinate()` 가 지금 서빙이 무엇으로 도는지 읽고, `compare()` 가 다른 좌표의
+수치를 나란히 놓으려 할 때 무엇이 다른지 알려준다.
+
 **카탈로그·가드 처방 비교** — 무엇을 고치면 기준을 넘는가 (`docs/catalog-prescriptions-2026-09-08.md`):
 
 ```bash
