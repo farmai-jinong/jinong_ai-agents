@@ -1,0 +1,13 @@
+# 실통화 84통화(jinong-call)에서 발화됐지만 카탈로그 표제에 없는 말 — 후보정 오탐의 직접 원인.
+# 출처: docs/stt-term-fix-calls-2026-09-08.md §3 (오탐을 정답 발화에 대고 읽어 확인). 사람이 검수한 목록이다.
+# 이 파일은 튜닝 하네스(`--add-terms`)의 입력이자 jinong_gpu 카탈로그 보강 제안이다. 카탈로그 사본이 아니다.
+# term	category	근거(정답 발화)
+레일단	pesticide_brand	저희가 레일단이라는.
+돌격제	pesticide_brand	제가 살충제 돌격제라는 것을 야채에 좀 뿌렸거든요.
+아리커	pesticide_brand	한 번에 아리커 때문에 전화드렸는데요.
+총채싹플러스	pesticide_brand	예, 총채싹플러스라는 거 있지요.
+풀마기골드	pesticide_brand	풀마기 골드라는.
+헬리앤드론	pesticide_brand	그 헬리앤드론이라는 그 비료를.
+청운플러스	pesticide_brand	무 씨앗에 청운하고 청운 플러스가 있는데.
+가루이	pest	토마토 해충 상위어 — 카탈로그엔 담배가루이·온실가루이만 있어 하위어로 과잉 특정된다
+이리응애	pest	천적 상위어 — 카탈로그엔 긴털이리응애만 있다

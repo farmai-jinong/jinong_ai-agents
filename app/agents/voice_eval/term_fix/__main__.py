@@ -108,7 +108,8 @@ async def proposals_for(llm: Any, fx: dict[str, Any], base: str, catalog: Catalo
 
 
 def score_fixture(fx: dict[str, Any], base: str, prop: dict[str, Any], catalog: Catalog, *,
-                  min_confidence: float, max_per_segment: int) -> tuple[ArmScore, ArmScore, list[dict[str, Any]]]:
+                  min_confidence: float, max_per_segment: int,
+                  reject_catalog_originals: bool = False) -> tuple[ArmScore, ArmScore, list[dict[str, Any]]]:
     expect, _ = case_meta(fx["case"], fx)
     reference = fx["reference"]
     keywords = list(fx.get("expect_keywords") or [])
@@ -116,7 +117,8 @@ def score_fixture(fx: dict[str, Any], base: str, prop: dict[str, Any], catalog: 
     base_score = score_arm(base, join_text(segments), reference, keywords, expect, segments=segments)
     proposals = [TermCorrection(**c) for c in prop["corrections"]]
     fixed, applied = apply_corrections(segments, proposals, catalog, min_confidence=min_confidence,
-                                       max_per_segment=max_per_segment)
+                                       max_per_segment=max_per_segment,
+                                       reject_catalog_originals=reject_catalog_originals)
     fix_score = score_arm(f"{base}+fix", join_text(fixed), reference, keywords, expect, applied,
                           prompt_tokens=prop.get("prompt_tokens", 0), completion_tokens=prop.get("completion_tokens", 0),
                           elapsed_s=prop.get("elapsed_s", 0.0), segments=fixed)
@@ -358,13 +360,15 @@ async def amain(args: argparse.Namespace, llm: Any | None = None) -> int:
             log.info("%s / %s", fx["case"], base)
             prop = await proposals_for(llm, fx, base, catalog, out_dir, args)
             b, f, changed = score_fixture(fx, base, prop, catalog, min_confidence=args.min_confidence,
-                                          max_per_segment=args.max_per_segment)
+                                          max_per_segment=args.max_per_segment,
+                                          reject_catalog_originals=args.reject_catalog_originals)
             (out_dir / fx["case"] / f"{base}.result.json").write_text(
                 json.dumps({"base": b.to_dict(), "fix": f.to_dict(), "changed_segments": changed},
                            ensure_ascii=False, indent=1), encoding="utf-8")
             rows.append(row_of(fx["case"], base, b, f))
             for t in thresholds:
-                b2, f2, _ = score_fixture(fx, base, prop, catalog, min_confidence=t, max_per_segment=args.max_per_segment)
+                b2, f2, _ = score_fixture(fx, base, prop, catalog, min_confidence=t, max_per_segment=args.max_per_segment,
+                                          reject_catalog_originals=args.reject_catalog_originals)
                 sweep_rows[t].append(row_of(fx["case"], base, b2, f2))
     verdicts = [v for v in (verdict(rows, b, args.min_confidence) for b in arms) if v]
     sweep = [v for t in thresholds for v in (verdict(sweep_rows[t], b, t) for b in arms) if v]
@@ -413,6 +417,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--min-confidence", type=float, default=0.8)
     p.add_argument("--sweep", default="", help="신뢰도 하한 스윕, 예: 0.7,0.8,0.9 (LLM 재호출 없음)")
     p.add_argument("--max-per-segment", type=int, default=3)
+    p.add_argument("--reject-catalog-originals", action="store_true",
+                   help="가드: 원문이 카탈로그의 다른 용어면 거부(`마세트`→`마세트300` 류)")
     p.add_argument("--out", default="out/term-fix")
     p.add_argument("--force", action="store_true", help="LLM 제안 캐시 무시하고 재호출")
     p.add_argument("--dump-prompts", action="store_true")

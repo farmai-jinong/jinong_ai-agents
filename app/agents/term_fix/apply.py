@@ -38,7 +38,8 @@ def _reject(c: TermCorrection, why: str) -> Applied:
 
 def apply_corrections(segments: list[dict[str, Any]], proposals: list[TermCorrection], catalog: Catalog, *,
                       min_confidence: float = 0.9, max_per_segment: int = 3,
-                      max_len_ratio: float = 3.0) -> tuple[list[dict[str, Any]], list[Applied]]:
+                      max_len_ratio: float = 3.0,
+                      reject_catalog_originals: bool = False) -> tuple[list[dict[str, Any]], list[Applied]]:
     """세그먼트 사본에 치환을 적용한다. 세그먼트는 `{"text": ...}` 를 가진 dict, seg_id 는 인덱스."""
     out = [dict(s) for s in segments]
     log: list[Applied] = []
@@ -63,9 +64,14 @@ def apply_corrections(segments: list[dict[str, Any]], proposals: list[TermCorrec
         if norm_chars(orig) == norm_chars(repl):
             log.append(_reject(c, "noop"))
             continue
-        if catalog.lookup(orig) is term:
+        orig_term = catalog.lookup(orig)
+        if orig_term is term:
             # 원문이 이미 같은 용어의 발화형(독음 변형·법인 접두)이다 — 오청이 아니라 표기 규약이므로 이 실험 밖
             log.append(_reject(c, "already_catalog_form"))
+            continue
+        if reject_catalog_originals and orig_term is not None:
+            # 원문이 카탈로그의 다른 용어다 = 멀쩡히 알아들은 상표를 닮은 표제로 바꾸려는 것(`마세트`→`마세트300`)
+            log.append(_reject(c, "original_is_catalog_term"))
             continue
         if catalog.is_stopword(orig):
             log.append(_reject(c, "original_is_common_word"))

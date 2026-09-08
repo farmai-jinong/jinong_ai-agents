@@ -34,14 +34,16 @@ async def correct_terms(state: PipelineState, config) -> dict:  # type: ignore[n
         return {"term_fix": None}
     t0 = time.perf_counter()
     try:
-        catalog = get_catalog(s.term_fix_catalog_path, s.term_fix_stopwords_path)
+        catalog = get_catalog(s.term_fix_catalog_path, s.term_fix_stopwords_path,
+                              company_prefix=s.term_fix_company_prefix, gaps=s.term_fix_gaps_path)
         segments = [{"speaker": t.speaker_letter, "text": t.text} for t in nt.turns]     # seg_id = turn index
         hints = state["ctx"].hints
         crops = [hints.prdlst_nm] if hints and hints.prdlst_nm else []
         proposals, traces = await propose(deps.llm, segments, catalog, crops=crops, name="term_fix",
                                           mode=s.llm_structured_mode, dump_dir=deps.dump_dir, timeout=s.node_timeout_s)
         fixed, applied = apply_corrections(segments, proposals, catalog, min_confidence=s.term_fix_min_confidence,
-                                           max_per_segment=s.term_fix_max_per_segment)
+                                           max_per_segment=s.term_fix_max_per_segment,
+                                           reject_catalog_originals=s.term_fix_reject_catalog_originals)
     except Exception as e:  # noqa: BLE001 — 교정 실패는 치명적이지 않다
         log.warning("correct_terms failed: %s", e)
         return {"term_fix": {"status": "failed", "error": f"{type(e).__name__}: {e}"[:200],

@@ -82,12 +82,18 @@ class Settings(BaseSettings):
     verify_diary_min_confidence: float = 0.6   # 확신이 이 값 미만이면 강등하지 않는다
     # STT 용어 오청 복구(app/agents/term_fix) — 전사 turn + 카탈로그(품종 제외)를 LLM 에 주고 치환 목록만 받아 결정적으로
     # 적용한다(통화당 1콜, ~22k 토큰). 카탈로그는 jinong_gpu/stt-serve/catalog/catalog.jsonl 을 경로로 읽는다(복사 금지).
-    # 근거·판정: docs/stt-term-fix-2026-09-06.md. 기본 off — 카탈로그 경로가 비어도 off.
+    # 근거·판정: docs/stt-term-fix-2026-09-06.md → docs/stt-term-fix-calls-2026-09-08.md(실통화 84통화 재측정)
+    # → docs/catalog-prescriptions-2026-09-08.md(카탈로그 처방으로 사전 등록 기준 통과). 기본 off — 카탈로그 경로가 비어도 off.
     term_fix_enabled: bool = False
     term_fix_catalog_path: str = ""
     term_fix_stopwords_path: str = ""          # 비우면 카탈로그 옆 stopwords_v3top5k.txt
-    term_fix_min_confidence: float = 0.9
+    term_fix_min_confidence: float = 0.9       # 0.8 → 0.9 는 용어 recall 손실 0 에 오탐 28→8 (실통화 84통화)
     term_fix_max_per_segment: int = 3
+    # 아래 셋이 카탈로그 처방(ALL) — 켜면 precision(lenient) .8298 → .9464, ΔCER −.00142 [−.00239,−.00059].
+    # jinong_gpu 카탈로그가 같은 처방을 받으면 여기서 끄고 파일만 따라가면 된다.
+    term_fix_company_prefix: bool = True       # 농약상표 회사명 접두 87건을 맨 표기로(전사 규약과 맞춘다)
+    term_fix_gaps_path: str = ""               # 비우면 app/agents/voice_eval/term_fix/catalog_gaps.tsv
+    term_fix_reject_catalog_originals: bool = True   # 원문이 카탈로그의 다른 용어면 거부(`마세트`→`마세트300`)
 
     # --- 평가 하네스 judge (app/agents/voice_eval; 런타임 서비스와 무관) ----------
     # 파이프라인과 다른 모델로 채점한다 — 같은 모델이 자기 산출물을 채점하면 점수가 후해진다.

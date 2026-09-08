@@ -260,3 +260,39 @@ def test_micro_verdict_uses_occurrence_gold(catalog, tmp_path: Path):
     assert v["mean_recall_base"] == 0.5                 # 케이스 평균은 골드 없는 통화에 희석된다
     assert "발생 단위(micro)" in (out / "report.md").read_text(encoding="utf-8")
     assert (out / "catalog_queue.tsv").exists()
+
+
+# --------------------------------------------------------------------------- 카탈로그 처방 (런타임 로더)
+PRESCRIPTION_LINES = CATALOG_LINES + [
+    {"term": "팜한농포리캡탄", "category": "pesticide_brand"},
+    {"term": "경농디치", "category": "pesticide_brand"},
+    {"term": "경농", "category": "company"},
+]
+
+
+def test_load_catalog_company_prefix_and_gaps(tmp_path: Path):
+    p = tmp_path / "catalog.jsonl"
+    p.write_text("\n".join(json.dumps(x, ensure_ascii=False) for x in PRESCRIPTION_LINES), encoding="utf-8")
+    gaps = tmp_path / "gaps.tsv"
+    gaps.write_text("# 주석\n레일단\tpesticide_brand\t근거\n쏘일킹\tpesticide_brand\t이미 있음\n", encoding="utf-8")
+
+    plain = load_catalog(p)
+    assert plain.lookup("팜한농포리캡탄").display == "팜한농포리캡탄" and plain.lookup("포리캡탄") is None
+
+    fixed = load_catalog(p, company_prefix=True, gaps=gaps)
+    assert fixed.lookup("팜한농포리캡탄").display == "포리캡탄"     # 치환은 전사 규약 표기로 나간다
+    assert fixed.lookup("포리캡탄") is not None                     # ≥3자 맨 표기는 표제로도
+    assert fixed.lookup("경농디치").display == "디치"
+    # 2자 맨 표기는 별도 표제 행을 만들지 않는다 — 다만 canonical 이라 조회·프롬프트에는 그대로 나온다
+    assert fixed.lookup("디치") is fixed.lookup("경농디치")
+    assert fixed.lookup("레일단") is not None                       # 구멍 보강
+    assert len(fixed) == len(plain) + 2                             # 포리캡탄 + 레일단 (쏘일킹은 이미 있어 중복 안 됨)
+
+
+def test_gaps_are_wired_into_get_catalog_by_default(tmp_path: Path):
+    from app.agents.term_fix.catalog import GAPS_PATH, get_catalog
+    assert GAPS_PATH.exists()
+    p = tmp_path / "catalog.jsonl"
+    p.write_text("\n".join(json.dumps(x, ensure_ascii=False) for x in CATALOG_LINES), encoding="utf-8")
+    cat = get_catalog(str(p))
+    assert cat.lookup("레일단") is not None and cat.lookup("가루이") is not None

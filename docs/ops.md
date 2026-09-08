@@ -229,6 +229,19 @@ python -m app.agents.voice_eval.term_fix --fixtures out/term-fix-calls/fixtures/
   `expect_keywords`·발화별 `gold` 로 쓴다. 정제본은 `jinong-call-gold-domain.jsonl`(jinong_gpu stt-043 입력).
 - 팔은 `base`(agents 실경로 좌표, 도메인 recall .8071) / `champ`(승격 FT 참고팔, .9429) 두 벌이 나온다.
 
+**카탈로그·가드 처방 비교** — 무엇을 고치면 기준을 넘는가 (`docs/catalog-prescriptions-2026-09-08.md`):
+
+```bash
+python -m app.agents.voice_eval.term_fix.tune --run out/term-fix-calls-base \
+  --fixtures out/term-fix-calls/fixtures/base --min-confidence 0.9 --out out/term-fix-tune   # 스크리닝, LLM 0콜
+python -m app.agents.voice_eval.term_fix.tune ... --confirm ALL        # 이긴 처방을 LLM 재호출로 확정
+```
+
+- 스크리닝은 캐시된 제안 위에 카탈로그·가드만 갈아 끼운 **반사실**이다. 카탈로그는 프롬프트에 통째로 들어가므로
+  채택 후보는 반드시 `--confirm` 으로 다시 재야 한다(`--keep-cache` 면 가드만 바꿔 캐시로 재채점).
+- 확정된 처방 `ALL`(회사명 접두 87 + 구멍 9 + 원문가드)은 런타임 로더에 배선돼 있다 —
+  `TERM_FIX_COMPANY_PREFIX`/`TERM_FIX_GAPS_PATH`/`TERM_FIX_REJECT_CATALOG_ORIGINALS`, 기본 켜짐.
+
 ## 5. 대안: 같은 호스트에서 게이트웨이 내부 호출
 
 기본은 공개 HTTPS(`STT_BASE_URL=https://jinong-stt.jinongservice.co.kr`). 헤어핀을 피하려면 두 compose 를 같은 docker network 에
