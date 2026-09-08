@@ -227,7 +227,13 @@ python -m app.agents.voice_eval.term_fix --fixtures out/term-fix-calls/fixtures/
   스스로 검증하고 어긋나면 중단한다. `rows.json` 캐시가 있으면 ssh 없이 재조립된다.
 - 골드 정제: `bias_positives` 538건 중 품종 246(부분문자열 오탐)·회사 152(표기 규약)를 빼고 **도메인 140건**만
   `expect_keywords`·발화별 `gold` 로 쓴다. 정제본은 `jinong-call-gold-domain.jsonl`(jinong_gpu stt-043 입력).
-- 팔은 `base`(agents 실경로 좌표, 도메인 recall .8071) / `champ`(승격 FT 참고팔, .9429) 두 벌이 나온다.
+- **좌표를 확인하고 쓸 것.** `deploy-*-k10-*` 덤프는 정답 대본에서 뽑은 bias 목록을 프롬프트에 넣은 오라클
+  팔이라 용어 recall 이 부풀어 있다(`docs/stt-term-fix-scale-2026-09-08.md` §0). agents 근사 좌표는 **base
+  pass-1** 이고, 그 덤프는 `run_asr_eval.sh --model qwen3-asr-1.7b`(ctx 레이어 없음)로 직접 만든다.
+- 골드는 `--gold catalog`(기본, 도메인 표제 ≥3자 매칭 + `gold_denylist.tsv`)를 쓴다. 덤프 옆
+  `bias_positives`(`--gold bias`)는 품종 오탐 46% 라 권장하지 않는다.
+- 학습 풀(`jinong-call-train`, 337통화 585발생)도 같은 방식으로 반입한다 — base 는 그 통화를 학습하지
+  않았으므로 0-shot 전사로 유효하다. **챔피언 계열 성적은 거기서 읽으면 안 된다(암기).**
 
 **카탈로그·가드 처방 비교** — 무엇을 고치면 기준을 넘는가 (`docs/catalog-prescriptions-2026-09-08.md`):
 

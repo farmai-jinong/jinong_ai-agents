@@ -1,5 +1,10 @@
 # 용어 후보정(LLM)을 실통화 92통화에서 재측정 — 사전 등록 기준 미달, 갈래 종결 (2026-09-08)
 
+> **정정 (같은 날 3편)**: 이 문서의 base 좌표(`deploy-base-k10-jinong`)는 정답 대본에서 뽑은 bias 목록을
+> 프롬프트에 넣은 **오라클 팔**이었다. 진짜 pass-1 좌표에서 base 용어 recall 은 .84 가 아니라 .3526 이다.
+> 표본을 421통화·12,596발화로 늘리며 드러났고, 정본은 [`stt-term-fix-scale-2026-09-08.md`](./stt-term-fix-scale-2026-09-08.md) 다.
+> 아래 수치는 그 좌표 위에서만 유효하다.
+
 `docs/stt-term-fix-2026-09-06.md` 의 5건 결과(exact .7667→.9500, FP 0)를 실통화 평가셋에서 다시 잰 것이다.
 `jinong_gpu` 백로그 **stt-044(GER)** 와 같은 질문을 agents 좌표에서 물었다. 판정 기준은 **돌리기 전에** 코드에
 못박았다(`voice_eval/term_fix/__main__.py` 의 `MICRO_RECALL_MIN`/`PRECISION_LENIENT_MIN`/`CER_CI_MAX`).
