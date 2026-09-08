@@ -37,7 +37,7 @@ def _reject(c: TermCorrection, why: str) -> Applied:
 
 
 def apply_corrections(segments: list[dict[str, Any]], proposals: list[TermCorrection], catalog: Catalog, *,
-                      min_confidence: float = 0.8, max_per_segment: int = 3,
+                      min_confidence: float = 0.9, max_per_segment: int = 3,
                       max_len_ratio: float = 3.0) -> tuple[list[dict[str, Any]], list[Applied]]:
     """세그먼트 사본에 치환을 적용한다. 세그먼트는 `{"text": ...}` 를 가진 dict, seg_id 는 인덱스."""
     out = [dict(s) for s in segments]

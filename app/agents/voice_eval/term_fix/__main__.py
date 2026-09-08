@@ -27,11 +27,12 @@ from typing import Any
 from ....clients.llm import make_chat_model
 from ....config import Settings
 from ...term_fix.apply import apply_corrections, join_text
-from ...term_fix.catalog import Catalog, load_catalog
+from ...term_fix.catalog import Catalog, load_catalog, norm_chars
 from ...term_fix.run import propose
 from ...term_fix.schemas import TermCorrection
 from ...tools.fake_llm import FakeChatModel
 from ..cases import TESTCASES
+from ..stt_score import match_keyword
 from .score import ArmScore, micro_cer, paired_boot, score_arm
 
 log = logging.getLogger("voice_eval.term_fix")
@@ -119,6 +120,10 @@ def score_fixture(fx: dict[str, Any], base: str, prop: dict[str, Any], catalog: 
     fix_score = score_arm(f"{base}+fix", join_text(fixed), reference, keywords, expect, applied,
                           prompt_tokens=prop.get("prompt_tokens", 0), completion_tokens=prop.get("completion_tokens", 0),
                           elapsed_s=prop.get("elapsed_s", 0.0), segments=fixed)
+    for row in fix_score.corrections:            # 오탐이 무엇을 가리키는지 보려면 그 발화의 정답이 있어야 한다
+        seg = segments[row["seg_id"]] if 0 <= row["seg_id"] < len(segments) else {}
+        if seg.get("ref"):
+            row["seg_ref"] = seg["ref"]
     changed = [{"id": i, "before": segments[i].get("text"), "after": s.get("text")}
                for i, s in enumerate(fixed) if s.get("text") != segments[i].get("text")]
     return base_score, fix_score, changed
@@ -204,6 +209,25 @@ def verdict(rows: list[dict[str, Any]], base: str, min_confidence: float | None 
             "cer_worse_cases": worse, "pass": ok}
 
 
+def fp_diagnosis(rows: list[dict[str, Any]], catalog: Catalog) -> list[dict[str, Any]]:
+    """FP 를 정답 발화에 대고 판독한다 — 환각인지, 카탈로그 구멍/표제 규약인지 가른다."""
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        for c in r["corrections"]:
+            if c.get("verdict") != "fp" or not c.get("seg_ref"):
+                continue
+            ref = c["seg_ref"]
+            if norm_chars(c["original"]) in norm_chars(ref):
+                d = "**원문이 정답** — 멀쩡한 어절을 건드렸다"
+            elif match_keyword(c["replacement"], ref).status == "fuzzy":
+                # 정답 발화에 그 표기와 발음이 닮은 말이 실제로 있다 = 용어는 맞고 표기가 카탈로그 표제와 다르다
+                d = "정답에 닮은 말 있음(자모 fuzzy ≥85) — 카탈로그 표제 규약/구멍 후보"
+            else:
+                d = "닮은 말 없음(<85) — 환각이거나 카탈로그 구멍, 정답 발화를 보고 판단"
+            out.append({**c, "diagnosis": d})
+    return sorted(out, key=lambda x: -x["confidence"])
+
+
 def catalog_queue(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """`replacement_not_in_catalog` 로 거부된 제안 = 카탈로그 구멍 후보. 빈도순으로 모은다."""
     agg: dict[str, dict[str, Any]] = {}
@@ -274,6 +298,16 @@ def write_report(out_dir: Path, rows: list[dict[str, Any]], verdicts: list[dict[
                          f"{v['mean_exact_base']:.4f}→{v['mean_exact_fix']:.4f} | "
                          f"{v['mean_cer_base']:.4f}→{v['mean_cer_fix']:.4f} | {', '.join(v['cer_worse_cases']) or '없음'} | "
                          f"{'PASS' if v['pass'] else 'FAIL'} |")
+        lines.append("")
+    fps = fp_diagnosis(rows, catalog)
+    if fps:
+        lines += ["## 오탐이 가리키는 카탈로그 문제", "",
+                  "치환이 FP(대본에 없는 표기)로 판정된 자리에서 **정답 발화가 실제로 무엇이었는지** 나란히 놓은 것이다. "
+                  "판독은 기계적 힌트일 뿐이니 정답 발화 열을 직접 읽어라 — 정답 쪽 말이 카탈로그에 없으면 환각이 아니라 "
+                  "**카탈로그 구멍**이고(모델은 가장 닮은 표제를 고를 수밖에 없다), 있으면 표제 규약(회사 접두·숫자 접미)이다.", "",
+                  "| conf | 치환 | 정답 발화 | 판독 |", "|---:|---|---|---|"]
+        for f in fps:
+            lines.append(f"| {f['confidence']:.2f} | {f['original']} → {f['replacement']} | {f['seg_ref'][:60]} | {f['diagnosis']} |")
         lines.append("")
     queue = catalog_queue(rows)
     if queue:

@@ -86,7 +86,7 @@ class Settings(BaseSettings):
     term_fix_enabled: bool = False
     term_fix_catalog_path: str = ""
     term_fix_stopwords_path: str = ""          # 비우면 카탈로그 옆 stopwords_v3top5k.txt
-    term_fix_min_confidence: float = 0.8
+    term_fix_min_confidence: float = 0.9
     term_fix_max_per_segment: int = 3
 
     # --- 평가 하네스 judge (app/agents/voice_eval; 런타임 서비스와 무관) ----------
@@ -116,6 +116,10 @@ class Settings(BaseSettings):
     # 날짜별 일지는 요청 body 의 callback_url 을 계속 사용한다.
     summary_callback_url: str = ""
     summary_engine_version: str = "jinong-summary-v1"   # 콜백 engine_version (모델명이 붙어 최대 100자로 컷)
+    # 통화 terminal 시 통화 시작 payload 의 `callback_url`(= `.../voicetalk/public/agent-callback`) 로도 통보한다.
+    # 백엔드는 **이 콜백을 받을 때만** 결과를 끌어간다(fetchAndSaveResult). 통화요약 콜백만 보내면 요약만 저장되고
+    # 일지 본문은 백엔드의 30분 주기 누락 복구 배치가 주울 때까지 남는다(2026-09-08 실측). 끌 때만 0.
+    call_agent_callback_enabled: bool = True
     # 통화요약 콜백에 화자 역할표(speaker_key → farmer|consultant|unknown)를 같이 싣는다.
     # 백엔드 DTO 가 미지 필드를 거부(4xx)하면 0 으로 내려 끄면 된다 — 같은 값은 GET /v1/calls/{id}
     # 의 result.speaker_map 과 GET /v1/calls/{id}/transcript 에도 그대로 있다.
