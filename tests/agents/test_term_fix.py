@@ -13,6 +13,8 @@ from app.agents.term_fix.catalog import load_catalog, strip_legal
 from app.agents.term_fix.schemas import TermCorrection
 from app.agents.tools.fake_llm import FakeChatModel, detect_kind
 from app.agents.voice_eval.term_fix import __main__ as cli
+from app.agents.voice_eval.term_fix import import_calls as ic
+from app.agents.voice_eval.term_fix import score as score_mod
 from app.agents.voice_eval.term_fix.score import score_arm
 
 CATALOG_LINES = [
@@ -161,3 +163,100 @@ def test_cli_fake_end_to_end(catalog, tmp_path: Path):
     assert cli.main(["--fixtures", str(fx_dir), "--catalog", str(cat_path), "--provider", "fake", "--out", str(out)],
                     llm=llm) == 0
     assert len(llm.calls) == calls
+
+
+# --------------------------------------------------------------------------- 실통화 세트 반입 · 골드 정제
+def _cat_file(tmp_path: Path) -> Path:
+    p = tmp_path / "catalog_full.jsonl"
+    p.write_text("\n".join(json.dumps(x, ensure_ascii=False) for x in CATALOG_LINES), encoding="utf-8")
+    return p
+
+
+def test_gold_split_drops_variety_and_separates_company(tmp_path: Path):
+    cats = ic.term_categories(_cat_file(tmp_path))
+    assert cats["쏘일킹"] == "pesticide_brand" and cats["설향"] == "crop_variety"
+    b = ic.split_gold(["쏘일킹", "탄저병", "설향", "팜한농", "없는말"], cats)
+    assert b["domain"] == ["쏘일킹", "탄저병"]          # 품종·회사는 판정에서 뺀다
+    assert b["variety"] == ["설향"] and b["company"] == ["팜한농"] and b["unknown"] == ["없는말"]
+
+
+def test_group_calls_orders_segments_and_carries_gold(tmp_path: Path):
+    cats = ic.term_categories(_cat_file(tmp_path))
+    rows = [
+        {"i": 0, "audio": "c1_002.wav", "ref": "탄저병이 왔네요", "gold": ["탄저병", "설향"],
+         "hyp": {"base": {"ref": "탄저병이 왔네요", "hyp": "탄두병이 왔네요"}}},
+        {"i": 1, "audio": "c1_001.wav", "ref": "쏘일킹 쳤어요", "gold": ["쏘일킹"],
+         "hyp": {"base": {"ref": "쏘일킹 쳤어요", "hyp": "수독 쳤어요"}}},
+        {"i": 2, "audio": "c2_001.wav", "ref": "그냥 얘기", "gold": [],
+         "hyp": {"base": {"ref": "그냥 얘기", "hyp": "그냥 얘기"}}},
+    ]
+    calls = ic.group_calls(rows, "base", cats)
+    assert [c["case"] for c in calls] == ["c1", "c2"]
+    c1 = calls[0]
+    assert [s["text"] for s in c1["pass1"]["segments"]] == ["수독 쳤어요", "탄두병이 왔네요"]   # seg 인덱스 순
+    assert c1["expect_keywords"] == ["쏘일킹", "탄저병"]
+    assert c1["pass1"]["segments"][1]["gold"] == ["탄저병"]      # 발화별 골드가 실린다
+    assert c1["gold_occurrences"]["variety"] == 1 and c1["gold"]["variety"] == ["설향"]
+
+
+# --------------------------------------------------------------------------- 발생 단위 채점 · 미시집계
+def test_occurrence_stats_counts_per_utterance(catalog):
+    segs = [{"text": "수독 쳤어요", "gold": ["쏘일킹"]},
+            {"text": "쏘일킹 또 쳤어요", "gold": ["쏘일킹"]},
+            {"text": "잡담", "gold": []}]
+    total, exact, hit, rows = score_mod.occurrence_stats(segs)
+    assert (total, exact) == (2, 1)         # 같은 용어를 두 번 말했고 한 번만 살아남았다
+    assert hit == 1 and rows[0]["status"] == "miss" and rows[1]["status"] == "exact"
+
+
+def test_paired_boot_is_deterministic_and_signed():
+    b = score_mod.paired_boot([5, 5], [3, 3], [100, 100], iters=500)
+    assert b == score_mod.paired_boot([5, 5], [3, 3], [100, 100], iters=500)
+    assert b["delta"] < 0 and b["hi"] <= 0 and b["p_better"] == 1.0
+
+
+def test_catalog_queue_aggregates_missing_replacements():
+    rows = [{"corrections": [
+        {"status": "rejected", "why": "replacement_not_in_catalog", "original": "가로이",
+         "replacement": "가루이", "category": "pest", "reason": "해충 오청"},
+        {"status": "rejected", "why": "replacement_not_in_catalog", "original": "가로 있는",
+         "replacement": "가루이", "category": "pest", "reason": "해충 오청"},
+        {"status": "rejected", "why": "confidence<0.8", "original": "x", "replacement": "y"},
+        {"status": "applied", "original": "수독", "replacement": "쏘일킹", "verdict": "tp"},
+    ]}]
+    q = cli.catalog_queue(rows)
+    assert [x["replacement"] for x in q] == ["가루이"]
+    assert q[0]["n"] == 2 and q[0]["originals"] == ["가로이", "가로 있는"]
+
+
+def test_micro_verdict_uses_occurrence_gold(catalog, tmp_path: Path):
+    """발화별 골드가 실린 세트는 케이스 평균이 아니라 발생 단위로 판정한다."""
+    cat_path = _cat_file(tmp_path)
+    fx_dir = tmp_path / "fx"
+    fx_dir.mkdir()
+    segs = [{"speaker": "A", "text": "수독 한 병 쳤어요", "gold": ["쏘일킹"], "row_id": 0},
+            {"speaker": "B", "text": "탄두병이 왔네요", "gold": ["탄저병"], "row_id": 1}]
+    (fx_dir / "call_a.json").write_text(json.dumps({
+        "case": "call_a", "reference": "쏘일킹 한 병 쳤어요 탄저병이 왔네요",
+        "expect_keywords": ["쏘일킹", "탄저병"], "pass1": {"segments": segs}}, ensure_ascii=False), encoding="utf-8")
+    # 골드가 없는 통화 — 케이스 평균이라면 recall 1.0 으로 희석되는 자리
+    (fx_dir / "call_b.json").write_text(json.dumps({
+        "case": "call_b", "reference": "그냥 잡담이에요", "expect_keywords": [],
+        "pass1": {"segments": [{"speaker": "A", "text": "그냥 잡담이에요", "gold": [], "row_id": 2}]}},
+        ensure_ascii=False), encoding="utf-8")
+
+    llm = FakeChatModel(responses={"term_fix": lambda m: {"corrections": [
+        {"seg_id": 0, "original": "수독", "replacement": "쏘일킹", "confidence": 0.9, "reason": "발음"},
+        {"seg_id": 1, "original": "탄두병", "replacement": "탄저병", "confidence": 0.9, "reason": "문맥"},
+    ]} if "수독" in m[-1].content else {"corrections": []}})
+    out = tmp_path / "out_micro"
+    rc = cli.main(["--fixtures", str(fx_dir), "--catalog", str(cat_path), "--stopwords", str(tmp_path / "stopwords.txt"),
+                   "--arms", "pass1", "--provider", "fake", "--out", str(out)], llm=llm)
+    assert rc == 0
+    v = json.loads((out / "summary.json").read_text(encoding="utf-8"))["verdicts"][0]
+    m = v["micro"]
+    assert m["occurrences"] == 2 and m["exact_base"] == 0.0 and m["exact_fix"] == 1.0
+    assert v["pass"] is True and m["boot"]["delta"] < 0
+    assert v["mean_recall_base"] == 0.5                 # 케이스 평균은 골드 없는 통화에 희석된다
+    assert "발생 단위(micro)" in (out / "report.md").read_text(encoding="utf-8")
+    assert (out / "catalog_queue.tsv").exists()

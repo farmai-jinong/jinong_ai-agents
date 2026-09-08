@@ -76,7 +76,7 @@
 | `farm` | object | 선택 | 자유 형식(`farm_id`, `farm_nm` 등). 응답에 그대로 반환 |
 | `num_speakers` | int 1..8 | 선택 | STT 화자 분리 힌트 |
 | `language` | string | 선택 | 기본 `"ko"` |
-| `callback_url` | string | 선택 | 호환용으로 계속 받지만 **통화 단위 콜백에는 사용하지 않습니다** — 통화 결과 알림은 저희 설정의 통화요약 콜백 URL로 발사됩니다 (§5.1). 이 필드는 날짜별 일지(§3.7) 전용 |
+| `callback_url` | string | 선택 | 통화 terminal 시 **agent-callback을 이 URL로 발사합니다** (§5.1.1). 이게 백엔드에서 결과 조회를 트리거하는 신호입니다. 날짜별 일지(§3.7)도 같은 필드를 씁니다 |
 | `metadata` | object | 선택 | 자유 형식. `metadata.hints`는 특별 취급(아래) |
 
 `metadata.hints` (선택 — farmos 조회가 없거나 실패할 때 대체 사용):
@@ -558,9 +558,28 @@ terminal 사유 (`status` + `error.code`):
   `GET /v1/calls/{call_id}/artifacts/summary` 로 같은 요약을 다시 가져올 수 있습니다.
 - `summary_type`은 `SUMMARY` 고정입니다(현재 `KEYWORD`/`ACTION_ITEM`은 보내지 않습니다).
 - 중복 제거는 `(call_id, summary_type)` 기준 UPSERT로 처리해 주세요.
-- `POST /v1/calls` body의 `callback_url` 필드는 호환을 위해 계속 받지만 **통화 단위 발사에는 쓰지
-  않습니다**(날짜별 전용). 통화 단위 agent-callback은 통화요약 콜백으로 대체됐습니다 — 수신 준비가
-  끝나는 시점을 알려주시면 전환 시점을 맞추겠습니다.
+- 이 콜백만으로는 일지 본문이 저장되지 않습니다 — 조회 트리거는 §5.1.1의 통화 agent-callback입니다.
+
+#### 5.1.1 통화 단위 — agent-callback (통화 ID 알림, 조회 트리거)
+
+`POST /v1/calls` body의 `callback_url`로, terminal마다 통화 ID만 알립니다. 수신 라우팅 시 `call_id`
+필드의 존재로 날짜별(§5.2)과 구분하시면 됩니다.
+
+```json
+{"call_id": "…", "status": "COMPLETED", "result_url": "https://…/v1/calls/…", "generation_run": 1}
+```
+
+- `status`: `COMPLETED` / `EMPTY`(+`empty_reason`) / `FAILED`(+`error{code,message}`).
+- 본문·산출물 키는 싣지 않습니다 — `AgentCallbackPayload`에 있는 필드만 보냅니다.
+- 통화요약 콜백(§5.1)보다 먼저 발사합니다.
+
+**경위(2026-09-08)**: 통화 단위 agent-callback을 통화요약 콜백으로 대체했었는데, 백엔드
+`call-summary-callback` 핸들러는 요약만 저장하고(`callSummaryCallbackService.save`) 결과를 끌어가지
+않아(`fetchAndSaveResult`는 `agent-callback`에만 있음) 일지 본문이 30분 주기 누락 복구 배치
+(`VoiceTalkSttScheduler`)로만 저장되고 있었습니다. 실측 1분 46초 통화에서 저희 처리는 3분 51초에
+끝났으나 백엔드 저장은 30분 13초 후였습니다. 그래서 통화 agent-callback을 되살렸습니다. 백엔드에서
+`call-summary-callback` 수신 시에도 `fetchAndSaveResult`를 태우신다면 어느 쪽이든 중복 없이 동작합니다
+(둘 다 오면 조회가 한 번 더 날 수 있으나 결과는 같습니다).
 
 ### 5.2 날짜별 일지 — agent-callback (마스터 ID 알림)
 
@@ -723,8 +742,9 @@ curl "$B/v1/daily-diaries/daily_u1_20260819" -H "Authorization: Bearer $K"
 - [ ] 통화 시작 페이로드에 `farm_access_token`(농가 JWT) 포함
 - [ ] 통화 시작 `participants[]`의 farmer 항목에 `engn_id` 포함 (농가 구분은 `engn_id`+`user_id` 복합 키 — §3.1)
 - [x] 알림 방식 — 콜백 활성화 완료(2026-08-24): 합의된 `X-API-Key` (§5). 폴링은 안전망으로 유지 권장
-- [ ] **통화요약 콜백 수신 준비** — `POST .../voicetalk/public/call-summary-callback` (§5.1). 수신 가능 시점을
-      알려주시면 통화 단위 agent-callback 발사를 중단하고 전환합니다
+- [x] **통화요약 콜백 수신 준비** — `POST .../voicetalk/public/call-summary-callback` (§5.1). 수신 확인됨
+- [ ] **통화 agent-callback 수신 확인** — 통화 시작의 `callback_url`로 발사합니다 (§5.1.1). 이게 일지 본문
+      조회를 트리거합니다 — 없으면 30분 주기 복구 배치로만 저장됩니다
 - [ ] 통화요약 콜백 `content` 는 통화 단순요약(불릿 3줄, 100자 안팎) — 별도 컬럼 확장 불필요
 - [ ] 영농일지·전사본은 콜백이 아니라 `GET /v1/calls/{call_id}` 로 조회 (§3.5, §5.1)
 - [ ] 통화요약 콜백 중복 제거: `(call_id, summary_type)` UPSERT (§5.1)

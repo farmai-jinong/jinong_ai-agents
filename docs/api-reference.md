@@ -43,7 +43,7 @@
 - 응답 `200`(재전송)에서 통화가 이미 terminal 이어도 **`participants`/`farm`/`metadata` 는 갱신한다**
   (백엔드가 누락된 `engn_id` 를 같은 `call_id` 로 재등록해 보정하는 규약). 산출물·상태는 그대로이고,
   갱신된 필드는 `note` 에 나온다(`"call already finalized — updated participants, metadata"`).
-- `callback_url`: 호환용으로 계속 받지만 통화 단위 콜백에는 쓰지 않는다(날짜별 일지 전용) — 통화 결과는 전역 `SUMMARY_CALLBACK_URL` 로 발사. 콜백 절 참조.
+- `callback_url`: 통화 terminal 시 agent-callback 을 이 URL 로도 발사한다(`CALL_AGENT_CALLBACK_ENABLED`, 기본 켬). 날짜별 일지에도 같은 필드를 쓴다. 콜백 절 참조.
 - 응답: `201` 신규 / `200` 재전송(참가자·토큰·메타 upsert; terminal 후엔 변경 없이 `note`). 본문은 `CallDetail`.
 
 ## `POST /v1/calls/{call_id}/audio` — 녹음파일 수신
@@ -250,7 +250,7 @@ terminal 시 (형식은 통화 콜백과 동일한 전송 규칙):
 공통: 헤더 `X-API-Key: CALLBACK_API_KEY`, 타임아웃 10s, 최대 3회 시도(실패 시 10s·30s 뒤 재시도).
 **4xx(429 제외)는 재시도하지 않는다** — 요청/설정을 고치기 전에는 결과가 같기 때문. `CALLBACK_ENABLED=true` 가 공통 스위치.
 
-**통화 단위 — 통화요약 콜백**: terminal 마다 `POST SUMMARY_CALLBACK_URL`(전역 설정, 예 `…/voicetalk/public/call-summary-callback`). `content` 는 **통화 단순요약**(주제/조치/후속 불릿 3줄)이다 — 영농일지·컨설팅 보고서 마크다운은 싣지 않는다. 요약은 일지 파이프라인 산출물이 아니라 **전사에서 직접 뽑는 독립 LLM 패스**(`app/agents/summarize.py`)이고, 산출물 S3 저장(`persist_result`)이 끝난 뒤에만 발사한다. 이 콜백 도착이 곧 **일지·전사 준비 완료 신호**를 겸한다 — 본문은 `GET /v1/calls/{id}` 로 가져간다.
+**통화 단위 — 통화요약 콜백**: terminal 마다 `POST SUMMARY_CALLBACK_URL`(전역 설정, 예 `…/voicetalk/public/call-summary-callback`). `content` 는 **통화 단순요약**(주제/조치/후속 불릿 3줄)이다 — 영농일지·컨설팅 보고서 마크다운은 싣지 않는다. 요약은 일지 파이프라인 산출물이 아니라 **전사에서 직접 뽑는 독립 LLM 패스**(`app/agents/summarize.py`)이고, 산출물 S3 저장(`persist_result`)이 끝난 뒤에만 발사한다. 본문은 `GET /v1/calls/{id}` 로 가져간다 — 그 조회를 트리거하는 건 아래 **통화 agent-callback** 이다(백엔드는 요약 콜백에서는 결과를 끌어가지 않는다).
 
 ```json
 {"call_id": "…", "summary_type": "SUMMARY", "status": "COMPLETED",
@@ -266,7 +266,7 @@ terminal 시 (형식은 통화 콜백과 동일한 전송 규칙):
 - 요약 LLM 이 실패하면 이미 만들어진 보고서 요약(`report.structured.summary` + `action_items`)으로 폴백하고
   `generation.warnings` 에 경고를 남긴다 — 통화 상태는 `COMPLETED` 를 유지한다.
 - 같은 `(call_id, summary_type)` 은 백엔드에서 UPSERT — 재생성 시 덮어쓰기.
-- `CallCreateRequest.callback_url` 은 스키마상 유지되지만 **통화 단위 발사에는 쓰지 않는다**(날짜별 전용).
+- 이 콜백만으로는 백엔드가 일지 본문을 가져가지 않는다 — `callback_url` 로 나가는 통화 agent-callback 이 조회 트리거다(아래).
 - **`COMPLETED` 에는 산출물 S3 키를 같이 싣는다**(`CALLBACK_INCLUDE_ARTIFACT_KEYS`, 기본 켬; 본문은 싣지 않는다):
   ```json
   "diaries": [{"prdlst_code": "0804MM", "prdlst_nm": "딸기", "status": "OK",
@@ -279,6 +279,21 @@ terminal 시 (형식은 통화 콜백과 동일한 전송 규칙):
   키는 `jinong-agri-stt` 버킷 기준이고 prefix 는 환경별(prod `agents/voicecall/`, dev `agents/voicecall-dev/`).
   `EMPTY`/`FAILED` 에는 싣지 않는다. 백엔드 DTO 가 미지 필드를 거부하면 `CALLBACK_INCLUDE_ARTIFACT_KEYS=false`.
   **운영(prod)은 백엔드가 이 필드를 받기로 하기 전까지 `false`** — 콜백 payload 가 이전과 동일하다(ops.md §7).
+
+**통화 단위 — agent-callback**: `POST /v1/calls` body 의 `callback_url` 로, terminal 마다 통화 ID만 알린다
+(`CALL_AGENT_CALLBACK_ENABLED`, 기본 켬; URL 이 없으면 미발사). 백엔드는 **이 콜백을 받을 때만**
+`GET /v1/calls/{id}` + `/transcript` 로 결과를 끌어간다(`VoiceTalkAgentCallbackController` →
+`researchAiSttClient.fetchAndSaveResult`). 통화요약 콜백은 요약 텍스트만 저장하므로 이것이 없으면
+일지 본문은 백엔드의 30분 주기 누락 복구 배치(`VoiceTalkSttScheduler`, `fixedDelay = 30분`)가 주울 때까지
+남는다 — 2026-09-08 실측으로 30분 지연이 확인됐다. 본문·산출물 키는 싣지 않는다(백엔드 `AgentCallbackPayload` 필드에 없다).
+
+```json
+{"call_id": "…", "status": "COMPLETED", "result_url": "https://…/v1/calls/…", "generation_run": 1}
+```
+
+- `status`: `COMPLETED` / `EMPTY`(+`empty_reason`) / `FAILED`(+`error{code,message}`) — 백엔드는 terminal 상태만 수락한다.
+- 통화요약 콜백보다 **먼저** 보낸다(조회를 먼저 풀어 주려고). 한쪽 재시도가 다른 쪽을 막지 않도록 순차 발사.
+- `callback_status`/`callback_attempts` 는 통화요약 콜백의 것이고, 이 콜백은 `job_events.agent_callback` 으로만 남는다.
 
 **날짜별 일지 — agent-callback**: `POST /v1/daily-diaries` body 의 `callback_url` 로, terminal 마다 마스터 ID만 알린다. 백엔드는 이 콜백을 받고 `GET /v1/daily-diaries/{id}?inline=true` 로 `diaries[]`(작물별 1건)를 가져가 저장한다.
 

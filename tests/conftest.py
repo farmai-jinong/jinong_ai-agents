@@ -84,18 +84,21 @@ def stt_mock(stt_sample):
         yield router
 
 
-async def full_flow(client, call_id="call-1", keys=("raw/sample1.wav",), end=True):
+async def full_flow(client, call_id="call-1", keys=("raw/sample1.wav",), end=True, callback_url=None):
     # 시각은 '지금' 기준 상대값 — 실제 통화와 같은 모양으로. (deadline 스윕은 서버 수신 시각을 쓰므로 여기에 의존하지 않는다)
     from datetime import datetime, timedelta
     now = datetime.now(UTC)
     started_at = (now - timedelta(minutes=15)).isoformat()
     ended_at = now.isoformat()
-    r = await client.post("/v1/calls", json={
+    body = {
         "call_id": call_id, "started_at": started_at,
         "participants": [{"role": "farmer", "user_id": "u1", "name": "홍길동"},
                          {"role": "consultant", "user_id": "c1", "name": "김상담"}],
         "farm_access_token": "eyJ.secret.token", "metadata": {"hints": {"prdlst_code": "0804MM", "prdlst_nm": "딸기"}},
-    })
+    }
+    if callback_url is not None:      # 백엔드가 통화 시작에 실어 보내는 agent-callback URL
+        body["callback_url"] = callback_url
+    r = await client.post("/v1/calls", json=body)
     assert r.status_code in (200, 201), r.text
     for i, k in enumerate(keys):
         r = await client.post(f"/v1/calls/{call_id}/audio", json={"bucket": BUCKET, "key": k, "seq": i + 1})

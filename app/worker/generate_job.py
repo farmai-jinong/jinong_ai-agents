@@ -99,27 +99,76 @@ async def build_summary(rt: Runtime, transcript, ctx: CallContext, result: Pipel
     return fallback, [warn if fallback else warn.replace("보고서 요약으로 대체", "대체 불가")]
 
 
-async def _summary_callback(rt: Runtime, call: Call, result: PipelineResult | None = None,
-                            summary_md: str | None = None, artifacts: list[Artifact] | None = None) -> None:
+def _terminal_status(call: Call, result: PipelineResult | None, content: str) -> tuple[str, str]:
+    """콜백에 실을 최종 상태와 empty_reason — 저장된 산출물 기준으로 COMPLETED 를 EMPTY 로 접는다.
+
+    두 콜백(agent-callback / 통화요약)이 같은 상태를 보고해야 하므로 한 번만 계산해서 나눠 쓴다.
+    """
+    status = call.status
+    empty_reason = call.error_code if call.error_code in ALLOWED_EMPTY_REASONS else NO_DIARY_CONTENT
+    # 일지 유무는 저장되는 산출물 기준으로 판정한다(콜백 content 와 무관).
+    if status == "COMPLETED" and result is not None and not has_diary_content(result.diaries):
+        return "EMPTY", NO_DIARY_CONTENT
+    if status == "COMPLETED" and not content:   # 본문 없는 COMPLETED 는 명세 위반(content 필수)
+        # 일지는 있는데 요약이 폴백까지 실패한 경우 — 백엔드 허용값에 맞춰 NO_CONTENT 로 접는다.
+        return "EMPTY", "NO_CONTENT"
+    return status, empty_reason
+
+
+async def _notify_terminal(rt: Runtime, call: Call, result: PipelineResult | None = None,
+                           summary_md: str | None = None, artifacts: list[Artifact] | None = None) -> None:
+    """terminal 상태 통보 — agent-callback(결과 조회 트리거) → 통화요약 콜백 순.
+
+    두 콜백은 역할이 다르다. 백엔드는 **agent-callback 을 받을 때만** 결과를 끌어가고
+    (`VoiceTalkAgentCallbackController` → `researchAiSttClient.fetchAndSaveResult`),
+    call-summary-callback 은 요약 텍스트만 저장한다(`callSummaryCallbackService.save`).
+    요약만 보내면 일지 본문은 백엔드의 30분 주기 누락 복구 배치(`VoiceTalkSttScheduler`,
+    `fixedDelay = 30분`)가 주울 때까지 남아 실제로 30분 지연이 관측됐다(2026-09-08).
+    조회를 먼저 풀어 주려고 agent-callback 을 앞에 두고, 한쪽 재시도가 다른 쪽을 막지 않도록 순차로 보낸다.
+    """
+    content = (summary_md or "").strip()
+    status, empty_reason = _terminal_status(call, result, content)
+    await _agent_callback(rt, call, status, empty_reason)
+    await _summary_callback(rt, call, status, empty_reason, content, result=result, artifacts=artifacts)
+
+
+async def _agent_callback(rt: Runtime, call: Call, status: str, empty_reason: str) -> None:
+    """통화 agent-callback — 통화 시작 payload 의 `callback_url` 로 "결과 준비됨"만 통보한다.
+
+    백엔드는 이 수신에서 `GET /v1/calls/{id}` + `/transcript` 를 끌어간다. 본문·산출물 키는 싣지 않는다
+    (백엔드 `AgentCallbackPayload` 필드에 없다 — 날짜별 일지 콜백과 달리 여기서는 키를 덧붙이지 않는다).
+    `callback_status` 는 통화요약 콜백의 것이라 건드리지 않고 job_events 로만 남긴다.
+    """
+    st = rt.settings
+    if not (st.callback_enabled and st.call_agent_callback_enabled and call.callback_url):
+        return
+    payload: dict[str, Any] = {"call_id": call.call_id, "status": status,
+                               "result_url": f"{st.public_base_url.rstrip('/')}/v1/calls/{call.call_id}",
+                               "generation_run": call.generation_run}
+    if status == "EMPTY":
+        payload["empty_reason"] = empty_reason   # ALLOWED_EMPTY_REASONS 중 하나
+    elif status == "FAILED":
+        payload["error"] = {"code": call.error_code, "message": (call.error_message or "")[:1000]}
+    ok, attempts = await send_callback(rt.settings, call.callback_url, payload)
+    async with rt.db.session() as s:
+        await repo.add_event(s, call.call_id, "agent_callback",
+                             {"ok": ok, "attempts": attempts, "status": status})
+        await s.commit()
+
+
+async def _summary_callback(rt: Runtime, call: Call, status: str, empty_reason: str, content: str,
+                            result: PipelineResult | None = None,
+                            artifacts: list[Artifact] | None = None) -> None:
     """백엔드 통화요약 콜백 — content 는 **통화 단순요약**(불릿).
 
     영농일지·컨설팅 보고서 **본문**은 싣지 않는다. 일지는 `GET /v1/calls/{id}` 의 `result.diaries[]`,
-    전사는 `/transcript` 로 조회한다 — 이 콜백 도착이 그 결과가 준비됐다는 신호를 겸한다.
+    전사는 `/transcript` 로 조회한다 — 그 조회를 트리거하는 건 agent-callback 이다(`_notify_terminal`).
     COMPLETED 에는 산출물 S3 키(`diaries[]`/`report`, 전달용 + 근거 포함 내부용)만 같이 싣는다
     (`CALLBACK_INCLUDE_ARTIFACT_KEYS`).
     """
     st = rt.settings
     if not (st.callback_enabled and st.summary_callback_url):
         return
-    content = (summary_md or "").strip()
-    status = call.status
-    empty_reason = call.error_code if call.error_code in ALLOWED_EMPTY_REASONS else NO_DIARY_CONTENT
-    # 일지 유무는 저장되는 산출물 기준으로 판정한다(콜백 content 와 무관).
-    if status == "COMPLETED" and result is not None and not has_diary_content(result.diaries):
-        status, empty_reason = "EMPTY", NO_DIARY_CONTENT
-    elif status == "COMPLETED" and not content:   # 본문 없는 COMPLETED 는 명세 위반(content 필수)
-        # 일지는 있는데 요약이 폴백까지 실패한 경우 — 백엔드 허용값에 맞춰 NO_CONTENT 로 접는다.
-        status, empty_reason = "EMPTY", "NO_CONTENT"
     engine = f"{st.summary_engine_version}/{call.generation_model}" if call.generation_model \
         else st.summary_engine_version
     payload: dict[str, Any] = {"call_id": call.call_id, "summary_type": SUMMARY_TYPE, "status": status,
@@ -169,12 +218,12 @@ async def run_generate(rt: Runtime, call_id: str) -> None:
     done = [a for a in audios if a.status in ("TRANSCRIBED", "FAILED")]
     if not audios:
         c = await _finalize(rt, call_id, status="EMPTY", error_code="NO_AUDIO", error_message="no audio received")
-        await _summary_callback(rt, c)
+        await _notify_terminal(rt, c)
         return
     if not any(a.status == "TRANSCRIBED" for a in done):
         c = await _finalize(rt, call_id, status="FAILED", error_code="STT_FAILED",
                             error_message="; ".join(f"audio#{a.id}: {a.last_error}" for a in done if a.last_error)[:1000])
-        await _summary_callback(rt, c)
+        await _notify_terminal(rt, c)
         return
 
     warnings = [f"audio#{a.id} STT failed: {a.last_error}" for a in done if a.status == "FAILED"]
@@ -196,7 +245,7 @@ async def run_generate(rt: Runtime, call_id: str) -> None:
     if transcript.is_empty:
         c = await _finalize(rt, call_id, status="EMPTY", error_code="NO_TRANSCRIPT",
                             error_message="no speech recognised", warnings=warnings)
-        await _summary_callback(rt, c)
+        await _notify_terminal(rt, c)
         return
 
     try:
@@ -204,7 +253,7 @@ async def run_generate(rt: Runtime, call_id: str) -> None:
     except PipelineEmpty as e:
         c = await _finalize(rt, call_id, status="EMPTY", error_code="NO_CONTENT", error_message=str(e) or None,
                             warnings=warnings)
-        await _summary_callback(rt, c)
+        await _notify_terminal(rt, c)
         return
     except Exception as e:  # noqa: BLE001 — 타임아웃 포함
         msg = f"{type(e).__name__}: {e}"[:1000]
@@ -222,7 +271,7 @@ async def run_generate(rt: Runtime, call_id: str) -> None:
             await s.commit()
         c = await _finalize(rt, call_id, status="FAILED", error_code="GENERATION_FAILED", error_message=msg,
                             warnings=warnings)
-        await _summary_callback(rt, c)
+        await _notify_terminal(rt, c)
         return
 
     # 성공 — 산출물 저장. 추정된 역할(농가/컨설턴트)을 전사에 되먹여 merged.json/md 를 다시 쓴다
@@ -249,4 +298,4 @@ async def run_generate(rt: Runtime, call_id: str) -> None:
                         usage=result.usage or None, speaker_map=result.speaker_map)
     log.info("[%s] generation COMPLETED: %d diaries, report=%s", call_id, len(result.diaries), result.report is not None)
     # 산출물 S3 저장(persist_result) 이 끝난 뒤에만 콜백 — 백엔드가 조회할 때 키가 이미 존재한다.
-    await _summary_callback(rt, c, result, summary.markdown if summary else None, artifacts=arts)
+    await _notify_terminal(rt, c, result, summary.markdown if summary else None, artifacts=arts)
