@@ -577,3 +577,93 @@ async def test_summary_callback_carries_speaker_map(client, app, stt_mock):
         rt.settings.callback_include_speaker_map = True
         rt.pipeline = orig
         restore()
+
+
+AGENT_HOOK = "https://cb.test/voicetalk/public/agent-callback"
+
+
+async def test_agent_callback_triggers_result_fetch(client, app, stt_mock, s3_env):
+    """통화 시작 payload 의 callback_url 로도 terminal 통보를 보낸다.
+
+    백엔드는 **agent-callback 수신에서만** 결과를 끌어간다(`researchAiSttClient.fetchAndSaveResult`).
+    통화요약 콜백은 요약만 저장하므로, 이게 없으면 일지 본문은 백엔드의 30분 주기 누락 복구
+    배치가 주울 때까지 남는다(2026-09-08 실측 30분 지연의 회귀 가드).
+    """
+    import json
+
+    rt = app.state.rt
+    restore = _enable_summary_callback(rt)
+    try:
+        with respx.mock(assert_all_called=True) as router:
+            agent = router.post(AGENT_HOOK).mock(return_value=httpx.Response(200))
+            summary = router.post(SUMMARY_HOOK).mock(return_value=httpx.Response(200))
+            await full_flow(client, "cb-agent", callback_url=AGENT_HOOK)
+            await rt.worker.drain()
+    finally:
+        restore()
+
+    assert agent.called and summary.called          # 둘 다 — 역할이 다르다
+    req = agent.calls[0].request
+    assert req.headers["X-API-Key"] == "cb-secret"
+    payload = json.loads(req.content)
+    assert payload["call_id"] == "cb-agent"
+    assert payload["status"] == "COMPLETED"         # 백엔드 TERMINAL_STATUSES 중 하나여야 수락된다
+    assert payload["result_url"].endswith("/v1/calls/cb-agent")
+    assert payload["generation_run"] == 1
+    assert "daily_diary_id" not in payload          # call_id 와 배타 — 둘 다 있으면 백엔드가 400
+    assert "empty_reason" not in payload and "error" not in payload
+    # 본문·산출물 키는 싣지 않는다 (백엔드 AgentCallbackPayload 에 없는 필드)
+    assert "content" not in payload and "diaries" not in payload and "markdown" not in json.dumps(payload)
+
+
+async def test_agent_callback_empty_carries_reason(client, app):
+    """EMPTY → 백엔드 허용값 empty_reason 을 싣는다 (오디오 없이 종료)."""
+    import json
+
+    rt = app.state.rt
+    restore = _enable_summary_callback(rt)
+    try:
+        with respx.mock(assert_all_called=True) as router:
+            agent = router.post(AGENT_HOOK).mock(return_value=httpx.Response(200))
+            router.post(SUMMARY_HOOK).mock(return_value=httpx.Response(200))
+            await full_flow(client, "cb-agent-empty", keys=(), callback_url=AGENT_HOOK)
+            await rt.worker.drain()
+    finally:
+        restore()
+
+    payload = json.loads(agent.calls[0].request.content)
+    assert payload["status"] == "EMPTY"
+    assert payload["empty_reason"] == "NO_AUDIO"
+
+
+async def test_agent_callback_absent_without_callback_url(client, app, stt_mock):
+    """callback_url 이 없으면 발사하지 않는다 — 통화요약 콜백만 나간다(기존 동작 유지)."""
+    rt = app.state.rt
+    restore = _enable_summary_callback(rt)
+    try:
+        with respx.mock(assert_all_called=False) as router:
+            agent = router.post(AGENT_HOOK).mock(return_value=httpx.Response(200))
+            summary = router.post(SUMMARY_HOOK).mock(return_value=httpx.Response(200))
+            await full_flow(client, "cb-agent-none")
+            await rt.worker.drain()
+    finally:
+        restore()
+    assert not agent.called and summary.called
+
+
+async def test_agent_callback_can_be_disabled(client, app, stt_mock):
+    """CALL_AGENT_CALLBACK_ENABLED=0 이면 URL 이 있어도 끈다 (킬 스위치)."""
+    rt = app.state.rt
+    restore = _enable_summary_callback(rt)
+    prev = rt.settings.call_agent_callback_enabled
+    rt.settings.call_agent_callback_enabled = False
+    try:
+        with respx.mock(assert_all_called=False) as router:
+            agent = router.post(AGENT_HOOK).mock(return_value=httpx.Response(200))
+            summary = router.post(SUMMARY_HOOK).mock(return_value=httpx.Response(200))
+            await full_flow(client, "cb-agent-off", callback_url=AGENT_HOOK)
+            await rt.worker.drain()
+    finally:
+        rt.settings.call_agent_callback_enabled = prev
+        restore()
+    assert not agent.called and summary.called
