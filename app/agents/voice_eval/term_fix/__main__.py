@@ -39,10 +39,23 @@ log = logging.getLogger("voice_eval.term_fix")
 DEFAULT_CATALOG = Path.home() / "dev/jinong/jinong_gpu/stt-serve/catalog/catalog.jsonl"
 PRECISION_MIN = 0.8                 # 대본 세트(케이스 평균) 판정용
 
-# 실통화 세트(발생 단위) 사전 등록 판정 기준 — 돌리기 전에 못박은 값이다. 근거는 docs/stt-term-fix-calls-*.md
-MICRO_RECALL_MIN = 0.90             # 도메인 용어 발생 recall (base 좌표 .8071)
-PRECISION_LENIENT_MIN = 0.90        # 치환 precision(lenient)
-CER_CI_MAX = 0.0033                 # 공백제거 CER 페어드 CI 상한(회귀 감시 — 이득은 기대하지 않는다)
+# 실통화 세트(발생 단위) 사전 등록 판정 기준 — 돌리기 전에 못박는다.
+#
+# 2026-09-08 재등록: 첫 판(MICRO_RECALL_MIN=0.90 절대값)은 `deploy-base-k10` 덤프를 base 좌표로 알고
+# 그 위에서 잡은 값이었다. 그 덤프는 **정답 대본에서 뽑은 bias 목록을 프롬프트에 넣은 오라클 팔**이라
+# (그 팔만 맞힌 도메인 용어 76건 중 62건이 그 행의 bias 목록에 들어 있다) base 용어 recall 이 .84 로
+# 부풀어 있었다. 진짜 pass-1 좌표의 base recall 은 .5577 이고, 거기에 절대값 .90 을 요구하는 것은
+# 좌표가 정한 상수를 기준으로 착각한 것이다. 그래서 **좌표에 의존하지 않는 세 축**으로 다시 등록한다:
+#
+#   ① 치환 precision(lenient) ≥ 0.90        — 없는 말을 지어내지 않는가(이 실험의 진짜 위험)
+#   ② 도메인 용어 exact 인식률이 **상승**     — 고치라는 것을 실제로 고쳤는가
+#   ③ 공백제거 CER 페어드 CI **상한 < 0**    — 전사가 전체적으로 나빠지지 않았는가(유의한 개선)
+#
+# ①은 그대로 두고 ②를 비하락→상승으로, ③을 회귀 감시(+.0033)에서 유의 개선(<0)으로 조인 것이다.
+PRECISION_LENIENT_MIN = 0.90
+CER_CI_UPPER_MAX = 0.0              # ΔCER 부트스트랩 CI 상한이 이보다 작아야 한다
+MICRO_RECALL_MIN = 0.0              # 절대 하한은 쓰지 않는다(좌표 의존). 0 이면 조건이 비활성이다
+CER_CI_MAX = 0.0033                 # 구 기준 — 09-08 오전 리포트 재현용으로만 남긴다
 BOOT_ITERS = 10000
 
 
@@ -189,13 +202,12 @@ def verdict(rows: list[dict[str, Any]], base: str, min_confidence: float | None 
                                  [r["ref_chars"] for r in rs], iters=iters) if iters else None}
     # 판정 단위는 세트가 정한다. 발생 단위 골드가 있으면(실통화) micro, 없으면(대본 5건) 케이스 평균.
     if n_occ:
-        # 사전 등록 기준 — recall ≥ MICRO_RECALL_MIN ∧ precision(lenient) ≥ PRECISION_LENIENT_MIN
-        #                 ∧ 공백제거 CER 페어드 CI 상한 < CER_CI_MAX
+        # 사전 등록 기준(위 주석 참조) — precision ∧ exact 상승 ∧ CER CI 상한 < 0
         hi = (micro["boot"] or {}).get("hi")
-        ok = ((micro["recall_fix"] or 0) >= MICRO_RECALL_MIN
-              and (lenient is not None and lenient >= PRECISION_LENIENT_MIN)
-              and (hi is None or hi < CER_CI_MAX)
-              and (micro["recall_fix"] or 0) >= (micro["recall_base"] or 0))
+        ok = ((lenient is not None and lenient >= PRECISION_LENIENT_MIN)
+              and (micro["exact_fix"] or 0) > (micro["exact_base"] or 0)
+              and (hi is not None and hi < CER_CI_UPPER_MAX)
+              and (micro["recall_fix"] or 0) >= MICRO_RECALL_MIN)
     else:
         # recall 은 fuzzy(≥85) 를 인정해 기준선이 이미 0.97~1.0 이라 '상승' 을 요구하면 천장에 막힌다 → 비하락 + exact 상승 또는 TP>0
         ok = (mean_fix >= mean_base and exact_fix >= exact_base and (lenient is not None and lenient >= PRECISION_MIN)
@@ -264,11 +276,11 @@ def write_report(out_dir: Path, rows: list[dict[str, Any]], verdicts: list[dict[
             b = m.get("boot") or {}
             lines += [f"### 발생 단위(micro) — 사전 등록 판정 좌표 · 골드 발생 {m['occurrences']}건", "",
                       "| 지표 | 기준 | +fix | 사전 등록 기준 |", "|---|---:|---:|---|",
-                      f"| 도메인 용어 recall(exact+fuzzy) | {_fmt(m['recall_base'])} | {_fmt(m['recall_fix'])} | ≥ {MICRO_RECALL_MIN} |",
-                      f"| 도메인 용어 exact | {_fmt(m['exact_base'])} | {_fmt(m['exact_fix'])} | 비하락 |",
-                      f"| 치환 precision(lenient) | — | {_fmt(v['precision_lenient'])} | ≥ {PRECISION_LENIENT_MIN} |",
+                      f"| 도메인 용어 recall(exact+fuzzy) | {_fmt(m['recall_base'])} | {_fmt(m['recall_fix'])} | — |",
+                      f"| 도메인 용어 exact | {_fmt(m['exact_base'])} | {_fmt(m['exact_fix'])} | **상승** |",
+                      f"| 치환 precision(lenient) | — | {_fmt(v['precision_lenient'])} | **≥ {PRECISION_LENIENT_MIN}** |",
                       f"| CER(공백제거, micro) | {_fmt(m['cer_base'])} | {_fmt(m['cer_fix'])} | — |",
-                      f"| Δ CER 페어드 CI95 | — | {b.get('delta', '—')} [{b.get('lo', '—')}, {b.get('hi', '—')}] | 상한 < +{CER_CI_MAX} |", ""]
+                      f"| Δ CER 페어드 CI95 | — | {b.get('delta', '—')} [{b.get('lo', '—')}, {b.get('hi', '—')}] | **상한 < {CER_CI_UPPER_MAX}** |", ""]
         lines += ["| 케이스 | recall 기준→fix | exact 기준→fix | CER 기준→fix | 적용/거부 | TP/이형/FP | 토큰(in/out) | 초 |",
                   "|---|---|---|---|---:|---|---|---:|"]
         for r in rows:
@@ -329,7 +341,7 @@ def write_report(out_dir: Path, rows: list[dict[str, Any]], verdicts: list[dict[
               "- precision strict = TP/(TP+FP), lenient = (TP+이형)/(TP+이형+FP). 판정은 lenient 기준(표기 규약은 이 실험의 대상이 아님).",
               "- CER 은 참고치(공백·구두점 제거 = `jinong_gpu` 의 결정 좌표인 공백제거 CER). 표기 규약 상쇄가 남는다.",
               f"- **판정 단위는 세트가 정한다.** 발생 단위 골드가 실린 세트(실통화)는 micro 표가 판정이다"
-              f"(recall ≥ {MICRO_RECALL_MIN} ∧ lenient ≥ {PRECISION_LENIENT_MIN} ∧ ΔCER CI 상한 < +{CER_CI_MAX} ∧ recall 비하락). "
+              f"(lenient ≥ {PRECISION_LENIENT_MIN} ∧ exact 상승 ∧ ΔCER CI 상한 < {CER_CI_UPPER_MAX}). "
               f"골드가 통화 단위뿐인 대본 세트는 케이스 평균으로 판정한다(recall·exact 비하락 ∧ TP+이형>0 ∧ lenient≥{PRECISION_MIN} ∧ CER 악화 0).",
               "- micro recall 은 발화별 골드를 그 발화 텍스트에 대고 잰다 — 같은 용어를 5번 말했는데 1번 놓친 것도 보인다"
               "(통화 단위 매칭은 못 본다).", ""]

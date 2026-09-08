@@ -241,14 +241,16 @@ def test_micro_verdict_uses_occurrence_gold(catalog, tmp_path: Path):
         "expect_keywords": ["쏘일킹", "탄저병"], "pass1": {"segments": segs}}, ensure_ascii=False), encoding="utf-8")
     # 골드가 없는 통화 — 케이스 평균이라면 recall 1.0 으로 희석되는 자리
     (fx_dir / "call_b.json").write_text(json.dumps({
-        "case": "call_b", "reference": "그냥 잡담이에요", "expect_keywords": [],
-        "pass1": {"segments": [{"speaker": "A", "text": "그냥 잡담이에요", "gold": [], "row_id": 2}]}},
+        "case": "call_b", "reference": "쏘일킹 얘기예요", "expect_keywords": [],
+        "pass1": {"segments": [{"speaker": "A", "text": "수독 얘기예요", "gold": [], "row_id": 2}]}},
         ensure_ascii=False), encoding="utf-8")
 
     llm = FakeChatModel(responses={"term_fix": lambda m: {"corrections": [
         {"seg_id": 0, "original": "수독", "replacement": "쏘일킹", "confidence": 0.9, "reason": "발음"},
         {"seg_id": 1, "original": "탄두병", "replacement": "탄저병", "confidence": 0.9, "reason": "문맥"},
-    ]} if "수독" in m[-1].content else {"corrections": []}})
+    ]} if "탄두병" in m[-1].content else {
+        "corrections": [{"seg_id": 0, "original": "수독", "replacement": "쏘일킹",
+                         "confidence": 0.9, "reason": "발음"}]}})
     out = tmp_path / "out_micro"
     rc = cli.main(["--fixtures", str(fx_dir), "--catalog", str(cat_path), "--stopwords", str(tmp_path / "stopwords.txt"),
                    "--arms", "pass1", "--provider", "fake", "--out", str(out)], llm=llm)
@@ -256,7 +258,9 @@ def test_micro_verdict_uses_occurrence_gold(catalog, tmp_path: Path):
     v = json.loads((out / "summary.json").read_text(encoding="utf-8"))["verdicts"][0]
     m = v["micro"]
     assert m["occurrences"] == 2 and m["exact_base"] == 0.0 and m["exact_fix"] == 1.0
-    assert v["pass"] is True and m["boot"]["delta"] < 0
+    # 사전 등록 3축: precision(lenient) ≥ .90 ∧ exact 상승 ∧ ΔCER CI 상한 < 0
+    assert v["precision_lenient"] == 1.0 and m["boot"]["hi"] < 0
+    assert v["pass"] is True
     assert v["mean_recall_base"] == 0.5                 # 케이스 평균은 골드 없는 통화에 희석된다
     assert "발생 단위(micro)" in (out / "report.md").read_text(encoding="utf-8")
     assert (out / "catalog_queue.tsv").exists()
