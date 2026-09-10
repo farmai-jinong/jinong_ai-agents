@@ -4,8 +4,10 @@
 포트: **7003**(loopback) — 7001 hatchery-serving, 7002 jinong-ai-gateway 와 나란히. 외부는 호스트 nginx(443) 로만.
 같은 호스트의 **dev 인스턴스**는 **7013** / `apps/jinong_ai-agents-dev` / `jinong-stt-report-generation-dev.jinongservice.co.kr` — §7.
 
-## 0. 현재 상태 (2026-09-02)
+## 0. 현재 상태 (2026-09-10)
 
+- 2026-09-10 영농일지 형식 변경(`fix/diary-format`, dev·prod 양쪽): 첫 줄 H1 `# 영농일지 — 작물 (날짜)` 제거,
+  메타 표를 `## 근거 발화` 와 `## 참고` 사이(public 은 마지막 섹션 뒤·푸터 앞)로 이동. `##` 섹션 집합·순서는 그대로.
 - 2026-09-02 dev 인스턴스 분리(§7): 같은 호스트에 `jinong-ai-agents-dev`(`127.0.0.1:7013`, `apps/jinong_ai-agents-dev`,
   compose 볼륨 `jinong_ai-agents-dev_agent_data`, `S3_PREFIX=agents/voicecall-dev`, 별도 `AGENT_API_KEY`) 기동. 기존 7003 인스턴스는
   무변경(백엔드 `dev.jinongservice.co.kr` 를 계속 바라봄 — prod 백엔드 `data.` 전환은 별도 작업). dev 공개 HTTPS 는 DNS A

@@ -16,15 +16,14 @@ class FakePipeline:
         code = ctx.hints.prdlst_code or "0000MM"
         name = ctx.hints.prdlst_nm or "미확정작물"
         lines = "\n".join(f"- [{s.speaker_key}] {s.text}" for s in transcript.segments[:20])
-        # 실제 템플릿(render/templates/diary.md.j2)과 같은 골격: H1 → 요약·격려 인용 블록 → 표 → 고정 섹션.
+        # 실제 템플릿(render/templates/diary.md.j2)과 같은 골격: 요약·격려 인용 블록 → 고정 섹션 → 메타 표(근거 발화 뒤·참고 앞). H1 없음.
         # internal(근거 포함) / public(근거·코드·참고 제거) 두 벌 — 실파이프라인의 render 변형과 같은 제거 규칙.
-        head = f"# 영농일지 — {name} ({diary_date})\n\n" \
-               f"> 📝 **통화 요약** · (fake) 세그먼트 {len(transcript.segments)}건\n> 💬 오늘도 수고 많으셨어요 🌱\n\n"
+        head = f"> 📝 **통화 요약** · (fake) 세그먼트 {len(transcript.segments)}건\n> 💬 오늘도 수고 많으셨어요 🌱\n\n"
         body = (f"## 주요 농작업\n- 언급 없음\n\n"
                 f"## 기타 기록사항\n[AI 초안·FAKE] 통화 세그먼트 {len(transcript.segments)}건\n\n")
-        diary_md = (head + f"| 항목 | 값 |\n|---|---|\n| 작성일자 | {diary_date} |\n| 작물 | {name} ({code}) |\n\n"
-                    + body + f"## 근거 발화\n{lines}\n\n## 참고\n- 없음\n")
-        diary_md_public = (head + f"| 항목 | 값 |\n|---|---|\n| 작성일자 | {diary_date} |\n| 작물 | {name} |\n\n" + body)
+        diary_md = (head + body + f"## 근거 발화\n{lines}\n\n"
+                    f"| 항목 | 값 |\n|---|---|\n| 작성일자 | {diary_date} |\n| 작물 | {name} ({code}) |\n\n## 참고\n- 없음\n")
+        diary_md_public = (head + body + f"| 항목 | 값 |\n|---|---|\n| 작성일자 | {diary_date} |\n| 작물 | {name} |\n")
         report_head = f"# 컨설팅 보고서 — {diary_date}\n\n## 대화 요약\n(fake) 세그먼트 {len(transcript.segments)}건\n"
         report_md = report_head + f"\n## 근거 발화\n{lines}\n"
         report_md_public = report_head

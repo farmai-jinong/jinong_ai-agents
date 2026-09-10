@@ -60,7 +60,7 @@ async def test_end_and_get_flow(client, app, stt_mock):
     assert body["stt_progress"] == {"total": 1, "transcribed": 1, "failed": 0, "pending": 0}
     res = body["result"]
     assert res["diaries"][0]["prdlst_code"] == "0804MM"
-    assert res["diaries"][0]["markdown"].startswith("# 영농일지 — ") and "\n> 📝 **통화 요약** · " in res["diaries"][0]["markdown"] \
+    assert res["diaries"][0]["markdown"].startswith("> 📝 **통화 요약** · ") and "# 영농일지" not in res["diaries"][0]["markdown"] \
         and "## 주요 농작업" in res["diaries"][0]["markdown"]
     assert res["diaries"][0]["s3_key_md"] == "agents/voicecall/c3/artifacts/diary/0804MM.md"
     # 기본 전달용(markdown / s3_key_md)에는 근거가 없고, 근거 포함 정본은 internal 키로만 가리킨다
