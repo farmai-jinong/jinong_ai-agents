@@ -37,10 +37,11 @@ async def test_strawberry_full_run(settings, farmos_fake):
     assert "## 방제이력\n- 언급 없음" in d.markdown
     assert "사파이어 액상수화제 → 잿빛곰팡이 · 2000배 (확인 필요)" in d.markdown
     # 상단 요약·격려 블록: 마크다운에는 있고 prefill(앱 일지 메모)에는 없다
-    assert d.markdown.startswith("# 영농일지 — 딸기 (") and "\n\n> 📝 **통화 요약** · " in d.markdown \
+    assert d.markdown.startswith("> 📝 **통화 요약** · ") and "# 영농일지" not in d.markdown \
         and "> 💬 관수와 적엽까지 꼼꼼히 챙기셨네요 👍" in d.markdown
-    # public 변형(전달용): 같은 H1·내용, 근거·코드만 없다
-    assert d.markdown_public.startswith("# 영농일지 — 딸기 (") and "\n\n> 📝 **통화 요약** · " in d.markdown_public \
+    # public 변형(전달용): 같은 내용, 근거·코드만 없다. 메타 표는 마지막 섹션 뒤·푸터 앞
+    assert d.markdown_public.startswith("> 📝 **통화 요약** · ") and "# 영농일지" not in d.markdown_public \
+        and d.markdown_public.index("## 향후 작업·확인 계획") < d.markdown_public.index("\n| 항목 | 값 |\n") < d.markdown_public.index("\n---\n_AI 초안") \
         and "## 주요 농작업" in d.markdown_public
     assert "(근거:" not in d.markdown_public and "## 근거 발화" not in d.markdown_public and "(0804MM)" not in d.markdown_public
     assert "사파이어 액상수화제 → 잿빛곰팡이 · 2000배 (확인 필요)" in d.markdown_public

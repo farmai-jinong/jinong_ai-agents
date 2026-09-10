@@ -175,7 +175,7 @@ async def test_list_and_artifact_endpoints(client, app, stt_mock):
     code = detail["result"]["diaries"][0]["prdlst_code"]
 
     r = await client.get(f"/v1/daily-diaries/{DAILY['diary_id']}/artifacts/diary/{code}")
-    assert r.status_code == 200 and r.text.startswith("# 영농일지 — ") and "\n> 📝 **통화 요약** · " in r.text and "## 주요 농작업" in r.text
+    assert r.status_code == 200 and r.text.startswith("> 📝 **통화 요약** · ") and "## 주요 농작업" in r.text
     assert "## 근거 발화" not in r.text                                # 기본 view=public
     r = await client.get(f"/v1/daily-diaries/{DAILY['diary_id']}/artifacts/diary/{code}", params={"view": "internal"})
     assert r.status_code == 200 and "## 근거 발화" in r.text
