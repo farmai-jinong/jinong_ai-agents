@@ -260,7 +260,8 @@ Body 선택: `{"retranscribe": false, "reason": "...", "farm_access_token": "<�
 
 - `result`는 **`status=COMPLETED`일 때만** 채워집니다.
 - `diaries[]`는 통화에서 다룬 **작물별** 1건씩. `prdlst_code`는 farmos 품목코드이며, 작물을 확정하지
-  못하면 `null`(S3 키·artifact 경로는 `unresolved`; 한 결과에 미확정 작물이 여럿이면 두 번째부터 `unresolved-2`, `unresolved-3` …). 건별 `status` ∈ `OK|PARTIAL|EMPTY|UNRESOLVED_CROP`
+  못하면 `null`(S3 키·artifact 경로는 `unresolved`; 한 결과에 미확정 작물이 여럿이면 두 번째부터 `unresolved-2`, `unresolved-3` …). 건별 `status` ∈ `OK|PARTIAL|EMPTY|UNRESOLVED_CROP`.
+  **농가 등록 작물이 아닌 언급 작물**도 1건으로 온다(2026-09-14, 예: 파프리카 농가가 토마토 통화 → 토마토 일지): `prdlst_code` 는 표준 품목 이름이 정확히 일치할 때만, `structured.crop_registered=false`, 마크다운 메타 표 `작물` 행에 `(미등록 작물)` 표시
   (`EMPTY` = 이 작물로 일지에 남길 내용 없음 — 규칙 판정 + 독립 LLM 검수 패스, §5.1).
 - **저희는 farmos에 저장하지 않습니다.** `structured.prefill`은 앱 `PUT /m/diary`의 `fields`와 같은
   모양의 **초안**이고, 농가가 앱에서 확인 후 저장하는 용도입니다.

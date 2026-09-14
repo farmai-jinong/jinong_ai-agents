@@ -1,15 +1,21 @@
 """대상 작물 결정 + 사실 라우팅.
 
-규칙: crops_mentioned ↔ farm.crops 이름 매칭(≥85 또는 부분문자열) → 대상; 없으면 대표작물
-(reprsntPrdlstCnt==1) → 첫 작물; hints.prdlst_code 우선; farm 불명 + 작물 언급 → code None;
-아무것도 없으면 UNRESOLVED_CROP 1건. crop=None 사실은 대상 1개면 그쪽, 여러 개면 대표/첫 작물 + warning.
+규칙: crops_mentioned ↔ farm.crops 이름 매칭(≥85 또는 부분문자열) → 대상; **등록 목록에 없는 언급 작물도 대상**
+(registered=False, 코드는 AP 백엔드 표준 품목 전체 목록에서 정확 일치로 찾고 없으면 None); 언급이 하나도 없으면
+대표작물(reprsntPrdlstCnt==1) → 첫 작물; hints.prdlst_code 우선; 아무것도 없으면 UNRESOLVED_CROP 1건.
+crop=None 사실은 대상 1개면 그쪽, 여러 개면 대표/첫 작물 + warning.
 """
 
 from __future__ import annotations
 
+import logging
+
+from ..deps import get_deps
 from ..mapping.matcher import match
 from ..schemas import CallFacts, CropFacts, CropRef, CropTarget, FarmContext
 from ..state import PipelineState
+
+log = logging.getLogger(__name__)
 
 
 def _match_crop(name: str, crops: list[CropRef]) -> CropRef | None:
@@ -25,6 +31,15 @@ def _match_crop(name: str, crops: list[CropRef]) -> CropRef | None:
     return None
 
 
+def _match_standard(name: str, standard: list[CropRef]) -> CropRef | None:
+    """표준 품목 전체(약 2,100건)에서는 느슨한 매칭이 오탐을 부르므로 정확 일치(정규화 후)만 채택한다."""
+    if not name or not standard:
+        return None
+    r = match(name, standard, key=lambda c: c.prdlstNm, code=lambda c: c.prdlstCode or c.prdlstNm,
+              family="crop", auto=95.0, ambiguous=95.0)
+    return r.best.item if r.status == "matched" and r.best else None
+
+
 def _default_crop(crops: list[CropRef]) -> CropRef | None:
     for c in crops:
         if c.reprsntPrdlstCnt == 1:
@@ -32,18 +47,33 @@ def _default_crop(crops: list[CropRef]) -> CropRef | None:
     return crops[0] if crops else None
 
 
-def choose_targets(facts: CallFacts, farm: FarmContext, hint_code: str | None, hint_nm: str | None) -> tuple[list[CropTarget], dict[str, str], list[str]]:
-    """returns (targets, name→target_key, warnings). target_key = prdlst_code or prdlst_nm."""
+def choose_targets(facts: CallFacts, farm: FarmContext, hint_code: str | None, hint_nm: str | None,
+                   standard: list[CropRef] | None = None) -> tuple[list[CropTarget], dict[str, str], list[str]]:
+    """returns (targets, name→target_key, warnings). target_key = prdlst_code or prdlst_nm.
+
+    `standard` = AP 백엔드 표준 품목 전체 목록(선택) — 농가 등록 목록에 없는 언급 작물의 코드를 여기서 찾는다.
+    """
     warnings: list[str] = []
     crops = farm.crops
+    standard = standard or []
     name_to_key: dict[str, str] = {}
     targets: list[CropTarget] = []
 
-    def add(code: str | None, nm: str, reason: str, resolved: bool = True) -> str:
+    def add(code: str | None, nm: str, reason: str, resolved: bool = True, registered: bool = True) -> str:
         key = code or nm
         if not any((t.prdlst_code or t.prdlst_nm) == key for t in targets):
-            targets.append(CropTarget(prdlst_code=code, prdlst_nm=nm, reason=reason, resolved=resolved))
+            targets.append(CropTarget(prdlst_code=code, prdlst_nm=nm, reason=reason, resolved=resolved, registered=registered))
         return key
+
+    def add_unregistered(name: str, reason: str) -> str:
+        """등록 목록에 없는 언급 작물 — 표준 품목에서 코드를 찾아 붙이고, 못 찾으면 이름만으로 만든다."""
+        std = _match_standard(name, standard)
+        nm = std.prdlstNm if std is not None else name
+        code = std.prdlstCode if std is not None else None
+        if crops:
+            warnings.append(f"{nm}: 농가 등록 작물에 없음 — 통화 언급대로 일지 생성(미등록 작물"
+                            + (")" if code else ", 표준 품목코드도 못 찾음)"))
+        return add(code, nm, reason, registered=not crops)
 
     if hint_code or hint_nm:
         c = next((c for c in crops if c.prdlstCode and c.prdlstCode == hint_code), None) if hint_code else None
@@ -66,9 +96,11 @@ def choose_targets(facts: CallFacts, farm: FarmContext, hint_code: str | None, h
             if m.matched_name:
                 name_to_key[m.matched_name] = key
             name_to_key[c.prdlstNm] = key
-        elif not crops and m.name_raw:
-            key = add(None, m.matched_name or m.name_raw, "mentioned-unknown-farm")
+        elif m.matched_name or m.name_raw:
+            key = add_unregistered(m.matched_name or m.name_raw, "mentioned-unregistered" if crops else "mentioned-unknown-farm")
             name_to_key[m.name_raw] = key
+            if m.matched_name:
+                name_to_key[m.matched_name] = key
     # 사실의 crop 필드에 등장한 이름
     for name in {x.crop for x in (facts.farmworks + facts.observations + facts.pests + facts.products) if x.crop}:
         if name in name_to_key:
@@ -76,8 +108,8 @@ def choose_targets(facts: CallFacts, farm: FarmContext, hint_code: str | None, h
         c = _match_crop(name, crops)
         if c is not None:
             name_to_key[name] = add(c.prdlstCode, c.prdlstNm, "fact-crop")
-        elif not crops:
-            name_to_key[name] = add(None, name, "fact-crop-unknown-farm")
+        else:
+            name_to_key[name] = add_unregistered(name, "fact-crop-unregistered" if crops else "fact-crop-unknown-farm")
     if not targets:
         d = _default_crop(crops)
         if d is not None:
@@ -126,10 +158,31 @@ def route_facts(facts: CallFacts, targets: list[CropTarget], name_to_key: dict[s
     return out, sorted(set(warnings))
 
 
+async def _standard_prdlsts(deps) -> list[CropRef]:  # type: ignore[no-untyped-def]
+    """AP 백엔드 표준 품목 전체 — 클라이언트에 `prdlsts` 가 없거나 실패하면 빈 목록(코드 없이 진행)."""
+    fn = getattr(deps.ap_backend, "prdlsts", None) if deps.ap_backend is not None else None
+    if fn is None:
+        return []
+    try:
+        rows = await fn()
+    except Exception as e:  # noqa: BLE001
+        log.warning("ap-backend prdlsts failed: %s", e)
+        return []
+    return [CropRef(prdlstCode=r.get("prdlstCode"), prdlstNm=str(r.get("prdlstNm") or "")) for r in rows if r.get("prdlstNm")]
+
+
+def _needs_standard(facts: CallFacts, farm: FarmContext) -> bool:
+    """등록 목록과 안 맞는 언급 작물이 있을 때만 표준 품목 전체를 가져온다."""
+    names = {m.matched_name or m.name_raw for m in facts.crops_mentioned}
+    names |= {x.crop for x in (facts.farmworks + facts.observations + facts.pests + facts.products) if x.crop}
+    return any(n and _match_crop(n, farm.crops) is None for n in names)
+
+
 async def select_crops(state: PipelineState, config) -> dict:  # type: ignore[no-untyped-def]
     facts: CallFacts = state["facts"]
     farm: FarmContext = state.get("farm") or FarmContext()
     ctx = state["ctx"]
-    targets, name_to_key, w1 = choose_targets(facts, farm, ctx.hints.prdlst_code, ctx.hints.prdlst_nm)
+    standard = await _standard_prdlsts(get_deps(config)) if _needs_standard(facts, farm) else []
+    targets, name_to_key, w1 = choose_targets(facts, farm, ctx.hints.prdlst_code, ctx.hints.prdlst_nm, standard)
     routed, w2 = route_facts(facts, targets, name_to_key)
     return {"crop_targets": targets, "crop_facts": routed, "warnings": w1 + w2}

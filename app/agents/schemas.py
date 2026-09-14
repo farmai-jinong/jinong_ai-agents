@@ -273,6 +273,7 @@ class CropTarget(BaseModel):
     prdlst_nm: str
     reason: str
     resolved: bool = True          # False → UNRESOLVED_CROP
+    registered: bool = True        # False → 농가 등록 작물 목록에 없는 통화 언급 작물(코드는 표준 품목 전체에서 찾음)
 
 
 class CropFacts(BaseModel):
@@ -367,6 +368,7 @@ class DiaryResult(BaseModel):
     gs_nm: str | None = None
     growing_season_start: str | None = None
     existing_diary_id: int | None = None
+    crop_registered: bool = True   # False → 농가 등록 작물이 아닌 통화 언급 작물 — 메타 표 `작물` 행에 "(미등록 작물)" 표시
     existing_farmworks: list[str] = Field(default_factory=list)   # 기존 일지에 체크돼 있던 농작업(유지)
     markdown: str = ""             # internal 변형(근거 포함 정본) — judge/eval/verify 가 보는 대상
     markdown_public: str = ""      # public 변형(근거·코드·내부 메타 제거) — 백엔드 기본 전달용

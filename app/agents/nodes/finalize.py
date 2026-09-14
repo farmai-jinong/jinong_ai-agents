@@ -30,7 +30,7 @@ def diary_to_artifact(d: DiaryResult) -> DiaryArtifact:
             "prefill_ready": d.prefill_ready,
             "mapping": d.mapping.model_dump(),
             "gsNm": d.gs_nm, "growingSeasonStartDe": d.growing_season_start,
-            "existing_diary_id": d.existing_diary_id, "content": d.content,
+            "existing_diary_id": d.existing_diary_id, "crop_registered": d.crop_registered, "content": d.content,
             "warnings": d.warnings, "evidence": d.evidence,
             "verify": d.verify.model_dump() if d.verify else None,
         })

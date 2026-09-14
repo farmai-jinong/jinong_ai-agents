@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Any
 
 import httpx
@@ -31,6 +32,8 @@ class ApBackendAuthError(ApBackendError):
 
 
 class ApBackendClient:
+    PRDLSTS_TTL_S = 3600.0
+
     def __init__(self, base_url: str, api_key: str, *, timeout: float = 10.0,
                  client: httpx.AsyncClient | None = None, retries: int = 2) -> None:
         self.base_url = base_url.rstrip("/")
@@ -38,6 +41,8 @@ class ApBackendClient:
         self.timeout = timeout
         self.retries = retries
         self._client = client
+        self._prdlsts_cache: list[dict[str, Any]] | None = None
+        self._prdlsts_at = 0.0
         self._own = client is None
 
     async def __aenter__(self) -> "ApBackendClient":
@@ -106,6 +111,23 @@ class ApBackendClient:
     async def prdlst(self, prdlst_code: str) -> dict[str, Any] | None:
         """`GET /voicetalk/public/research/prdlsts/{code}` — 없으면 None."""
         return await self._get(f"/voicetalk/public/research/prdlsts/{prdlst_code}")
+
+    async def prdlsts(self) -> list[dict[str, Any]]:
+        """`GET /voicetalk/public/research/prdlsts?group_type=M&use_yn=Y` — 표준 품목 전체(약 2,100건)를
+        farmos `list_crops()` 모양(`prdlstCode`/`prdlstNm`)으로. 농가 등록 목록에 없는 **통화 언급 작물**의 코드를
+        찾는 데 쓴다. 종자류(`lclas_code_nm` 에 '종자')는 재배 작물이 아니므로 뺀다. 프로세스 내 1시간 캐시."""
+        now = time.monotonic()
+        if self._prdlsts_cache is not None and now - self._prdlsts_at < self.PRDLSTS_TTL_S:
+            return self._prdlsts_cache
+        rows = await self._get("/voicetalk/public/research/prdlsts", {"group_type": "M", "use_yn": "Y"}) or []
+        out: list[dict[str, Any]] = []
+        for r in rows if isinstance(rows, list) else []:
+            nm = r.get("mlsfc_code_nm") or r.get("prdlst_nm")
+            if not nm or not r.get("prdlst_code") or "종자" in str(r.get("lclas_code_nm") or ""):
+                continue
+            out.append({"prdlstCode": r["prdlst_code"], "prdlstNm": str(nm)})
+        self._prdlsts_cache, self._prdlsts_at = out, now
+        return out
 
     async def probe(self, timeout: float = 5.0) -> dict[str, Any]:
         try:

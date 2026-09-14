@@ -118,7 +118,8 @@ async def render_diary_node(state: CropDiaryState, config) -> dict:  # type: ign
     praise = EMPTY_PRAISE if status in ("EMPTY", "UNRESOLVED_CROP") else ((content.praise if content else None) or FALLBACK_PRAISE)
     summary_line = (content.summary if content else None) or state.get("call_summary") or EMPTY_SUMMARY
     d = DiaryResult(prdlst_code=target.prdlst_code, prdlst_nm=target.prdlst_nm, diary_date=state["diary_date"],
-                    status=status, gs_nm=gs, growing_season_start=gss, existing_diary_id=ex, existing_farmworks=existing_fw, prefill=prefill,
+                    status=status, gs_nm=gs, growing_season_start=gss, existing_diary_id=ex, crop_registered=target.registered,
+                    existing_farmworks=existing_fw, prefill=prefill,
                     prefill_ready=prefill_ready, mapping=rep, content=content_text, warnings=warnings,
                     summary_line=summary_line, praise=praise,
                     evidence=collect_evidence(rep, content.evidence if content else [], cf))

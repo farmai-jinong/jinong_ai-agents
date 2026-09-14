@@ -22,6 +22,8 @@ FarmosFactory = Callable[[str], FarmosLike]   # token → client
 class ApBackendLike(Protocol):
     """AP 백엔드 research API — 농가 JWT 없이 작물 목록을 준다(백엔드 문서 §3)."""
     async def farm_context(self, engn_id: str, user_id: str) -> list[dict[str, Any]]: ...
+    # 선택: 표준 품목 전체 목록(등록되지 않은 언급 작물의 코드 확정용). 없으면 select_crops 가 코드 없이 진행한다.
+    # async def prdlsts(self) -> list[dict[str, Any]]: ...
 
 
 def _utcnow() -> datetime:

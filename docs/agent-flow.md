@@ -166,8 +166,15 @@ STT 화자 글자 `A`/`B` 는 **그 요청 안의 등장 순서**일 뿐이다. 
 1. `hints.prdlst_code`/`prdlst_nm` 이 있으면 그것부터 (농가 작물 목록과 매칭 시도)
 2. 통화에서 **언급된 작물**(`crops_mentioned`)을 농가 작물 목록과 이름 매칭
 3. 사실의 `crop` 필드에 등장한 이름
-4. 아무것도 안 걸리면 **대표작물**(`reprsntPrdlstCnt == 1`) → 없으면 첫 작물 → 경고
-5. 농가 작물 목록 자체가 없으면 `UNRESOLVED_CROP` 1건 + 경고
+4. **2·3 에서 농가 등록 목록에 없는 작물도 그대로 대상이 된다(2026-09-14)** — `CropTarget.registered=False`.
+   코드는 AP 백엔드 **표준 품목 전체**(`ApBackendClient.prdlsts`, `group_type=M`·종자류 제외, 1시간 캐시)에서
+   **정규화 후 정확 일치**(`_match_standard`, auto=95)로만 찾고, 못 찾으면 `prdlst_code=None`(이름만). 표준 목록은
+   등록 목록과 안 맞는 언급이 있을 때만 가져온다(`_needs_standard`); 조회 실패는 코드 없이 진행. 경고
+   `"{작물}: 농가 등록 작물에 없음 — 통화 언급대로 일지 생성(미등록 작물)"`. 일지에는 **메타 표 `작물` 행에
+   `(미등록 작물)` 만** 붙는다(internal·public 공통, `DiaryResult.crop_registered` / `structured.crop_registered`).
+   이전에는 등록 목록 밖 언급을 버리고 대표작물로 가정해 토마토 통화가 파프리카 일지로 나갔다.
+5. 언급이 **하나도 없으면** **대표작물**(`reprsntPrdlstCnt == 1`) → 없으면 첫 작물 → 경고 "통화에서 작물이 특정되지 않아 … 로 가정"
+6. 농가 작물 목록 자체가 없고 언급도 없으면 `UNRESOLVED_CROP` 1건 + 경고
 
 작물 이름 매칭 임계값은 여기서만 완화돼 있다 — `auto=85`, `ambiguous=70`, 그리고 ambiguous 라도
 최고 후보가 **90 이상이면 채택**(`_match_crop`).

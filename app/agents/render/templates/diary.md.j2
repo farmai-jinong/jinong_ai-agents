@@ -90,7 +90,7 @@
 | 항목 | 값 |
 |---|---|
 | 작성일자 | {{ d.diary_date }} |
-| 작물 | {{ d.prdlst_nm }}{% if d.prdlst_code and not public %} ({{ d.prdlst_code }}){% endif %} |
+| 작물 | {{ d.prdlst_nm }}{% if not d.crop_registered %} (미등록 작물){% endif %}{% if d.prdlst_code and not public %} ({{ d.prdlst_code }}){% endif %} |
 | 생육단계 | {{ d.gs_nm or "정보 없음" }} |
 | 정식일 | {{ d.growing_season_start or "미등록" }} |
 {% if not public %}

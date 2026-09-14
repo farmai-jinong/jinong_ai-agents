@@ -65,7 +65,7 @@ class DiaryArtifact(BaseModel):
     #   두 벌 모두 같은 구조화 데이터의 렌더 결과 — 폴백 없음(비어 있으면 근거가 새는 대신 검증에서 걸리게).
     structured: dict[str, Any] = Field(default_factory=dict)
     # structured = {schema_version, prefill: PutDiaryDTO|None, prefill_ready, mapping, gsNm,
-    #               growingSeasonStartDe, existing_diary_id, warnings, evidence}
+    #               growingSeasonStartDe, existing_diary_id, crop_registered, warnings, evidence}
 
 
 class ReportArtifact(BaseModel):

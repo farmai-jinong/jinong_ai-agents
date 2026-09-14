@@ -43,6 +43,12 @@ def test_diary_headings_order_and_footer():
     assert "언급 없음" not in md.split("## 기타 기록사항")[0]          # 항목이 있으면 '언급 없음' 은 안 나온다
     assert "## 참고\n- 없음" in md
     assert "잿빛곰팡이병 — 발생단계: 2%미만 (주의)" in md
+    # 미등록 작물 표시는 메타 표 작물 행에만 — internal 은 코드와 함께, public 은 코드 없이
+    d.crop_registered = False
+    md2 = render_diary(d, ctx, nt, CropFacts(), model="m", prompt_version="1", now=NOW)
+    assert "| 작물 | 딸기 (미등록 작물) (0804MM) |" in md2 and md2.count("미등록 작물") == 1
+    pub = render_diary(d, ctx, nt, CropFacts(), model="m", prompt_version="1", now=NOW, variant="public")
+    assert "| 작물 | 딸기 (미등록 작물) |" in pub and pub.count("미등록 작물") == 1
     assert "AI 초안 — 농가 확인 후 저장" in md and "프롬프트 v1" in md
     assert "`#2`" in md and "`#4`" in md
 
