@@ -11,12 +11,15 @@
 
 from __future__ import annotations
 
+import logging
 import os
 
 import httpx
 import pytest
 
 from .profiles import PROFILES
+
+logging.getLogger("httpx").setLevel(logging.WARNING)      # 요청 1건마다 INFO 한 줄 — 스모크 출력에서는 잡음
 
 
 def pytest_collection_modifyitems(config, items):
