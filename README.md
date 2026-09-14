@@ -32,9 +32,11 @@ STORAGE_IMPL=local ./scripts/run_local.sh
 ## 배포 (지농서버, 포트 7003, nginx TLS `jinong-stt-report-generation.jinongservice.co.kr`)
 
 ```bash
-./deploy/deploy.sh          # prod: rsync + 원격 docker compose up -d --build + health 확인
-./deploy/deploy.sh dev      # dev : 같은 호스트 apps/jinong_ai-agents-dev, 포트 7013, jinong-stt-report-generation-dev.jinongservice.co.kr
+./deploy/deploy.sh          # prod: ruff+pytest 게이트 → rsync → 원격 compose → healthz(commit 일치) → 스모크(tests/smoke)
+./deploy/deploy.sh dev      # dev : 같은 호스트 apps/jinong_ai-agents-dev, 포트 7013 — 스모크에 실녹음 E2E 포함
+./scripts/verify_deploy.sh dev   # 배포 없이 스모크만 (docs/ops.md §3)
 ```
+푸시·PR 마다 GitHub Actions(`.github/workflows/ci.yml`)가 같은 ruff+pytest 를 돈다.
 최초 1회(DNS·nginx vhost·인증서·`.env`)는 `docs/ops.md`(dev 는 §7).
 
 브랜치: 기본 작업 브랜치는 **`dev`**(→ dev 인스턴스). `prod` 는 7003 운영 인스턴스에 올라간 것(`dev` → `prod` 머지로 승격, prod 배포는 `prod` 에서만). `main` 은 안정 이력.

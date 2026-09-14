@@ -31,16 +31,15 @@ import argparse
 import copy
 import json
 import logging
-import re
 import sys
 from pathlib import Path
 from typing import Any
 
 from ...term_fix.apply import apply_corrections
-from ...term_fix.catalog import Catalog, load_catalog, norm_chars
+from ...term_fix.catalog import Catalog, load_catalog
 from ...term_fix.schemas import TermCorrection
 from . import __main__ as cli
-from .score import micro_cer, paired_boot, score_arm
+from .score import score_arm
 
 log = logging.getLogger("voice_eval.term_fix.tune")
 
@@ -61,7 +60,7 @@ RECIPES = {
 
 # --------------------------------------------------------------------------- 카탈로그 변형
 def read_catalog_rows(path: Path) -> list[dict[str, Any]]:
-    return [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines() if l.strip()]
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 def company_prefixes(rows: list[dict[str, Any]]) -> list[str]:

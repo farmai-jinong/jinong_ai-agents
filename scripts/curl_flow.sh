@@ -31,8 +31,10 @@ for i in $(seq 1 240); do
   case "$STATUS" in COMPLETED*|EMPTY*|FAILED*) break;; esac
   sleep 5
 done
+case "$STATUS" in COMPLETED*) ;; *) echo "!! 종료 상태가 COMPLETED 가 아님: $STATUS" >&2; RC=1;; esac
 
 echo "==> report"
 curl -fsS "${AUTH[@]}" "$AGENT_URL/v1/calls/$CALL_ID/artifacts/report" || true
 echo; echo "==> diaries"
 curl -fsS "${AUTH[@]}" "$AGENT_URL/v1/calls/$CALL_ID?inline=false" | python3 -c 'import sys,json; d=json.load(sys.stdin); r=d.get("result") or {}; [print(x["prdlst_code"], x["prdlst_nm"], x["status"], x["s3_key_md"]) for x in r.get("diaries",[])]'
+exit "${RC:-0}"

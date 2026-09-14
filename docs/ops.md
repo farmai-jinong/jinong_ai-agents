@@ -72,29 +72,36 @@
 ## 2. 배포
 
 ```bash
-./deploy/deploy.sh                 # prod: rsync(.env 제외) → 원격 docker compose up -d --build → AGENT_BIND(:7003)/healthz 폴링 → upstream health
-./deploy/deploy.sh dev             # dev : apps/jinong_ai-agents-dev, :7013 (§7)
+./deploy/deploy.sh                 # prod: 게이트(ruff+pytest) → rsync(.env 제외) → 원격 compose(GIT_SHA 주입) → healthz ok·commit 일치 → 스모크
+./deploy/deploy.sh dev             # dev : apps/jinong_ai-agents-dev, :7013 (§7) — 스모크에 실녹음 E2E 포함(기본)
 REMOTE=jinong_aws ./deploy/deploy.sh
 ```
+스위치: `FORCE=1`(브랜치≠환경 허용 — 기본은 exit 3) · `SKIP_TESTS=1`(게이트 생략) · `SKIP_SMOKE=1`(스모크 생략) · `SMOKE_E2E=0|1`(E2E 강제).
+어느 단계든 실패하면 배포 실패(exit≠0)이며 롤백은 하지 않는다 — 스모크 실패 시 원격 로그 80줄을 같이 출력한다.
 로그: `ssh jinong_aws_office 'cd apps/jinong_ai-agents && docker compose logs -f --tail=100 agent'` (dev 는 `apps/jinong_ai-agents-dev`)
 
-## 3. 검증
+## 3. 검증 — 코드로만 한다
+
+배포 후 검증은 `tests/smoke/`(pytest, `-m smoke`, 순수 HTTP) 가 전담하고 `deploy.sh` 가 마지막 단계로 자동 실행한다.
+**손으로 curl 을 치는 건 스모크가 실패했을 때 원인 진단에만** 쓴다. 같은 확인을 두 번 손으로 했다면 스위트에 추가한다.
 
 ```bash
-curl https://jinong-stt-report-generation.jinongservice.co.kr/healthz   # status:"ok" 확인 — "degraded" 면 DB ping 실패(pending_* 는 null)
-AGENT_API_KEY=… ./scripts/smoke_remote.sh                       # + upstream health (stt/llm/s3/farmos 모두 ok)
-AGENT_API_KEY=… ./scripts/smoke_remote.sh voice-recordings records/<...>.ogg   # 전체 플로우 (FARM_TOKEN 주면 farmos 조회 포함)
-aws s3 ls s3://jinong-agri-stt/agents/voicecall/<call_id>/ --recursive --endpoint-url https://smart-minio.jinongservice.co.kr
-# 또는 mc: mc ls -r <alias>/jinong-agri-stt/agents/voicecall/<call_id>/
+./scripts/verify_deploy.sh dev                 # 배포 없이 스모크만(ssh 터널 127.0.0.1:17013 → :7013). dev 는 E2E 기본 on
+./scripts/verify_deploy.sh prod                # :7003 빠른 스모크(수 초). E2E 는 SMOKE_E2E=1
+GIT_SHA=<sha> ./scripts/verify_deploy.sh dev   # /healthz commit 일치까지 (deploy.sh 가 자동으로 넘김)
+SMOKE_URL=https://jinong-stt-report-generation.jinongservice.co.kr SMOKE_API_KEY=… ./scripts/verify_deploy.sh prod   # 공개 URL(터널 없음)
+SMOKE_REUSE_CALL_ID=<완료된 call_id> SMOKE_E2E=1 ./scripts/verify_deploy.sh dev   # 새 통화 없이 E2E 판정만 재실행(진단)
 ```
 
-날짜별(멀티콜) 영농일지 스모크 — 위 플로우로 **terminal 된 call_id** 들을 넘긴다:
+| 파일 | 판정 |
+|---|---|
+| `tests/smoke/test_health.py` (항상) | `/healthz` `status:"ok"`·`worker.running`·`commit`==배포 sha / 인증 fail-closed 401 / `/v1/upstream/health` stt·llm·s3·farmos 전부 ok / **`config` 블록 == `tests/smoke/profiles.py`** (S3_PREFIX, API_MARKDOWN_VIEW, CALLBACK_INCLUDE_ARTIFACT_KEYS, STORAGE_IMPL, PUBLIC_BASE_URL, PIPELINE_IMPL, LLM_PROVIDER…) / 목록·`INVALID_CURSOR` 422·`CALL_NOT_FOUND` 404·`INVALID_VIEW` 400 |
+| `tests/smoke/test_e2e.py` (`SMOKE_E2E=1`, dev 기본) | `deploy/smoke.env` 의 고정 실녹음으로 start→audio→end→**COMPLETED**(FAILED/EMPTY 는 실패) / 모든 `s3_key_*` 가 `S3_PREFIX/<call_id>/` 아래(dev 격리) / `view=internal` 에 근거·`view=public` 에 근거 없음·일지 H1 없음·기본 view 가 프로필과 일치(inline `markdown` 포함) / `artifacts/*`·`/transcript` 200(=S3 객체 존재) / 응답 어디에도 `farm_access_token` 없음 |
 
-```bash
-AGENT_URL=https://jinong-stt-report-generation.jinongservice.co.kr AGENT_API_KEY=… FARM_TOKEN=… \
-  ./scripts/daily_flow.sh <call_id_1> [call_id_2 ...]           # 트리거 → 폴링 → 작물별 일지 md 출력
-aws s3 ls s3://jinong-agri-stt/agents/voicecall/daily/<diary_id>/ --recursive --endpoint-url https://smart-minio.jinongservice.co.kr
-```
+규칙: 원격 `.env` 의 위 항목을 의도적으로 바꾸면 **`tests/smoke/profiles.py` 도 같은 커밋에서** 바꾼다. 불일치가 나면 관측값을
+베끼지 말고 의도한 값이 무엇인지 먼저 확인(예: prod `API_MARKDOWN_VIEW=internal` 은 백엔드 A안 반영 전 임시 — §0 2026-09-07).
+스모크 녹음이 삭제되면 `deploy/smoke.env` 만 바꾼다. 날짜별(멀티콜) 일지는 `scripts/daily_flow.sh <call_id…>` 로 수동 확인(스모크 미포함;
+종료 상태가 COMPLETED 가 아니면 exit 1).
 
 ## 4. 로컬
 
@@ -318,7 +325,7 @@ ssh jinong_aws_office 'cd ~/apps && mkdir -p jinong_ai-agents-dev && \
       jinong_ai-agents/.env > jinong_ai-agents-dev/.env && \
   printf "AGENT_CONTAINER_NAME=jinong-ai-agents-dev\nAGENT_IMAGE_TAG=dev\n" >> jinong_ai-agents-dev/.env && \
   chmod 600 jinong_ai-agents-dev/.env'
-# (b) 배포 → :7013/healthz + upstream health 까지 확인
+# (b) 배포 → :7013 healthz·commit·스모크(§3)까지 자동
 ./deploy/deploy.sh dev
 # (c) /srv 디렉터리 + nginx vhost (HTTP 만 — sites.d 사본의 HTTPS 블록을 주석 처리한 채 reload)
 ssh jinong_aws_office 'sudo mkdir -p /srv/jinong-agent-dev/{logs,letsencrypt,deploy} && \
@@ -329,12 +336,9 @@ ssh jinong_aws_office 'sudo mkdir -p /srv/jinong-agent-dev/{logs,letsencrypt,dep
 
 ### 7.2 검증
 
-```bash
-ssh jinong_aws_office 'docker ps --filter name=jinong-ai-agents --format "{{.Names}} {{.Ports}} {{.Status}}"; \
-  curl -s 127.0.0.1:7013/healthz; echo; curl -s 127.0.0.1:7003/healthz; echo'        # 둘 다 healthy, prod 무영향
-ssh jinong_aws_office 'cd apps/jinong_ai-agents-dev && AGENT_URL=http://127.0.0.1:7013 AGENT_API_KEY=$(grep ^AGENT_API_KEY= .env|cut -d= -f2) \
-  ./scripts/curl_flow.sh voice-recordings <key>'                                        # COMPLETED → 산출물은 agents/voicecall-dev/<call_id>/ 아래에만
-```
+`./deploy/deploy.sh dev` 가 끝에서 `scripts/verify_deploy.sh dev` 를 자동 실행한다(§3): healthz·commit·업스트림·dev 프로필
+(`S3_PREFIX=agents/voicecall-dev` 등)·실녹음 E2E COMPLETED·산출물이 `agents/voicecall-dev/<call_id>/` 아래에만 있는지까지.
+prod 무영향 확인은 `./scripts/verify_deploy.sh prod`(빠른 스모크, 수 초).
 
 ### 7.3 공개 HTTPS (DNS A `jinong-stt-report-generation-dev.jinongservice.co.kr → 13.125.70.226` 등록 후)
 
@@ -343,7 +347,7 @@ ssh jinong_aws_office 'cd /srv/jinong-agent-dev && export INSTANCE=jinong-agent-
   bash deploy/letsencrypt/cert.sh --dry-run && bash deploy/letsencrypt/cert.sh'
 # vhost HTTPS 블록 주석 해제 → sudo nginx -t && sudo systemctl reload nginx
 # root crontab: 58 4 * * * INSTANCE=jinong-agent-dev /srv/jinong-agent-dev/deploy/letsencrypt/renew.sh >> /srv/jinong-agent-dev/logs/letsencrypt.log 2>&1
-AGENT_URL=https://jinong-stt-report-generation-dev.jinongservice.co.kr AGENT_API_KEY=<dev 키> ./scripts/smoke_remote.sh
+SMOKE_URL=https://jinong-stt-report-generation-dev.jinongservice.co.kr SMOKE_API_KEY=<dev 키> ./scripts/verify_deploy.sh dev
 ```
 
 ### 7.4 인수인계·후속

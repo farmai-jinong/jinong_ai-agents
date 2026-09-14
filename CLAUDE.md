@@ -39,6 +39,9 @@ history line. Feature/eval branches fork from `dev`.
 - `farm_access_token` is never echoed in responses/logs; purged on terminal status.
 - Docs and commit messages in Korean. No commit attribution footer.
 - Single uvicorn worker (`--workers 1`): the poller/semaphores are process-local.
+- **배포 후 검증은 코드로만**: `./deploy/deploy.sh` 가 게이트(ruff+pytest) → 배포 → `scripts/verify_deploy.sh`(`tests/smoke/`,
+  healthz·commit·업스트림·`.env` 프로필·계약, dev 는 실녹음 E2E)를 자동 실행한다. 수동 curl 은 스모크 실패 원인 진단에만.
+  같은 확인을 두 번 손으로 했다면 `tests/smoke/` 에 추가한다. 원격 `.env` 를 바꾸면 `tests/smoke/profiles.py` 도 같이(ops.md §3).
 
 ## Layout
 
@@ -55,10 +58,11 @@ app/worker/           runner (poll+wake, semaphores), stt_job, generate_job, dai
 app/routes/           health, calls (/v1/calls/*), daily (/v1/daily-diaries/* — 백엔드 트리거 날짜별 영농일지)
 app/agents/           LangGraph pipeline: interface.py (contract), fake.py, graph.py + state/schemas/llm/deps, nodes/mapping/prompts/render (crop subgraph ends with `verify_diary` — an independent LLM pass that demotes a hollow draft to EMPTY; render emits two variants from the same structured data — `internal` with evidence → S3 `artifacts/internal/`, `public` without evidence/codes/meta → API `markdown`, callback keys), summarize.py (call summary for the backend callback — independent of the diary pipeline), tools/ (fake_farmos·fake_llm·transcript), run.py (dry-run CLI), eval.py, voice_eval/ (실녹음 평가 하네스: STT 정확도 + 영농일지 LLM judge + 회귀 게이트, optimize/ = 평가 결과로 프롬프트·매핑을 고치는 자가 개선 루프, term_fix/ = 용어 교정 채점·CLI), term_fix/ (STT 용어 오청 복구 런타임 — `correct_terms` 노드, `TERM_FIX_ENABLED` 기본 off, 카탈로그는 jinong_gpu 경로 참조)
 app/schemas/          calls (API), daily (daily-diaries API), transcript (MergedTranscript), pipeline (CallContext/PipelineResult contract)
-tests/                pytest-asyncio + respx (STT/farmos) + moto (S3), FakePipeline; tests/agents/ for the pipeline, tests/agents/testcases/voice/ (대본·정답·임계값 — 녹음은 리포지토리 밖)
-deploy/               deploy.sh (rsync + remote compose), nginx vhost, letsencrypt cert/renew
+tests/                pytest-asyncio + respx (STT/farmos) + moto (S3), FakePipeline; tests/agents/ for the pipeline, tests/agents/testcases/voice/ (대본·정답·임계값 — 녹음은 리포지토리 밖); tests/smoke/ (배포 서버 스모크, `-m smoke`, profiles.py = 환경별 기대 .env)
+deploy/               deploy.sh (게이트 → rsync → remote compose(GIT_SHA) → healthz → verify_deploy.sh), smoke.env (E2E 고정 녹음 좌표), nginx vhost, letsencrypt cert/renew
+.github/workflows/    ci.yml — 푸시·PR 마다 ruff + pytest
 docs/                 api-reference.md (contract), architecture.md, agent-flow.md (노드별 판정 기준·프롬프트 출처), ops.md (runbook), integration-briefing.md (내부), integration-handoff.md (백엔드 전달용), eval-journal.md/.jsonl (자가 개선 루프 기록), proposals/ (구조 개선 제안서 — 자동 적용 안 함)
-scripts/              run_local.sh, curl_flow.sh, e2e_local.sh (로컬 파일 E2E), daily_flow.sh (날짜별 일지 스모크), smoke_remote.sh, farmos_login.py (농가 JWT 발급)
+scripts/              run_local.sh, verify_deploy.sh (배포 스모크 실행기: ssh 터널 + pytest -m smoke), curl_flow.sh·daily_flow.sh (수동 디버그, COMPLETED 아니면 exit 1), e2e_local.sh (로컬 파일 E2E), farmos_login.py (농가 JWT 발급)
 ```
 
 ## Run / test / deploy
@@ -72,8 +76,9 @@ python -m app.agents.run --transcript tests/agents/fixtures/calls/<fixture>.json
 python -m app.agents.voice_eval --audio-dir ~/Downloads/recordings   # 실녹음 5건 평가 → out/voice-eval/report.md (ops.md §4.2)
 python -m app.agents.voice_eval.optimize --max-iters 3       # 자가 개선 루프 → docs/eval-journal.md, eval/auto-tune (ops.md §4.3)
 python -m app.agents.voice_eval.term_fix --fixtures ~/dev/jinong/jinong_gpu/stt-serve/fixtures/ctx_replay   # STT 용어 오청 LLM 교정 실험 (ops.md §4.4)
-./deploy/deploy.sh                          # prod → jinong_aws_office :7003 (see docs/ops.md for first-time DNS/TLS/.env)
-./deploy/deploy.sh dev                      # dev  → same host, apps/jinong_ai-agents-dev :7013 (ops.md §7)
+./deploy/deploy.sh                          # prod → jinong_aws_office :7003 — 게이트·배포·스모크 자동 (ops.md §2·§3; first-time DNS/TLS/.env)
+./deploy/deploy.sh dev                      # dev  → same host, apps/jinong_ai-agents-dev :7013 (ops.md §7) — 실녹음 E2E 포함
+./scripts/verify_deploy.sh dev              # 배포 없이 스모크만; SMOKE_E2E=1 ./scripts/verify_deploy.sh prod 로 prod E2E
 ```
 
 ## Contract pointers

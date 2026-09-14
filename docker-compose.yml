@@ -9,7 +9,10 @@
 
 services:
   agent:
-    build: .
+    build:
+      context: .
+      args:
+        GIT_SHA: "${GIT_SHA:-unknown}"   # deploy.sh 가 주입 — /healthz commit
     image: jinong-ai-agents:${AGENT_IMAGE_TAG:-latest}
     container_name: ${AGENT_CONTAINER_NAME:-jinong-ai-agents}
     restart: unless-stopped

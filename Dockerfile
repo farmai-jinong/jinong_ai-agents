@@ -15,6 +15,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 
+# 배포 커밋 식별 — deploy.sh 가 build arg 로 넘기고 /healthz 가 `commit` 으로 노출한다(스모크가 배포본 일치 판정).
+ARG GIT_SHA=unknown
+ENV GIT_SHA=$GIT_SHA
+
 VOLUME ["/data"]
 EXPOSE 8080
 

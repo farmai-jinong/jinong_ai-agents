@@ -89,7 +89,7 @@ def llm_smoke(settings: Settings) -> tuple[bool, str]:
             settings.gcp_project_id = os.environ.get("GCP_PROJECT_ID") or settings.gcp_project_id or "jinong-lab-llm"
         llm = make_chat_model(settings)
         t0 = time.perf_counter()
-        res = llm.invoke("한 단어로만 답하라: 딸기")
+        llm.invoke("한 단어로만 답하라: 딸기")
         return True, f"{settings.llm_provider}/{settings.llm_model} 응답 {time.perf_counter() - t0:.1f}초"
     except Exception as e:  # noqa: BLE001
         return False, f"{type(e).__name__}: {e}"[:220]
@@ -174,7 +174,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"\n[한 바퀴 환산] 입력 토큰 {tok / 1e6:.1f}M · 출력 ~{a.calls * 260 / 1e3:.0f}k"
           f" · LLM 벽시계 {a.calls * SEC_PER_CALL / 60:.0f}분(순차)")
     if a.decode:
-        print(f"               + 원격 전사: GPU 2장 기준 발화 12,596 ≈ 40분")
+        print("               + 원격 전사: GPU 2장 기준 발화 12,596 ≈ 40분")
     print("               처방 비교(tune)는 LLM 0콜 — 캐시 위에서 초 단위")
 
     print()

@@ -26,6 +26,7 @@ for i in $(seq 1 240); do
   case "$STATUS" in COMPLETED*|EMPTY*|FAILED*) break;; esac
   sleep 5
 done
+case "$STATUS" in COMPLETED*) ;; *) echo "!! 종료 상태가 COMPLETED 가 아님: $STATUS" >&2; RC=1;; esac
 
 echo "==> merged transcript (head)"
 curl -fsS "${AUTH[@]}" "$AGENT_URL/v1/daily-diaries/$DIARY_ID/transcript" | head -c 600 || true; echo
@@ -36,3 +37,4 @@ for CODE in $CODES; do
   echo "--- diary [$CODE] ---"
   curl -fsS "${AUTH[@]}" "$AGENT_URL/v1/daily-diaries/$DIARY_ID/artifacts/diary/$CODE" || true; echo
 done
+exit "${RC:-0}"

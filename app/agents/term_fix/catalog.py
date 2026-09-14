@@ -105,7 +105,7 @@ GAPS_PATH = Path(__file__).parents[1] / "voice_eval/term_fix/catalog_gaps.tsv"
 
 
 def read_rows(path: Path) -> list[dict]:
-    return [json.loads(l) for l in Path(path).read_text(encoding="utf-8").splitlines() if l.strip()]
+    return [json.loads(line) for line in Path(path).read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 def read_gaps(path: Path) -> list[dict]:
