@@ -99,8 +99,10 @@ async def build_crop_diary(state: CropDiaryState, config) -> dict:  # type: igno
 def fan_out_crops(state: PipelineState) -> list[Send]:
     sends: list[Send] = []
     facts = state.get("facts")
-    call_summary = (facts.one_line_summary if facts else "").strip()
-    for t in state.get("crop_targets") or []:
+    targets = state.get("crop_targets") or []
+    # 통화 전체 요약은 단일 작물 통화의 폴백으로만 — 다작물이면 다른 작물 얘기가 섞이므로 비운다(작물별 요약은 diary_content 가 낸다)
+    call_summary = (facts.one_line_summary if facts and len(targets) == 1 else "").strip()
+    for t in targets:
         key = t.prdlst_code or t.prdlst_nm
         cf = (state.get("crop_facts") or {}).get(key, CropFacts())
         sends.append(Send("build_crop_diary", {

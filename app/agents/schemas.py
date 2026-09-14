@@ -182,6 +182,7 @@ class SummaryOut(_Strict):
 # --------------------------------------------------------------------------- narrative outputs (LLM)
 class DiaryContentOut(_Strict):
     content: str
+    summary: str | None         # 이 작물 기준 통화 한 문장 요약 — 마크다운 상단 블록 전용, prefill 에는 안 들어간다. 근거 없으면 null
     praise: str | None          # 통화 사실에 근거한 격려 한 줄(이모지 1개) — 근거 없으면 null. 마크다운 상단 블록 전용, prefill 에는 안 들어간다
     evidence: Ev
 

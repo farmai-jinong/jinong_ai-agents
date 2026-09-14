@@ -19,6 +19,7 @@ from .._common import err
 log = logging.getLogger(__name__)
 MAX_CHARS = 500
 MAX_PRAISE_CHARS = 80
+MAX_SUMMARY_CHARS = 120
 
 
 def facts_evidence(cf: CropFacts) -> list[int]:
@@ -54,7 +55,17 @@ def residual_facts(cf: CropFacts, unmatched_fw: list[str]) -> dict:
     pests = [{"name": p.name, "note": p.note, "evidence": p.evidence} for p in cf.pests if p.note]
     return {"observations": [o.model_dump() for o in cf.observations],
             "farmworks": farmworks, "products": products, "pests": pests,
-            "체크된_농작업": checked_names}
+            "체크된_농작업": checked_names,
+            "요약용_작물_전체사실": crop_overview(cf)}
+
+
+def crop_overview(cf: CropFacts) -> dict:
+    """상단 요약 줄(summary) 전용 입력 — 잔여 집합에서 빠진 병해충·예정 제품·향후 계획까지 이 작물의 전체 그림을 이름만으로 준다.
+    content 는 이걸 쓰면 안 된다(다른 섹션이 렌더하는 항목) — 프롬프트가 그렇게 지시한다."""
+    return {"농작업": [f"{f.name}({f.when})" for f in cf.farmworks],
+            "병해충": [f"{p.name} {p.status}" for p in cf.pests],
+            "제품": [f"{p.name}({p.when})" for p in cf.products],
+            "향후_계획": [x.text for x in cf.follow_ups] + [x.text for x in cf.actions]}
 
 
 def residual_evidence(residual: dict) -> list[int]:
@@ -93,7 +104,7 @@ def deterministic_content(cf: CropFacts, unmatched_fw: list[str]) -> DiaryConten
         lines.append(f"- {pr['name']}: {pr['note']}")
         ev.extend(pr.get("evidence") or [])
     text = "\n".join(lines[:8])
-    return DiaryContentOut(content=text[:MAX_CHARS], praise=None, evidence=sorted(set(ev)))
+    return DiaryContentOut(content=text[:MAX_CHARS], summary=None, praise=None, evidence=sorted(set(ev)))
 
 
 def _trim(text: str) -> str:
@@ -104,13 +115,13 @@ def _trim(text: str) -> str:
     return "\n".join(lines)[:MAX_CHARS]
 
 
-def _trim_praise(text: str | None) -> str | None:
-    """격려 한 줄 정규화 — 한 줄로 접고 마크다운 기호를 벗기고 길이를 자른다. 비면 None(렌더가 고정 문구로 대체)."""
+def _one_line(text: str | None, cap: int) -> str | None:
+    """상단 블록 한 줄(요약·격려) 정규화 — 한 줄로 접고 마크다운 기호를 벗기고 길이를 자른다. 비면 None(렌더가 폴백으로 대체)."""
     if not text:
         return None
     one = " ".join(text.replace("|", " ").split())
     one = one.lstrip("#>-* ").strip()
-    return one[:MAX_PRAISE_CHARS] or None
+    return one[:cap] or None
 
 
 async def write_content(state: CropDiaryState, config) -> dict:  # type: ignore[no-untyped-def]
@@ -132,7 +143,8 @@ async def write_content(state: CropDiaryState, config) -> dict:  # type: ignore[
                                            mode=deps.settings.llm_structured_mode, dump_dir=deps.dump_dir,
                                            timeout=deps.settings.node_timeout_s)
         out.content = _trim(out.content)
-        out.praise = _trim_praise(out.praise)
+        out.summary = _one_line(out.summary, MAX_SUMMARY_CHARS)
+        out.praise = _one_line(out.praise, MAX_PRAISE_CHARS)
         valid = set(t.tid for t in state["transcript"].turns)
         out.evidence = [e for e in out.evidence if e in valid] or ev
         return {"content": out, "usage": [trace.usage()]}

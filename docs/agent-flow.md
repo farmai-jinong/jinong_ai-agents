@@ -252,11 +252,14 @@ AP 백엔드 경로(`refs` 없음)는 코드가 확정돼도 prefill 이 나오�
 
 **마크다운 형식은 고정이다** (`render/templates/diary.md.j2` 하나, status 로만 내용을 비운다):
 H1 제목 없이(2026-09-10 제거 — 앱에 제목 텍스트가 그대로 노출됐다) `> 📝 **통화 요약** ·
-{CallFacts.one_line_summary}` / `> 💬 {praise}` 인용 블록(섹션 아님, prefill 에 안 들어감) →
+{DiaryContentOut.summary}` / `> 💬 {praise}` 인용 블록(섹션 아님, prefill 에 안 들어감) →
 (기존 일지·작물 미확정 안내) → `## 주요 농작업 / 기타 기록사항 / 병해충 / 방제이력 / 농작업 사진 /
 투입 제품 / 향후 작업·확인 계획 / 근거 발화` → 메타 표(작성일자·작물·생육단계·정식일·통화; public 은 마지막 섹션 뒤) → `## 참고` → 푸터. 비는 목록 섹션은 `- 언급 없음` **한 줄만**
 찍는다(항목이 하나라도 있으면 `언급 없음` 은 나오지 않는다). 격려 줄은 LLM 이 근거 있는 한 줄을 못 냈으면
-`FALLBACK_PRAISE`, EMPTY/UNRESOLVED 면 `EMPTY_PRAISE` 고정 문구. 통화 요약은 작물 공통(같은 통화의 여러 작물 일지에 같은 줄).
+`FALLBACK_PRAISE`, EMPTY/UNRESOLVED 면 `EMPTY_PRAISE` 고정 문구. **통화 요약 줄은 작물별**(2026-09-14): `diary_content` 가 content·praise 와
+같은 호출에서 낸 `summary`(이 작물 관련 내용만, 100자 이내) → 없으면 **단일 작물 통화에서만** `CallFacts.one_line_summary`(`fan_out_crops` 가
+다작물이면 `call_summary` 를 비워 보내 다른 작물 얘기가 섞이지 않게 한다) → 그것도 없으면(사실이 없는 작물의 EMPTY 등) `EMPTY_SUMMARY` 고정 문구.
+통화 전체 요약 자체는 그대로 남아 보고서 `summary_line` 과 콜백 통화 단순요약(`summarize.py`)이 쓴다.
 
 **두 벌 렌더 (`render_both`)**: 같은 `DiaryResult` 로 `variant="internal"`(위 고정 형식 그대로 — `DiaryResult.markdown`, 검수·평가·
 judge 가 보는 정본, S3 `artifacts/internal/`)과 `variant="public"`(`DiaryResult.markdown_public`, 백엔드 기본 전달용 —

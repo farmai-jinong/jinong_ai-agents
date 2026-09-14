@@ -11,6 +11,9 @@ from ...state import CropDiaryState
 # 상단 격려 줄의 고정 문구 — LLM 이 근거 있는 한 줄을 못 냈을 때 / 빈 일지일 때. 형식(항상 2줄 블록)을 고정하기 위한 값.
 FALLBACK_PRAISE = "오늘도 수고 많으셨어요 🌱"
 EMPTY_PRAISE = "이번 통화에는 기록할 농작업이 없었어요. 다음 통화도 응원할게요 🌱"
+# 상단 요약 줄은 작물별(LLM `DiaryContentOut.summary`). 없으면 단일 작물 통화의 통화 요약(call_summary) → 그것도 없으면 고정 문구.
+# 다작물 통화에서 통화 전체 요약을 쓰면 다른 작물 얘기가 섞이므로 fan_out 이 call_summary 를 비워 보낸다.
+EMPTY_SUMMARY = "이 작물에 대한 농작업 언급이 없었던 통화예요"
 
 
 def build_prefill(diary_date: str, prdlst_code: str | None, rep: MappingReport, content: str, refs) -> PutDiaryDTO:  # type: ignore[no-untyped-def]
@@ -113,10 +116,11 @@ async def render_diary_node(state: CropDiaryState, config) -> dict:  # type: ign
     if refs is not None and refs.detail and refs.detail.get("diaryId"):
         existing_fw = [str(f.get("userFarmworkNm")) for f in (refs.detail.get("userFarmworkList") or []) if f.get("checked")]
     praise = EMPTY_PRAISE if status in ("EMPTY", "UNRESOLVED_CROP") else ((content.praise if content else None) or FALLBACK_PRAISE)
+    summary_line = (content.summary if content else None) or state.get("call_summary") or EMPTY_SUMMARY
     d = DiaryResult(prdlst_code=target.prdlst_code, prdlst_nm=target.prdlst_nm, diary_date=state["diary_date"],
                     status=status, gs_nm=gs, growing_season_start=gss, existing_diary_id=ex, existing_farmworks=existing_fw, prefill=prefill,
                     prefill_ready=prefill_ready, mapping=rep, content=content_text, warnings=warnings,
-                    summary_line=state.get("call_summary") or "", praise=praise,
+                    summary_line=summary_line, praise=praise,
                     evidence=collect_evidence(rep, content.evidence if content else [], cf))
     render_both(d, state, cf, deps)
     return {"diary": d, "diaries": [d]}

@@ -1,5 +1,7 @@
 """그래프 전체 실행 (Fake LLM + Fake farmos) — 정상/멀티파일/EMPTY/강등 경로."""
 
+import json
+
 import pytest
 
 from app.agents.interface import PipelineEmpty
@@ -10,6 +12,7 @@ from app.schemas.pipeline import PipelineResult
 from .conftest import FIX, fake_llm, load_call, make_pipeline
 
 STRAW_CONTENT = {"content": "[AI 초안·통화 기반]\n- 2동 잿빛곰팡이 초기 발생, 환기 강화\n- 내일 사파이어 살포 예정 (확인 필요)",
+                 "summary": "딸기 잿빛곰팡이 초기 발생 상담, 환기·적엽·사파이어 살포 권고",
                  "praise": "관수와 적엽까지 꼼꼼히 챙기셨네요 👍", "evidence": [2, 3, 8]}
 STRAW_REPORT = {"farm_status": [{"text": "딸기 하우스 2동", "evidence": [2], "needs_verification": False}],
                 "issues": [{"text": "잿빛곰팡이병 초기 발생", "evidence": [2, 3], "needs_verification": False}],
@@ -37,7 +40,7 @@ async def test_strawberry_full_run(settings, farmos_fake):
     assert "## 방제이력\n- 언급 없음" in d.markdown
     assert "사파이어 액상수화제 → 잿빛곰팡이 · 2000배 (확인 필요)" in d.markdown
     # 상단 요약·격려 블록: 마크다운에는 있고 prefill(앱 일지 메모)에는 없다
-    assert d.markdown.startswith("> 📝 **통화 요약** · ") and "# 영농일지" not in d.markdown \
+    assert d.markdown.startswith("> 📝 **통화 요약** · 딸기 잿빛곰팡이 초기 발생 상담") and "# 영농일지" not in d.markdown \
         and "> 💬 관수와 적엽까지 꼼꼼히 챙기셨네요 👍" in d.markdown
     # public 변형(전달용): 같은 내용, 근거·코드만 없다. 메타 표는 마지막 섹션 뒤·푸터 앞
     assert d.markdown_public.startswith("> 📝 **통화 요약** · ") and "# 영농일지" not in d.markdown_public \
@@ -57,6 +60,41 @@ async def test_strawberry_full_run(settings, farmos_fake):
     assert "## 컨설팅·권고 내용\n- [병해충관리] 사파이어 2000배 살포 ※ 확인 필요 (근거: #7)" in res.report.markdown
     assert "## 컨설팅·권고 내용\n- [병해충관리] 사파이어 2000배 살포 ※ 확인 필요\n" in res.report.markdown_public
     assert "## 근거 발화" not in res.report.markdown_public and "| 통화 ID |" not in res.report.markdown_public
+
+
+@pytest.mark.asyncio
+async def test_single_crop_summary_falls_back_to_call_summary(settings, farmos_fake):
+    """작물별 요약이 null 이면 단일 작물 통화에서만 통화 전체 요약으로 대체한다."""
+    tr, ctx = load_call("strawberry_botrytis")
+    llm = fake_llm("strawberry_botrytis", responses={"diary_content": {**STRAW_CONTENT, "summary": None}, "report": STRAW_REPORT})
+    res = await make_pipeline(settings, llm, farmos_fake).run(tr, ctx)
+    call_summary = json.loads((FIX / "golden" / "strawberry_botrytis.facts.json").read_text(encoding="utf-8"))["one_line_summary"]
+    assert res.diaries[0].markdown.startswith(f"> 📝 **통화 요약** · {call_summary}\n")
+
+
+@pytest.mark.asyncio
+async def test_multi_crop_summary_is_per_crop_not_shared(settings, farmos_fake):
+    """다작물 통화: 상단 요약은 작물별 LLM 요약이고 통화 전체 요약은 어느 일지에도 섞이지 않는다.
+    사실이 없는 작물(EMPTY)은 통화 요약 대신 고정 문구."""
+    from app.agents.nodes.crop_diary.render_diary import EMPTY_SUMMARY
+
+    tr, ctx = load_call("strawberry_botrytis")
+    facts = json.loads((FIX / "golden" / "strawberry_botrytis.facts.json").read_text(encoding="utf-8"))
+    facts["crops_mentioned"].append({"name_raw": "토마토", "matched_name": "토마토", "evidence": [1]})
+
+    def diary_content(messages):
+        human = next(m.content for m in messages if m.type == "human")
+        crop = human.split("[작물] ", 1)[1].split(" /", 1)[0]
+        return {**STRAW_CONTENT, "summary": f"{crop} 잿빛곰팡이 초기 발생 상담"}
+
+    llm = fake_llm("strawberry_botrytis", responses={"extract": facts, "diary_content": diary_content, "report": STRAW_REPORT})
+    res = await make_pipeline(settings, llm, farmos_fake).run(tr, ctx)
+    by = {d.prdlst_nm: d for d in res.diaries}
+    assert set(by) == {"딸기", "토마토"} and by["딸기"].status == "OK" and by["토마토"].status == "EMPTY"
+    assert by["딸기"].markdown.startswith("> 📝 **통화 요약** · 딸기 잿빛곰팡이 초기 발생 상담\n")
+    assert by["토마토"].markdown.startswith(f"> 📝 **통화 요약** · {EMPTY_SUMMARY}\n")
+    for d in res.diaries:
+        assert facts["one_line_summary"] not in d.markdown and facts["one_line_summary"] not in d.markdown_public
 
 
 @pytest.mark.asyncio

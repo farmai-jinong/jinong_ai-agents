@@ -53,7 +53,7 @@ class CropDiaryState(TypedDict, total=False):
     farm: FarmContext
     target: CropTarget
     crop_facts: CropFacts
-    call_summary: str                           # CallFacts.one_line_summary — 일지 상단 요약 줄(작물 공통)
+    call_summary: str                           # CallFacts.one_line_summary — 단일 작물 통화에서만 채워지는 상단 요약 폴백(다작물이면 "")
     refs: Any                                   # FarmosRefs | None
     refs_status: str
     mapping: MappingReport
