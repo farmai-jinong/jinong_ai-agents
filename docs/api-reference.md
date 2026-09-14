@@ -85,7 +85,7 @@ Body(선택) `{"ended_at": "...", "duration_sec": 900}` → `202` (`state=ENDED,
     "diaries": [{"prdlst_code": "0804MM", "prdlst_nm": "딸기", "diary_date": "2026-08-19", "status": "OK",
                  "markdown": "> 📝 **통화 요약** · …\n> 💬 …\n\n## 주요 농작업\n…\n| 항목 | 값 |\n…",
                  "structured": {"prefill": {"diaryId": null, "diaryDate": "2026-08-19", "prdlstCode": "0804MM", "...": "PutDiaryDTO"},
-                                "prefill_ready": true, "mapping": {...}, "gsNm": "…", "crop_registered": true, "warnings": []},
+                                "prefill_ready": true, "mapping": {...}, "gsNm": "…", "warnings": []},
                  "s3_key_md": "agents/voicecall/<id>/artifacts/diary/0804MM.md",
                  "s3_key_json": "agents/voicecall/<id>/artifacts/diary/0804MM.json",
                  "s3_key_md_internal": "agents/voicecall/<id>/artifacts/internal/diary/0804MM.md"}],
@@ -105,7 +105,7 @@ Body(선택) `{"ended_at": "...", "duration_sec": 900}` → `202` (`state=ENDED,
 
 - `result.summary` 는 통화 단순요약 — **콜백으로 보낸 `content` 와 같은 본문**이다(콜백을 놓쳤을 때 재조회용). `structured.source` ∈ `llm`|`report_fallback`|`fake`.
 - `result` 는 `COMPLETED` 일 때만. `diaries[]` 는 통화에서 다룬 **작물별** 1건씩(`prdlst_code` = farmos 품목코드; 확정 불가 시 `null`, S3 키는 `unresolved` — 한 결과에 미확정이 여럿이면 두 번째부터 `unresolved-2`, `unresolved-3` …). `status` ∈ `OK|PARTIAL|EMPTY|UNRESOLVED_CROP` (`EMPTY` 는 규칙 판정 + 검수 LLM 패스가 실질 내용 없음으로 본 경우; 판정 근거는 `structured.verify`).
-- 통화에서 언급됐지만 **농가 등록 작물이 아닌** 작물도 `diaries[]` 에 1건으로 나온다(2026-09-14). `prdlst_code` 는 AP 백엔드 표준 품목에서 이름이 정확히 일치할 때만 채워지고 아니면 `null`. `structured.crop_registered=false` 이며, 마크다운은 메타 표 `작물` 행에 `(미등록 작물)` 이 붙는 것 외에 동일하다.
+- 통화에서 언급됐지만 **농가 등록 작물이 아닌** 작물도 `diaries[]` 에 1건으로 나온다(2026-09-14). `prdlst_code` 는 AP 백엔드 표준 품목에서 이름이 정확히 일치할 때만 채워지고 아니면 `null`. 별도 필드는 없고, 마크다운 메타 표 `작물` 행에 `(미등록 작물)` 이 붙는 것 외에 등록 작물과 동일하다.
 - 에이전트는 farmos 에 **저장하지 않는다**. `structured.prefill` 은 앱 `PUT /m/diary` 의 `fields` 와 같은 모양의 초안 — 농가 확인 후 저장용.
 - 마크다운 본문이 `RESULT_INLINE_MAX_KB` 를 넘으면 인라인 생략(S3 키만).
 - **마크다운은 두 벌**이다. `markdown`/`s3_key_md` 는 **전달용(public)** — `(근거: #N)` 인라인 근거, `## 근거 발화`, `## 참고`,

@@ -171,7 +171,7 @@ STT 화자 글자 `A`/`B` 는 **그 요청 안의 등장 순서**일 뿐이다. 
    **정규화 후 정확 일치**(`_match_standard`, auto=95)로만 찾고, 못 찾으면 `prdlst_code=None`(이름만). 표준 목록은
    등록 목록과 안 맞는 언급이 있을 때만 가져온다(`_needs_standard`); 조회 실패는 코드 없이 진행. 경고
    `"{작물}: 농가 등록 작물에 없음 — 통화 언급대로 일지 생성(미등록 작물)"`. 일지에는 **메타 표 `작물` 행에
-   `(미등록 작물)` 만** 붙는다(internal·public 공통, `DiaryResult.crop_registered` / `structured.crop_registered`).
+   `(미등록 작물)` 만** 붙는다(internal·public 공통, `DiaryResult.crop_registered` 는 렌더 운반용 — API `structured` 에는 내지 않음).
    이전에는 등록 목록 밖 언급을 버리고 대표작물로 가정해 토마토 통화가 파프리카 일지로 나갔다.
 5. 언급이 **하나도 없으면** **대표작물**(`reprsntPrdlstCnt == 1`) → 없으면 첫 작물 → 경고 "통화에서 작물이 특정되지 않아 … 로 가정"
 6. 농가 작물 목록 자체가 없고 언급도 없으면 `UNRESOLVED_CROP` 1건 + 경고
