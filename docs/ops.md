@@ -111,6 +111,7 @@ pytest -q
 ./scripts/run_local.sh                       # fake 파이프라인, 무인증, :7003
 ./scripts/curl_flow.sh voice-recordings records/<...>.ogg   # MinIO 자격증명(S3_ENDPOINT_URL + 전용 사용자 키) + STT_API_KEY 필요
 ./scripts/daily_flow.sh <call_id_1> <call_id_2>           # 위 플로우로 terminal 된 call 들을 날짜별 일지로 집계
+CROP_CODE=0804MM CROP_NM=딸기 ./scripts/daily_flow.sh <call_id>   # 작물 고정 모드(crop) — 지정 작물 1건만, 타작물 항목 제외 경고 확인
 docker compose up --build                    # 컨테이너 검증(.env 필요)
 ```
 

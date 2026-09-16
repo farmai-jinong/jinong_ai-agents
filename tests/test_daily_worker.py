@@ -168,3 +168,52 @@ async def test_daily_multiple_unresolved_crops_no_collision(client, app, stt_moc
     # 두 번째 미확정 일지도 산출물 GET 으로 접근 가능
     r = await client.get(f"/v1/daily-diaries/{DAILY['diary_id']}/artifacts/diary/unresolved-2")
     assert r.status_code == 200 and "콩" in r.text
+
+
+async def test_daily_fixed_crop_hints_wiring_and_transcript_crops(client, app, stt_mock, s3_env):
+    """`crop` → ctx.hints(prdlst_*, crop_fixed) 로 전달되고, hints 만으로는 crop_fixed 를 못 켠다. 전사에는 판정 작물이 실린다."""
+    from app.schemas.pipeline import DiaryArtifact, PipelineResult
+
+    rt = app.state.rt
+    await _complete_calls(client, app)
+    seen: list = []
+
+    class Capture:
+        async def run(self, transcript, ctx):
+            seen.append(ctx)
+            return PipelineResult(diaries=[DiaryArtifact(prdlst_code=ctx.hints.prdlst_code, prdlst_nm=ctx.hints.prdlst_nm or "?",
+                                                         diary_date="2026-08-20", status="PARTIAL", markdown="# a", markdown_public="# a"),
+                                           DiaryArtifact(prdlst_code=None, prdlst_nm="콩", diary_date="2026-08-20",
+                                                         status="EMPTY", markdown="# b", markdown_public="# b")],
+                                  report=None, model="fake", prompt_version="0")
+
+    orig = rt.pipeline
+    rt.pipeline = Capture()
+    try:
+        r = await client.post("/v1/daily-diaries", json={**DAILY, "diary_id": "daily_fixed",
+                                                         "crop": {"prdlst_code": "0803MM", "prdlst_nm": "토마토"},
+                                                         "metadata": {"hints": {"prdlst_code": "0804MM", "farmer_engn_id": "1"}}})
+        assert r.status_code == 201, r.text
+        r = await client.post("/v1/daily-diaries", json={**DAILY, "diary_id": "daily_auto",
+                                                         "metadata": {"hints": {"prdlst_code": "0804MM", "crop_fixed": True}}})
+        assert r.status_code == 201, r.text
+        await rt.worker.drain()
+    finally:
+        rt.pipeline = orig
+
+    by_id = {c.call_id: c for c in seen}
+    fixed, auto = by_id["daily_fixed"], by_id["daily_auto"]
+    assert fixed.hints.crop_fixed is True and (fixed.hints.prdlst_code, fixed.hints.prdlst_nm) == ("0803MM", "토마토")
+    assert fixed.hints.farmer_engn_id == "1" and fixed.hints.diary_date == "2026-08-20"
+    assert fixed.metadata["daily"]["crop"] == {"prdlst_code": "0803MM", "prdlst_nm": "토마토"}
+    assert auto.hints.crop_fixed is False and auto.hints.prdlst_code == "0804MM" and auto.metadata["daily"]["crop"] is None
+
+    body = (await client.get("/v1/daily-diaries/daily_fixed")).json()
+    assert body["status"] == "COMPLETED"
+    tr = (await client.get("/v1/daily-diaries/daily_fixed/transcript")).json()
+    assert tr["crops"] == [{"prdlst_code": "0803MM", "prdlst_nm": "토마토", "status": "PARTIAL"},
+                           {"prdlst_code": None, "prdlst_nm": "콩", "status": "EMPTY"}]
+    assert [(d["prdlst_code"], d["prdlst_nm"], d["status"]) for d in body["result"]["diaries"]] == \
+        [(c["prdlst_code"], c["prdlst_nm"], c["status"]) for c in tr["crops"]]
+    md = (await rt.s3.get_bytes(rt.settings.s3_bucket, "agents/voicecall/daily/daily_fixed/transcript/merged.md")).decode()
+    assert "- 판정 작물: 토마토(0803MM, PARTIAL) · 콩(코드 없음, EMPTY)" in md

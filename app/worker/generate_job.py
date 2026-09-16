@@ -16,7 +16,7 @@ from ..runtime import Runtime
 from ..schemas.pipeline import CallContext, CallHints, CallSummaryResult, DiaryArtifact, Participant, PipelineResult
 from ..services.artifacts import artifact_keys, persist_result
 from ..services.results import utc
-from ..services.transcripts import apply_speaker_map, merge_transcripts, transcript_markdown
+from ..services.transcripts import apply_crops, apply_speaker_map, merge_transcripts, transcript_markdown
 
 log = logging.getLogger(__name__)
 
@@ -274,15 +274,14 @@ async def run_generate(rt: Runtime, call_id: str) -> None:
         await _notify_terminal(rt, c)
         return
 
-    # 성공 — 산출물 저장. 추정된 역할(농가/컨설턴트)을 전사에 되먹여 merged.json/md 를 다시 쓴다
-    # (처음 쓸 때는 아직 역할을 모른다 — 같은 키를 덮어쓰므로 GET /transcript 가 곧바로 role 을 본다).
-    if result.speaker_map:
-        transcript = apply_speaker_map(transcript, result.speaker_map)
-        try:
-            await rt.s3.put_json(tkey, transcript.model_dump(mode="json"))
-            await rt.s3.put_text(rt.s3.keys.transcript_md(call_id), transcript_markdown(transcript))
-        except Exception as e:  # noqa: BLE001
-            log.warning("[%s] transcript rewrite with roles failed: %s", call_id, e)
+    # 성공 — 산출물 저장. 추정된 역할(농가/컨설턴트)과 판정 작물(`crops[]`)을 전사에 되먹여 merged.json/md 를
+    # 다시 쓴다(처음 쓸 때는 둘 다 모른다 — 같은 키를 덮어쓰므로 GET /transcript 가 곧바로 role·crops 를 본다).
+    transcript = apply_crops(apply_speaker_map(transcript, result.speaker_map), result.diaries)
+    try:
+        await rt.s3.put_json(tkey, transcript.model_dump(mode="json"))
+        await rt.s3.put_text(rt.s3.keys.transcript_md(call_id), transcript_markdown(transcript))
+    except Exception as e:  # noqa: BLE001
+        log.warning("[%s] transcript rewrite with roles/crops failed: %s", call_id, e)
     all_warnings = warnings + list(result.warnings or [])
     # 통화 단순요약 — 일지가 실질 내용을 가질 때만 만든다(잡담 통화에 LLM 을 쓰지 않는다).
     summary: CallSummaryResult | None = None

@@ -124,5 +124,58 @@ def test_summary_and_transcript_available(client, completed_call):
     call_id = completed_call["call_id"]
     r = client.get(f"/v1/calls/{call_id}/transcript")
     assert r.status_code == 200 and r.json()["segments"], r.text[:200]
+    # 전사에 판정 작물 동봉 — result.diaries 와 같은 (코드, 이름, 상태)
+    want = [(d["prdlst_code"], d["prdlst_nm"], d["status"]) for d in completed_call["detail"]["result"]["diaries"]]
+    got = [(c["prdlst_code"], c["prdlst_nm"], c["status"]) for c in r.json().get("crops", [])]
+    assert got == want, f"transcript.crops {got} != result.diaries {want}"
     r = client.get(f"/v1/calls/{call_id}/artifacts/summary")
     assert r.status_code in (200, 404), r.text[:200]      # 실질 내용 없는 일지면 요약 생략(NOT_READY) 허용
+
+
+def _poll_daily(client, diary_id: str) -> dict:
+    deadline = time.monotonic() + 10 * 60
+    detail = None
+    while time.monotonic() < deadline:
+        detail = client.get(f"/v1/daily-diaries/{diary_id}", params={"inline": "false"}).json()
+        if detail["status"] in ("COMPLETED", "EMPTY", "FAILED"):
+            return detail
+        time.sleep(POLL_SEC)
+    raise AssertionError(f"daily {diary_id} 10분 내 종료 안 됨: {detail}")
+
+
+def test_fixed_crop_daily(client, completed_call, e2e):
+    """작물 고정 모드: 스모크 통화(딸기·파프리카 2작물)를 딸기로 고정 → 일지 1건, crop 에코, 전사 crops 1건, 다른 작물 재-POST 422.
+
+    LLM 1회 추가(약 1분). 상단 fixture 의 COMPLETED 통화를 멤버로 쓴다.
+    """
+    call_id = completed_call["call_id"]
+    diaries = completed_call["detail"]["result"]["diaries"]
+    fixed_nm = next((d["prdlst_nm"] for d in diaries if d["prdlst_nm"] == "딸기"), diaries[0]["prdlst_nm"])
+    other_nm = next((d["prdlst_nm"] for d in diaries if d["prdlst_nm"] != fixed_nm), None)
+    started = completed_call["detail"].get("started_at") or datetime.now(UTC).isoformat()
+    diary_date = started[:10]
+    diary_id = f"{call_id}-fixed"
+    body = {"diary_id": diary_id, "diary_date": diary_date, "call_ids": [call_id],
+            "crop": {"prdlst_nm": fixed_nm}, "metadata": {"hints": {}}}
+    r = client.post("/v1/daily-diaries", json=body)
+    assert r.status_code in (200, 201), r.text
+    assert r.json()["crop"] == {"prdlst_code": None, "prdlst_nm": fixed_nm}, r.json()["crop"]
+    t0 = time.monotonic()
+    d = _poll_daily(client, diary_id)
+    assert d["status"] == "COMPLETED", f"status={d['status']} error={d.get('error')} gen={d.get('generation')}"
+    assert d["crop"]["prdlst_nm"] == fixed_nm
+    res = d["result"]
+    assert len(res["diaries"]) == 1, [(x["prdlst_nm"], x["status"]) for x in res["diaries"]]
+    only = res["diaries"][0]
+    assert only["prdlst_nm"] == fixed_nm and only["diary_date"] == diary_date, only
+    assert only["status"] in ("OK", "PARTIAL", "EMPTY"), only
+    warns = d["generation"]["warnings"]
+    if other_nm:
+        assert any("작물 고정" in w for w in warns), f"타작물({other_nm}) 제외 경고 없음: {warns}"
+    tr = client.get(f"/v1/daily-diaries/{diary_id}/transcript").json()
+    assert [(c["prdlst_nm"], c["status"]) for c in tr["crops"]] == [(only["prdlst_nm"], only["status"])], tr.get("crops")
+    # 같은 diary_id 에 다른 작물 → 422 CROP_MISMATCH
+    r = client.post("/v1/daily-diaries", json={**body, "crop": {"prdlst_nm": other_nm or "가지"}})
+    assert r.status_code == 422 and r.json()["detail"]["code"] == "CROP_MISMATCH", r.text
+    print(f"[smoke] fixed-crop daily={diary_id} crop={fixed_nm} code={only['prdlst_code']} status={only['status']} "
+          f"elapsed={time.monotonic() - t0:.0f}s warnings={warns}")

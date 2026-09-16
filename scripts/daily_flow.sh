@@ -3,6 +3,7 @@
 #   ./scripts/daily_flow.sh <call_id> [call_id...]
 #   AGENT_URL=http://127.0.0.1:7003 AGENT_API_KEY=... FARM_TOKEN=<농가 JWT> \
 #     DIARY_ID=daily_farmer1_20260821 DIARY_DATE=2026-08-21 ./scripts/daily_flow.sh call-1 call-2
+#   CROP_CODE=0804MM CROP_NM=딸기 ./scripts/daily_flow.sh call-1     # 작물 고정 모드(crop) — 둘 중 하나만 줘도 됨
 # 전제: call_ids 전부 terminal(COMPLETED/EMPTY)이고 1개 이상 COMPLETED — 아니면 409/422.
 set -euo pipefail
 [ $# -ge 1 ] || { echo "usage: $0 <call_id> [call_id...]" >&2; exit 2; }
@@ -12,11 +13,15 @@ DIARY_DATE="${DIARY_DATE:-$(date +%Y-%m-%d)}"
 AUTH=(); [ -n "${AGENT_API_KEY:-}" ] && AUTH=(-H "Authorization: Bearer $AGENT_API_KEY")
 JSON=(-H 'Content-Type: application/json')
 CALL_IDS=$(printf '"%s",' "$@"); CALL_IDS="[${CALL_IDS%,}]"
+CROP=""
+if [ -n "${CROP_CODE:-}${CROP_NM:-}" ]; then
+  CROP=$(python3 -c 'import json,os; print(json.dumps({k: v for k, v in {"prdlst_code": os.environ.get("CROP_CODE"), "prdlst_nm": os.environ.get("CROP_NM")}.items() if v}, ensure_ascii=False))')
+fi
 
-echo "==> trigger $DIARY_ID ($DIARY_DATE, calls=$CALL_IDS)"
+echo "==> trigger $DIARY_ID ($DIARY_DATE, calls=$CALL_IDS${CROP:+, crop=$CROP})"
 curl -fsS "${AUTH[@]}" "${JSON[@]}" -X POST "$AGENT_URL/v1/daily-diaries" -d @- <<EOF_JSON | head -c 400; echo
 {"diary_id":"$DIARY_ID","diary_date":"$DIARY_DATE","call_ids":$CALL_IDS,
- "farm_access_token":"${FARM_TOKEN:-}"}
+ "farm_access_token":"${FARM_TOKEN:-}"${CROP:+, "crop": $CROP}}
 EOF_JSON
 
 echo "==> polling"

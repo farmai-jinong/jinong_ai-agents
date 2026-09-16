@@ -48,12 +48,20 @@ class TranscriptFile(BaseModel):
     error: str | None = None
 
 
+class TranscriptCrop(BaseModel):
+    """이 전사로 판정된 작물 1건 — 생성 결과 `diaries[]` 의 (코드, 이름, 상태) 와 같은 값."""
+    prdlst_code: str | None = None  # 미확정이면 None (S3 키의 'unresolved' 는 저장용 — 여기서는 쓰지 않음)
+    prdlst_nm: str
+    status: str                     # OK | PARTIAL | EMPTY | UNRESOLVED_CROP — 그 작물 일지의 상태
+
+
 class MergedTranscript(BaseModel):
     call_id: str
     files: list[TranscriptFile] = Field(default_factory=list)
     segments: list[TranscriptSegment] = Field(default_factory=list)
     speakers: list[str] = Field(default_factory=list)   # speaker_key 최초 등장 순
     speaker_map: dict[str, Role] = Field(default_factory=dict)   # speaker_key → 역할 (생성 후 채워짐)
+    crops: list[TranscriptCrop] = Field(default_factory=list)    # 판정 작물 (생성 후 apply_crops 가 채움; 그 전·EMPTY·FAILED 는 [])
     total_duration_sec: float = 0.0
     text: str = ""                                       # "[f0:A] …" 한 줄씩 (프롬프트/사람용)
 

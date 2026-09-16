@@ -19,8 +19,9 @@ from ..db.models import Call, CallAudio, DailyArtifact, DailyDiary, utcnow
 from ..runtime import Runtime
 from ..schemas.pipeline import CallContext, CallHints, Participant, PipelineResult
 from ..services.artifacts import artifact_keys, persist_daily_result
+from ..services.daily import stored_crop
 from ..services.results import utc
-from ..services.transcripts import apply_speaker_map, merge_calls, transcript_markdown
+from ..services.transcripts import apply_crops, apply_speaker_map, merge_calls, transcript_markdown
 
 log = logging.getLogger(__name__)
 
@@ -32,6 +33,12 @@ def build_daily_context(dd: DailyDiary, calls: list[Call]) -> CallContext:
     if isinstance(dd.metadata_json, dict) and isinstance(dd.metadata_json.get("hints"), dict):
         hints_raw = dict(dd.metadata_json["hints"])
     hints_raw["diary_date"] = dd.diary_date   # 집계 날짜로 고정 (diary_date_for 가 최우선으로 사용)
+    # 작물 고정 모드: 요청 `crop` 이 hints.prdlst_* 를 이기고, crop_fixed 는 crop 이 있을 때만 켜진다(hints 로는 못 켬)
+    crop = stored_crop(dd)
+    if crop:
+        hints_raw["prdlst_code"] = crop.get("prdlst_code")
+        hints_raw["prdlst_nm"] = crop.get("prdlst_nm") or crop.get("prdlst_code")
+    hints_raw["crop_fixed"] = bool(crop)
     hints = CallHints(**{k: v for k, v in hints_raw.items() if k in CallHints.model_fields})
 
     participants: list[Participant] = []
@@ -45,7 +52,7 @@ def build_daily_context(dd: DailyDiary, calls: list[Call]) -> CallContext:
 
     metadata: dict[str, Any] = dict(dd.metadata_json or {})
     metadata["daily"] = {"diary_date": dd.diary_date, "call_ids": [c.call_id for c in ordered],
-                         "call_count": len(ordered)}
+                         "call_count": len(ordered), "crop": crop}
     return CallContext(
         call_id=dd.diary_id, started_at=utc(started), ended_at=utc(ended),
         participants=participants, farm=farm, metadata=metadata,
@@ -179,13 +186,13 @@ async def run_daily_generate(rt: Runtime, diary_id: str) -> None:
     # 성공 — 산출물 저장 (daily 는 작물별 일지만: result.report 는 버린다)
     if result.report is not None:
         log.info("[%s] discarding report artifact (daily scope is diary-only)", diary_id)
-    if result.speaker_map:   # 역할(농가/컨설턴트)을 전사에 되먹여 merged.json/md 를 다시 쓴다
-        transcript = apply_speaker_map(transcript, result.speaker_map)
-        try:
-            await rt.s3.put_json(tkey, transcript.model_dump(mode="json"))
-            await rt.s3.put_text(rt.s3.keys.daily_transcript_md(diary_id), transcript_markdown(transcript))
-        except Exception as e:  # noqa: BLE001
-            log.warning("[%s] daily transcript rewrite with roles failed: %s", diary_id, e)
+    # 역할(농가/컨설턴트)과 판정 작물을 전사에 되먹여 merged.json/md 를 다시 쓴다
+    transcript = apply_crops(apply_speaker_map(transcript, result.speaker_map), result.diaries)
+    try:
+        await rt.s3.put_json(tkey, transcript.model_dump(mode="json"))
+        await rt.s3.put_text(rt.s3.keys.daily_transcript_md(diary_id), transcript_markdown(transcript))
+    except Exception as e:  # noqa: BLE001
+        log.warning("[%s] daily transcript rewrite with roles/crops failed: %s", diary_id, e)
     all_warnings = warnings + list(result.warnings or [])
     async with rt.db.session() as s:
         dd = await repo.get_daily(s, diary_id)

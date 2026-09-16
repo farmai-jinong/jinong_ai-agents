@@ -20,6 +20,7 @@ from ..schemas.calls import (
 from ..schemas.daily import DailyDiaryDetail, DailyDiaryListItem
 from ..schemas.pipeline import Participant
 from .artifacts import build_daily_result_view, build_result_view
+from .daily import stored_crop
 
 
 def utc(dt: datetime | None) -> datetime | None:
@@ -85,7 +86,7 @@ async def daily_detail(s: AsyncSession, dd: DailyDiary, *, inline: bool = True,
     artifacts = await repo.list_daily_artifacts(s, dd.diary_id)
     return DailyDiaryDetail(
         diary_id=dd.diary_id, diary_date=dd.diary_date, status=dd.status,
-        call_ids=list(dd.call_ids_json or []),
+        call_ids=list(dd.call_ids_json or []), crop=stored_crop(dd),
         created_at=utc(dd.created_at), updated_at=utc(dd.updated_at),
         metadata=dd.metadata_json, note=note,
         generation=GenerationView(run=dd.generation_run, attempts=dd.generation_attempts, state=dd.gen_state,

@@ -209,3 +209,75 @@ async def test_list_cursor_pagination(client, app, stt_mock):
 
     r = await client.get("/v1/daily-diaries", params={"cursor": "not-a-cursor"})
     assert r.status_code == 422 and r.json()["detail"]["code"] == "INVALID_CURSOR"
+
+
+# --- 작물 고정 모드 (`crop`) -------------------------------------------------
+
+FIXED = {"diary_id": "daily_1_u1_20260820_0803MM", "diary_date": "2026-08-20", "call_ids": ["c1", "c2"],
+         "crop": {"prdlst_code": "0803MM", "prdlst_nm": "토마토"}}
+
+
+async def test_create_with_crop_and_detail_exposes_it(client, app, stt_mock):
+    await _complete_calls(client, app)
+    r = await client.post("/v1/daily-diaries", json=FIXED)
+    assert r.status_code == 201, r.text
+    assert r.json()["crop"] == {"prdlst_code": "0803MM", "prdlst_nm": "토마토"}
+    assert r.json()["metadata"]["crop"] == {"prdlst_code": "0803MM", "prdlst_nm": "토마토"}
+    await app.state.rt.worker.drain()
+
+    body = (await client.get(f"/v1/daily-diaries/{FIXED['diary_id']}")).json()
+    assert body["status"] == "COMPLETED" and body["crop"]["prdlst_code"] == "0803MM"
+    diaries = body["result"]["diaries"]
+    assert len(diaries) == 1 and diaries[0]["prdlst_code"] == "0803MM" and diaries[0]["prdlst_nm"] == "토마토"
+    assert diaries[0]["diary_date"] == "2026-08-20"
+    # 자동 모드 응답에는 crop=null
+    r = await client.post("/v1/daily-diaries", json=DAILY)
+    assert r.status_code == 201 and r.json()["crop"] is None
+
+
+async def test_crop_validation(client, app, stt_mock):
+    await _complete_calls(client, app)
+    for bad in ({}, {"prdlst_code": "한글코드"}, {"prdlst_nm": "   "}, {"prdlst_code": "", "prdlst_nm": ""}):
+        r = await client.post("/v1/daily-diaries", json={**FIXED, "diary_id": "d-crop-bad", "crop": bad})
+        assert r.status_code == 422, (bad, r.text)
+    r = await client.post("/v1/daily-diaries", json={**FIXED, "diary_id": "d-crop-nm", "crop": {"prdlst_nm": " 딸기 "}})
+    assert r.status_code == 201 and r.json()["crop"] == {"prdlst_code": None, "prdlst_nm": "딸기"}
+    await app.state.rt.worker.drain()
+    body = (await client.get("/v1/daily-diaries/d-crop-nm")).json()
+    assert body["status"] == "COMPLETED" and body["result"]["diaries"][0]["prdlst_nm"] == "딸기"
+
+
+async def test_crop_mismatch_on_repost(client, app, stt_mock):
+    await _complete_calls(client, app)
+    assert (await client.post("/v1/daily-diaries", json=FIXED)).status_code == 201
+    # 같은 diary_id 에 다른 작물 → 422 (큐 대기 중이어도 상태와 무관하게)
+    r = await client.post("/v1/daily-diaries", json={**FIXED, "crop": {"prdlst_code": "0804MM", "prdlst_nm": "딸기"}})
+    assert r.status_code == 422 and r.json()["detail"]["code"] == "CROP_MISMATCH"
+    await app.state.rt.worker.drain()
+    r = await client.post("/v1/daily-diaries", json={**FIXED, "crop": {"prdlst_nm": "딸기"}})
+    assert r.status_code == 422 and r.json()["detail"]["code"] == "CROP_MISMATCH"
+    # 같은 작물(이름 표기만 다름) → 통과; crop 생략 + metadata 동봉 재-POST → crop 유지
+    r = await client.post("/v1/daily-diaries", json={**FIXED, "crop": {"prdlst_code": "0803MM"}})
+    assert r.status_code == 200 and r.json()["crop"]["prdlst_nm"] == "토마토"
+    await app.state.rt.worker.drain()
+    r = await client.post("/v1/daily-diaries", json={"diary_id": FIXED["diary_id"], "diary_date": "2026-08-20",
+                                                     "call_ids": ["c1", "c2"], "metadata": {"hints": {"farmer_engn_id": "1"}}})
+    assert r.status_code == 200, r.text
+    assert r.json()["crop"] == {"prdlst_code": "0803MM", "prdlst_nm": "토마토"}
+    assert r.json()["metadata"]["hints"] == {"farmer_engn_id": "1"} and r.json()["metadata"]["crop"]["prdlst_code"] == "0803MM"
+    await app.state.rt.worker.drain()
+    body = (await client.get(f"/v1/daily-diaries/{FIXED['diary_id']}")).json()
+    assert body["status"] == "COMPLETED" and body["result"]["diaries"][0]["prdlst_code"] == "0803MM"
+    # 자동 모드로 만든 diary_id 에 crop 을 붙여 재-POST → 모드 전환 금지
+    assert (await client.post("/v1/daily-diaries", json=DAILY)).status_code == 201
+    r = await client.post("/v1/daily-diaries", json={**DAILY, "crop": {"prdlst_code": "0803MM"}})
+    assert r.status_code == 422 and r.json()["detail"]["code"] == "CROP_MISMATCH"
+
+
+async def test_crop_takes_precedence_over_hints(client, app, stt_mock):
+    await _complete_calls(client, app)
+    r = await client.post("/v1/daily-diaries", json={**FIXED, "metadata": {"hints": {"prdlst_code": "0804MM", "prdlst_nm": "딸기"}}})
+    assert r.status_code == 201, r.text
+    await app.state.rt.worker.drain()
+    body = (await client.get(f"/v1/daily-diaries/{FIXED['diary_id']}")).json()
+    assert [d["prdlst_code"] for d in body["result"]["diaries"]] == ["0803MM"]

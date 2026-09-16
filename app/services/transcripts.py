@@ -13,7 +13,8 @@ from typing import Any
 
 from ..db.models import Call, CallAudio
 from ..db.repo import order_audio
-from ..schemas.transcript import MergedTranscript, Role, TranscriptFile, TranscriptSegment
+from ..schemas.pipeline import DiaryArtifact
+from ..schemas.transcript import MergedTranscript, Role, TranscriptCrop, TranscriptFile, TranscriptSegment
 
 ROLE_KO: dict[str, str | None] = {"farmer": "농가", "consultant": "컨설턴트", "unknown": None}
 
@@ -146,11 +147,31 @@ def apply_speaker_map(t: MergedTranscript, speaker_map: dict[str, str] | None) -
     })
 
 
+def apply_crops(t: MergedTranscript, diaries: Sequence[DiaryArtifact] | None) -> MergedTranscript:
+    """생성 결과의 작물별 일지(`PipelineResult.diaries`)에서 판정 작물을 전사에 되먹인다 (순수 함수).
+
+    백엔드가 전사(`GET …/transcript` = merged.json)만 보고도 그 통화가 어떤 작물로 판정됐는지 알 수 있게 한다.
+    순서·값은 `result.diaries[]` 의 (prdlst_code, prdlst_nm, status) 그대로 — 미확정 코드는 None 으로 둔다.
+    """
+    crops = [TranscriptCrop(prdlst_code=d.prdlst_code, prdlst_nm=d.prdlst_nm, status=d.status) for d in (diaries or [])]
+    return t.model_copy(update={"crops": crops})
+
+
+def crops_line(t: MergedTranscript) -> str | None:
+    """merged.md 헤더용 한 줄: `판정 작물: 딸기(0804MM, OK) · 콩(코드 없음, EMPTY)`. 판정 전이면 None."""
+    if not t.crops:
+        return None
+    return "판정 작물: " + " · ".join(f"{c.prdlst_nm}({c.prdlst_code or '코드 없음'}, {c.status})" for c in t.crops)
+
+
 def transcript_markdown(t: MergedTranscript, speaker_map: dict[str, str] | None = None) -> str:
     """사람이 읽는 병합 전사 (S3 transcript/merged.md). speaker_map 생략 시 전사에 실린 역할을 쓴다."""
     mp: dict[str, str] = dict(speaker_map or t.speaker_map or {})
     lines = [f"# 통화 전사 — {t.call_id}", "",
-             f"- 파일 수: {len(t.files)} · 총 길이: {_fmt_ts(t.total_duration_sec)} · 세그먼트: {len(t.segments)}", ""]
+             f"- 파일 수: {len(t.files)} · 총 길이: {_fmt_ts(t.total_duration_sec)} · 세그먼트: {len(t.segments)}"]
+    if (cl := crops_line(t)) is not None:
+        lines.append(f"- {cl}")
+    lines.append("")
     for s in t.segments:
         label = s.speaker_key
         ko = ROLE_KO.get(mp.get(s.speaker_key, ""))

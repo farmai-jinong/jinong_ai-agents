@@ -118,3 +118,24 @@ def test_apply_speaker_map_unknown_and_missing():
     assert transcript_markdown(t2).count("농가(f0:A):") == 1
     assert "] f0:B: " in transcript_markdown(t2)                         # unknown 은 라벨을 안 붙인다
     assert apply_speaker_map(t, None).speaker_map == {"f0:A": "unknown", "f0:B": "unknown"}
+
+
+# --- apply_crops (판정 작물 되먹임) -------------------------------------------
+
+from app.schemas.pipeline import DiaryArtifact  # noqa: E402
+from app.services.transcripts import apply_crops  # noqa: E402
+
+
+def test_apply_crops_is_pure_and_renders_header_line():
+    t = merge_transcripts("c", [_audio(1, stt_seconds=5)])
+    assert t.crops == [] and "판정 작물" not in transcript_markdown(t)
+    diaries = [DiaryArtifact(prdlst_code="0804MM", prdlst_nm="딸기", diary_date="2026-08-20", status="OK", markdown="", markdown_public=""),
+               DiaryArtifact(prdlst_code=None, prdlst_nm="콩", diary_date="2026-08-20", status="UNRESOLVED_CROP", markdown="", markdown_public="")]
+    t2 = apply_crops(t, diaries)
+    assert t.crops == []                                             # 원본 불변
+    assert [c.model_dump() for c in t2.crops] == [{"prdlst_code": "0804MM", "prdlst_nm": "딸기", "status": "OK"},
+                                                  {"prdlst_code": None, "prdlst_nm": "콩", "status": "UNRESOLVED_CROP"}]
+    md = transcript_markdown(t2)
+    assert "- 판정 작물: 딸기(0804MM, OK) · 콩(코드 없음, UNRESOLVED_CROP)" in md
+    assert "crops" in t2.model_dump(mode="json")
+    assert apply_crops(t2, []).crops == []

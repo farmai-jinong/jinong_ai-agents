@@ -140,3 +140,124 @@ async def test_select_crops_node_survives_standard_list_failure():
     out = await select_crops({"facts": facts(crops_mentioned=[CropMention(name_raw="토마토", matched_name="토마토", evidence=[0])]),
                               "farm": REGISTERED, "ctx": ctx}, _cfg(_Ap(fail=True)))
     assert [(t.prdlst_code, t.prdlst_nm, t.registered) for t in out["crop_targets"]] == [(None, "토마토", False)]
+
+
+# --- 작물 고정 모드 (daily `crop` → hints.crop_fixed) --------------------------
+
+from app.agents.nodes.select_crops import choose_fixed_target, route_facts_fixed  # noqa: E402
+from app.agents.schemas import ObservationFact, ProductFact  # noqa: E402
+from app.schemas.pipeline import CallHints  # noqa: E402
+
+
+def _fw(name, crop):
+    return FarmworkFact(name=name, crop=crop, when="today", date_hint=None, detail=None, evidence=[1])
+
+
+def _pest(name, crop):
+    return PestFact(name=name, kind="병", status="발생", severity="경미", severity_raw=None, location=None, note=None,
+                    crop=crop, evidence=[2])
+
+
+def test_fixed_by_code_in_farm():
+    t, others, w = choose_fixed_target(facts(), FARM, "0803MM", None)
+    assert (t.prdlst_code, t.prdlst_nm, t.reason, t.registered, t.resolved) == ("0803MM", "토마토", "fixed", True, True)
+    assert [o.prdlstNm for o in others] == ["딸기", "포도"] and w == []
+
+
+def test_fixed_by_name_only_fills_code_from_farm():
+    t, _, w = choose_fixed_target(facts(), FARM, None, "토마토")
+    assert (t.prdlst_code, t.prdlst_nm, t.registered) == ("0803MM", "토마토", True) and w == []
+
+
+def test_fixed_code_wins_over_name_when_both_given():
+    t, _, _ = choose_fixed_target(facts(), FARM, "0603MM", "딸기")     # 코드가 등록 목록에 있으면 이름은 무시
+    assert (t.prdlst_code, t.prdlst_nm) == ("0603MM", "포도")
+
+
+def test_fixed_unregistered_uses_standard_code_and_warns():
+    t, others, w = choose_fixed_target(facts(), REGISTERED, None, "토마토", STANDARD)
+    assert (t.prdlst_code, t.prdlst_nm, t.registered, t.resolved) == ("0803MM", "토마토", False, True)
+    assert [o.prdlstNm for o in others] == ["딸기", "파프리카"]
+    assert w == ["토마토: 농가 등록 작물에 없음 — 고정 작물로 일지 생성(미등록 작물)"]
+
+
+def test_fixed_unresolved_keeps_name_and_is_not_unresolved_crop():
+    t, _, w = choose_fixed_target(facts(), REGISTERED, None, "장인콘", None)
+    assert (t.prdlst_code, t.prdlst_nm, t.registered, t.resolved) == (None, "장인콘", False, True)
+    assert any("표준 품목코드도 못 찾음" in x for x in w)
+
+
+def test_fixed_no_farm_crops_is_registered_without_warning():
+    t, others, w = choose_fixed_target(facts(), FarmContext(), "0803MM", "토마토")
+    assert (t.prdlst_code, t.prdlst_nm, t.registered) == ("0803MM", "토마토", True) and others == [] and w == []
+
+
+def test_fixed_others_include_mentions_not_matching_fixed_or_farm():
+    f = facts(crops_mentioned=[CropMention(name_raw="방울토마토", matched_name=None, evidence=[0]),   # 토마토 substring → 등록 항목
+                               CropMention(name_raw="고추", matched_name=None, evidence=[1]),
+                               CropMention(name_raw="딸기", matched_name="딸기", evidence=[2])])
+    _, others, _ = choose_fixed_target(f, FARM, "0804MM", None)
+    assert [o.prdlstNm for o in others] == ["토마토", "포도", "고추"]
+
+
+def test_route_facts_fixed_excludes_other_crops_and_counts():
+    f = facts(crops_mentioned=[CropMention(name_raw="고추", matched_name=None, evidence=[0])],
+              farmworks=[_fw("관수", "딸기"), _fw("적심", None), _fw("적과", "포도"), _fw("봉지씌우기", "포도")],
+              pests=[_pest("탄저병", "고추")],
+              observations=[ObservationFact(topic="생육", text="화방 양호", crop="딸기", evidence=[3])],
+              products=[ProductFact(name="칼슘제", category="비료", target=None, dose=None, when="applied", date_hint=None,
+                                    note=None, crop="외계작물", evidence=[4])])
+    t, others, _ = choose_fixed_target(f, FARM, "0804MM", None)
+    routed, w = route_facts_fixed(f, t, others)
+    cf = routed["0804MM"]
+    assert [x.name for x in cf.farmworks] == ["관수", "적심"]          # 딸기 + 미상 포함, 포도 제외
+    assert cf.pests == [] and [x.text for x in cf.observations] == ["화방 양호"]
+    assert [x.name for x in cf.products] == ["칼슘제"]                # 어디에도 안 맞는 이름(잡음)은 포함
+    assert w == ["고추 관련 항목 1건 제외(작물 고정: 딸기)", "포도 관련 항목 2건 제외(작물 고정: 딸기)"]
+    assert not any("대표" in x for x in w)
+
+
+def test_route_facts_fixed_keeps_follow_ups_and_actions():
+    from app.agents.schemas import ActionFact, FollowUpFact
+    f = facts(follow_ups=[FollowUpFact(text="다음 주 재방문", when_hint=None, evidence=[1])],
+              actions=[ActionFact(text="환기 강화", actor="farmer", status="agreed", due_hint=None, evidence=[2])])
+    t, others, _ = choose_fixed_target(f, FARM, "0804MM", None)
+    routed, w = route_facts_fixed(f, t, others)
+    assert len(routed["0804MM"].follow_ups) == 1 and len(routed["0804MM"].actions) == 1 and w == []
+
+
+def test_route_facts_fixed_exact_beats_substring():
+    farm = FarmContext(crops=[CropRef(prdlstCode="0806MM", prdlstNm="방울토마토"), CropRef(prdlstCode="0803MM", prdlstNm="토마토")],
+                       source="farmos", status="ok")
+    f = facts(farmworks=[_fw("유인", "토마토")])
+    t, others, _ = choose_fixed_target(f, farm, "0806MM", None)
+    routed, w = route_facts_fixed(f, t, others)
+    assert routed["0806MM"].farmworks == [] and w == ["토마토 관련 항목 1건 제외(작물 고정: 방울토마토)"]
+    # 등록 목록에 '토마토' 가 없으면 부분 문자열로 고정 작물에 포함
+    farm2 = FarmContext(crops=[CropRef(prdlstCode="0806MM", prdlstNm="방울토마토"), CropRef(prdlstCode="0901MM", prdlstNm="고추")],
+                        source="farmos", status="ok")
+    t, others, _ = choose_fixed_target(f, farm2, "0806MM", None)
+    routed, w = route_facts_fixed(f, t, others)
+    assert [x.name for x in routed["0806MM"].farmworks] == ["유인"] and w == []
+
+
+@pytest.mark.asyncio
+async def test_select_crops_fixed_mode_single_target_and_standard_fetch_policy():
+    f = facts(crops_mentioned=[CropMention(name_raw="딸기", matched_name="딸기", evidence=[0]),
+                               CropMention(name_raw="파프리카", matched_name="파프리카", evidence=[1])],
+              farmworks=[_fw("관수", "딸기"), _fw("적심", "파프리카")])
+    # 코드 지정 → 표준 목록 조회 없음, 대상 1개, 파프리카 항목 제외
+    ap = _Ap()
+    ctx = CallContext(call_id="d1", hints=CallHints(prdlst_code="0804MM", prdlst_nm="딸기", crop_fixed=True))
+    out = await select_crops({"facts": f, "farm": REGISTERED, "ctx": ctx}, _cfg(ap))
+    assert ap.calls == 0 and [(t.prdlst_code, t.reason) for t in out["crop_targets"]] == [("0804MM", "fixed")]
+    assert [x.name for x in out["crop_facts"]["0804MM"].farmworks] == ["관수"]
+    assert out["warnings"] == ["파프리카 관련 항목 1건 제외(작물 고정: 딸기)"]
+    # 이름만 + 등록 목록에 없음 → 표준 목록 1회 조회로 코드 채움
+    ctx = CallContext(call_id="d2", hints=CallHints(prdlst_nm="토마토", crop_fixed=True))
+    out = await select_crops({"facts": f, "farm": REGISTERED, "ctx": ctx}, _cfg(ap))
+    assert ap.calls == 1 and [(t.prdlst_code, t.prdlst_nm, t.registered) for t in out["crop_targets"]] == [("0803MM", "토마토", False)]
+    # crop_fixed 가 아니면 기존 경로(힌트는 추가일 뿐 — 언급 작물도 대상)
+    ctx = CallContext(call_id="d3", hints=CallHints(prdlst_code="0804MM"))
+    out = await select_crops({"facts": f, "farm": REGISTERED, "ctx": ctx}, _cfg(ap))
+    assert len(out["crop_targets"]) == 2

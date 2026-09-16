@@ -120,7 +120,7 @@ Body(선택) `{"ended_at": "...", "duration_sec": 900}` → `202` (`state=ENDED,
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
-| GET | `/v1/calls/{id}/transcript` | 병합 전사 JSON(`MergedTranscript`, 화자 역할 포함). 미준비 `404 NOT_READY` |
+| GET | `/v1/calls/{id}/transcript` | 병합 전사 JSON(`MergedTranscript`, 화자 역할 + **판정 작물 `crops[]`** 포함). 미준비 `404 NOT_READY` |
 | GET | `/v1/calls/{id}/artifacts/summary[?format=json]` | 통화 단순요약 md / JSON (콜백 `content` 와 동일) |
 | GET | `/v1/calls/{id}/artifacts/report[?format=json][&view=public\|internal]` | 보고서 `text/markdown` / JSON. `view` 는 `public`(근거 제거) / `internal`(근거 포함 정본), 생략 시 `API_MARKDOWN_VIEW`(dev `public`, prod `internal`); `format=json` 이면 무시. 그 외 값 `400 INVALID_VIEW` |
 | GET | `/v1/calls/{id}/artifacts/diary/{prdlst_code}[?format=json][&view=public\|internal]` | 작물별 영농일지 md / JSON (`unresolved`, 다건이면 `unresolved-2` … 가능). `view` 규칙 동일 |
@@ -139,6 +139,8 @@ STT 화자 글자(`A`/`B`…)는 **그 요청 안의 등장 순서**일 뿐이�
 ```json
 {"call_id": "…", "speakers": ["f0:A", "f0:B"],
  "speaker_map": {"f0:A": "consultant", "f0:B": "farmer"},
+ "crops": [{"prdlst_code": "0804MM", "prdlst_nm": "딸기", "status": "OK"},
+           {"prdlst_code": null, "prdlst_nm": "콩", "status": "EMPTY"}],
  "segments": [{"file_index": 0, "speaker": "A", "speaker_key": "f0:A", "role": "consultant",
                "start": 0.0, "end": 2.1, "abs_start": 0.0, "abs_end": 2.1, "text": "…"}]}
 ```
@@ -148,6 +150,17 @@ STT 화자 글자(`A`/`B`…)는 **그 요청 안의 등장 순서**일 뿐이�
 - **신뢰도 0.6 미만이면 `unknown`** — 두 화자가 같은 역할로 나오거나 LLM 이 실패한 경우도 마찬가지다. 찍지 않는다.
 - 생성 **전**(STT 직후)에 조회하면 `role` 은 전부 `unknown` 이다. `EMPTY`/`FAILED` 로 끝난 통화도 마찬가지 —
   역할 추정은 일지 생성 파이프라인 안에서만 돈다.
+
+### 판정 작물 (`crops[]`, 2026-09-16)
+
+전사만 보고도 그 통화가 **어떤 작물로 판정됐는지** 알 수 있게, 생성이 끝나면 `merged.json` 에 `crops[]` 를 같이
+되먹인다(`services/transcripts.apply_crops`). `merged.md` 헤더에도 `판정 작물: 딸기(0804MM, OK) · 콩(코드 없음, EMPTY)` 한 줄.
+
+- 항목 = `{prdlst_code, prdlst_nm, status}`. **`GET /v1/calls/{id}` 의 `result.diaries[]` 와 순서·값이 항상 같다**
+  (같은 결과에서 쓴다). 미확정 작물은 `prdlst_code: null`(S3 키의 `unresolved` 는 저장용 표기).
+- `status` 는 그 작물 일지의 상태 `OK | PARTIAL | EMPTY | UNRESOLVED_CROP`.
+- 생성 **전**(STT 직후)·`EMPTY`·`FAILED` 통화는 `[]`. 날짜별 일지의 `/transcript` 도 동일.
+- 기존 필드는 변경 없음(추가만) — 백엔드는 모르는 필드를 무시해도 되고, 콜백에는 싣지 않는다.
 
 목록 커서(`/v1/calls` · `/v1/daily-diaries` 공통): 최신 생성순(`created_at DESC, id DESC`) keyset.
 `next_cursor` 는 **불투명 토큰** — 그대로 `cursor=` 로 되돌리면 다음 페이지, `null` 이면 마지막.
@@ -166,7 +179,8 @@ STT 화자 글자(`A`/`B`…)는 **그 요청 안의 등장 순서**일 뿐이�
  "call_ids": ["c1", "c2", "c3"],
  "farm_access_token": "eyJ…",          // 선택 — 매 트리거마다 새로 보내야 함(아래 참고)
  "callback_url": "https://…", "language": "ko",
- "metadata": {"hints": {"prdlst_code": "…"}}}
+ "metadata": {"hints": {"prdlst_code": "…"}},
+ "crop": {"prdlst_code": "0804MM", "prdlst_nm": "딸기"}}   // 선택 — 작물 고정 모드(아래). 없으면 자동 판정
 ```
 
 - **멱등성**: `diary_id` 가 멱등성 키다(형식은 call_id 와 동일 `[A-Za-z0-9_.:-]{1,128}`). 백엔드가
@@ -193,9 +207,30 @@ STT 화자 글자(`A`/`B`…)는 **그 요청 안의 등장 순서**일 뿐이�
   | `CALLS_NOT_READY` | 409 | `NONE`/`PROCESSING`/`FAILED` call 포함 (FAILED 는 먼저 call regenerate) |
   | `NO_TRANSCRIBED_CALLS` | 422 | `COMPLETED` call 이 하나도 없음 |
   | `FARM_MISMATCH` | 422 | call 들의 `farm.farm_id` 또는 farmer 복합 키 `(engn_id, user_id)` 가 2개 이상 서로 다름 (값이 있는 콜만 검사 — `engn_id` 없는 farmer 는 복합 키 검사에서 제외) |
+  | `CROP_MISMATCH` | 422 | 같은 `diary_id` 재-POST 의 `crop` 이 최초 생성값과 다름(또는 자동 모드 diary 에 `crop` 추가) — 작물 고정 모드 참고 |
 - 병합 전사: 통화를 `started_at` 순으로 이어붙인다. 시간축은 각 통화 길이의 누적(통화 사이 실제 공백은
   표현하지 않음). `transcript.files[].call_id` 로 원본 통화를 식별한다.
 - 산출물 날짜는 요청의 `diary_date` 로 고정된다.
+
+#### 작물 고정 모드 (`crop`, 2026-09-16)
+
+농가가 앱에서 **작물·날짜를 고른** 경우 — 자동 판정 대신 그 작물 일지 **1건만** 만든다.
+
+- `crop: {prdlst_code?, prdlst_nm?}` — 둘 중 **하나 이상**(둘 다 비면 422). `prdlst_code` 는 `[A-Za-z0-9_.:-]{1,64}`,
+  `prdlst_nm` 은 1..64자(NFKC·trim). 응답 `DailyDiaryDetail.crop` 으로 정규화된 요청값을 되돌려 준다(자동 모드는 `null`).
+- **`diary_id` 는 자동 배치와 달라야 한다** — 권장 규칙 `daily_{engnId}_{userId}_{yyyyMMdd}_{prdlstCode}`
+  (예: `daily_18_u123_20260916_0804MM`). `diary_id` 는 ASCII 만 허용하므로 코드 없이 이름만 줄 때는 ASCII 대체(예: `_nocode`).
+- **불변**: 같은 `diary_id` 재-POST 에 다른 `crop`(코드가 다르거나, 코드 없이 이름이 다름) → `422 CROP_MISMATCH`
+  (상태와 무관 — RUNNING 이어도). 자동 모드로 만든 `diary_id` 에 `crop` 을 붙여도 같은 오류(모드 전환은 새 `diary_id` 로).
+  `crop` 을 **생략**한 재-POST 는 기존 값을 유지한다(자동 배치처럼 `metadata` 를 통째로 다시 보내도 살아남는다).
+- `metadata.hints.prdlst_code/prdlst_nm` 과 같이 오면 **`crop` 이 이긴다**(hints 는 자동 모드에서만 "추가 힌트").
+- 파이프라인(`select_crops` 고정 분기, `docs/agent-flow.md` §2.5): 코드는 **농가 등록 목록(코드 일치 → 이름 매칭) → AP 표준
+  품목(이름 정확 일치) → 요청값 그대로** 순으로 채우고, 등록 목록에 없으면 경고 + 메타 표 `(미등록 작물)`. 통화에서
+  **다른 작물로 명시된 사실은 제외**하고 `generation.warnings` 에 `"파프리카 관련 항목 3건 제외(작물 고정: 딸기)"` 로 남긴다.
+  작물이 안 붙은 사실(및 후속·조치)은 고정 작물로 귀속.
+- 결과: `result.diaries` 는 항상 **1건**, `prdlst_code` 는 채워진 코드(못 찾으면 `null`, S3 키 `unresolved`).
+  통화 내용이 전부 다른 작물이면 **`COMPLETED` + `diaries[0].status = "EMPTY"`**(빈 골격), 잡담 통화면 daily 자체가
+  `EMPTY/NO_CONTENT` — 두 경우 모두 정상 종료다.
 
 ### 조회·산출물·재생성
 
@@ -207,12 +242,12 @@ STT 화자 글자(`A`/`B`…)는 **그 요청 안의 등장 순서**일 뿐이�
 | GET | `/v1/daily-diaries?diary_date=&status=&limit=50&cursor=` | 목록 `{items:[{diary_id,diary_date,status,updated_at}], next_cursor}` (`limit` 1..200, 기본 50) |
 | POST | `/v1/daily-diaries/{diary_id}/regenerate` | `{"farm_access_token": "…", "reason": "…"}` → `202`. `409 ALREADY_PROCESSING` / `404 DAILY_NOT_FOUND`. 같은 S3 키 덮어쓰기, `generation.run` +1 |
 
-`DailyDiaryDetail` 은 `CallDetail` 보다 단순하다 — `state`/`stale`/`stt_progress`/`audio`/`participants`/`farm`/`started_at`/`duration_sec` 필드가 **없다**(STT 는 멤버 call 에서 이미 끝난 상태이므로):
+`DailyDiaryDetail` 은 `CallDetail` 보다 단순하다 — `state`/`stale`/`stt_progress`/`audio`/`participants`/`farm`/`started_at`/`duration_sec` 필드가 **없다**(STT 는 멤버 call 에서 이미 끝난 상태이므로). `crop` 은 작물 고정 모드의 요청값(자동 모드 `null`):
 
 ```json
 {
   "diary_id": "daily_u1_20260820", "diary_date": "2026-08-20", "status": "COMPLETED",
-  "call_ids": ["c1", "c2", "c3"], "created_at": "…", "updated_at": "…",
+  "call_ids": ["c1", "c2", "c3"], "crop": null, "created_at": "…", "updated_at": "…",
   "metadata": {...}, "note": null,
   "generation": {"run": 1, "attempts": 1, "state": "IDLE", "started_at": "…", "finished_at": "…",
                  "model": "gemini-3.5-flash", "warnings": [], "usage": {...}},

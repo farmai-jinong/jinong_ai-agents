@@ -31,6 +31,10 @@ class CallHints(BaseModel):
     # (`/voicetalk/public/research/farm-context`) 조회 키로 쓴다. 계약: 백엔드 "AI 영농일지 연동 변경사항" §1·§3.
     farmer_engn_id: str | None = None
     farmer_user_id: str | None = None
+    # 작물 고정 모드 — `prdlst_code`/`prdlst_nm` 을 **유일한** 대상 작물로 쓰고 자동 판정을 하지 않는다
+    # (`select_crops` 고정 분기). 날짜별 일지 `POST /v1/daily-diaries` 의 `crop` 이 있을 때만 워커
+    # (`daily_job.build_daily_context`)가 켠다 — 호출자 hints 로는 켤 수 없다.
+    crop_fixed: bool = False
 
 
 class CallContext(BaseModel):

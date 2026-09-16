@@ -103,6 +103,10 @@ async def test_end_and_get_flow(client, app, stt_mock):
     assert r.status_code == 200
     r = await client.get("/v1/calls/c3/transcript")
     assert r.status_code == 200 and len(r.json()["segments"]) == 4
+    # 전사에 판정 작물 동봉 — result.diaries 와 같은 (코드, 이름, 상태)
+    assert r.json()["crops"] == [{"prdlst_code": "0804MM", "prdlst_nm": "딸기", "status": "OK"}]
+    assert [(d["prdlst_code"], d["prdlst_nm"], d["status"]) for d in res["diaries"]] == \
+        [(c["prdlst_code"], c["prdlst_nm"], c["status"]) for c in r.json()["crops"]]
     # 목록
     r = await client.get("/v1/calls?status=COMPLETED")
     assert r.json()["items"][0]["call_id"] == "c3"

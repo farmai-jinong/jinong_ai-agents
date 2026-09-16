@@ -4,11 +4,16 @@
 (registered=False, 코드는 AP 백엔드 표준 품목 전체 목록에서 정확 일치로 찾고 없으면 None); 언급이 하나도 없으면
 대표작물(reprsntPrdlstCnt==1) → 첫 작물; hints.prdlst_code 우선; 아무것도 없으면 UNRESOLVED_CROP 1건.
 crop=None 사실은 대상 1개면 그쪽, 여러 개면 대표/첫 작물 + warning.
+
+**작물 고정 모드**(`ctx.hints.crop_fixed`, 날짜별 일지 `POST /v1/daily-diaries` 의 `crop`): 자동 판정 없이
+hints.prdlst_code/nm 이 가리키는 작물 **하나만** 대상(`choose_fixed_target`). 코드는 농가 등록 목록 → 표준 품목 순으로
+채우고, 다른 작물로 명시된 사실은 제외하고 경고로 남긴다(`route_facts_fixed`). crop=None 사실은 고정 작물로.
 """
 
 from __future__ import annotations
 
 import logging
+from collections import Counter
 
 from ..deps import get_deps
 from ..mapping.matcher import match
@@ -158,6 +163,86 @@ def route_facts(facts: CallFacts, targets: list[CropTarget], name_to_key: dict[s
     return out, sorted(set(warnings))
 
 
+def _ref_key(c: CropRef) -> str:
+    return c.prdlstCode or c.prdlstNm
+
+
+def choose_fixed_target(facts: CallFacts, farm: FarmContext, code: str | None, nm: str | None,
+                        standard: list[CropRef] | None = None) -> tuple[CropTarget, list[CropRef], list[str]]:
+    """작물 고정 모드의 대상 1건 — returns (target, others, warnings).
+
+    코드 채우기 순서: 농가 등록 목록(코드 일치 → 이름 매칭) → 표준 품목(이름 정확 일치) → 요청값 그대로.
+    `others` = 고정 작물이 아닌 작물들(등록 목록 + 통화 언급) — `route_facts_fixed` 가 "다른 작물" 판정에 쓴다.
+    """
+    warnings: list[str] = []
+    crops = farm.crops
+    standard = standard or []
+    nm = (nm or "").strip() or None
+    found: CropRef | None = None
+    if code:
+        found = next((c for c in crops if c.prdlstCode and c.prdlstCode == code), None)
+    if found is None and nm:
+        found = _match_crop(nm, crops)
+    registered = True
+    if found is not None:
+        target = CropTarget(prdlst_code=found.prdlstCode or code, prdlst_nm=found.prdlstNm, reason="fixed")
+    else:
+        std = None
+        if code:
+            std = next((c for c in standard if c.prdlstCode and c.prdlstCode == code), None)
+        if std is None and nm:
+            std = _match_standard(nm, standard)
+        t_code = (std.prdlstCode if std is not None and std.prdlstCode else None) or code
+        t_nm = (std.prdlstNm if std is not None else None) or nm or code or ""
+        registered = not crops
+        target = CropTarget(prdlst_code=t_code, prdlst_nm=t_nm, reason="fixed", registered=registered)
+        if crops:
+            warnings.append(f"{t_nm}: 농가 등록 작물에 없음 — 고정 작물로 일지 생성(미등록 작물"
+                            + (")" if t_code else ", 표준 품목코드도 못 찾음)"))
+    fixed_ref = CropRef(prdlstCode=target.prdlst_code, prdlstNm=target.prdlst_nm)
+    others: list[CropRef] = []
+    seen = {_ref_key(fixed_ref)}
+    for c in crops:
+        if _ref_key(c) in seen or (found is not None and c is found):
+            continue
+        seen.add(_ref_key(c))
+        others.append(c)
+    for m in facts.crops_mentioned:
+        name = (m.matched_name or m.name_raw or "").strip()
+        if not name or name in seen or _match_crop(name, [fixed_ref]) is not None or _match_crop(name, others) is not None:
+            continue
+        seen.add(name)
+        others.append(CropRef(prdlstNm=name))
+    return target, others, warnings
+
+
+def route_facts_fixed(facts: CallFacts, target: CropTarget, others: list[CropRef]) -> tuple[dict[str, CropFacts], list[str]]:
+    """고정 작물 하나로 사실을 모은다. crop 이 다른 작물로 확인되는 사실은 제외(작물별 건수 경고), 미상·잡음은 포함."""
+    key = target.prdlst_code or target.prdlst_nm
+    fixed_ref = CropRef(prdlstCode=target.prdlst_code, prdlstNm=target.prdlst_nm)
+    union = [fixed_ref] + list(others)
+    out = CropFacts()
+    excluded: Counter[str] = Counter()
+
+    def keep(crop: str | None) -> bool:
+        if not crop:
+            return True
+        hit = _match_crop(crop, union)
+        if hit is None or _ref_key(hit) == key:
+            return True
+        excluded[hit.prdlstNm] += 1
+        return False
+
+    out.farmworks = [f for f in facts.farmworks if keep(f.crop)]
+    out.observations = [o for o in facts.observations if keep(o.crop)]
+    out.pests = [p for p in facts.pests if keep(p.crop)]
+    out.products = [p for p in facts.products if keep(p.crop)]
+    out.follow_ups = list(facts.follow_ups)
+    out.actions = list(facts.actions)
+    warnings = sorted(f"{nm} 관련 항목 {n}건 제외(작물 고정: {target.prdlst_nm})" for nm, n in excluded.items())
+    return {key: out}, warnings
+
+
 async def _standard_prdlsts(deps) -> list[CropRef]:  # type: ignore[no-untyped-def]
     """AP 백엔드 표준 품목 전체 — 클라이언트에 `prdlsts` 가 없거나 실패하면 빈 목록(코드 없이 진행)."""
     fn = getattr(deps.ap_backend, "prdlsts", None) if deps.ap_backend is not None else None
@@ -182,6 +267,13 @@ async def select_crops(state: PipelineState, config) -> dict:  # type: ignore[no
     facts: CallFacts = state["facts"]
     farm: FarmContext = state.get("farm") or FarmContext()
     ctx = state["ctx"]
+    if ctx.hints.crop_fixed:
+        # 고정 모드: 코드가 없고 등록 목록에서도 못 찾을 때만 표준 품목 전체를 가져온다
+        needs = not ctx.hints.prdlst_code and _match_crop(ctx.hints.prdlst_nm or "", farm.crops) is None
+        standard = await _standard_prdlsts(get_deps(config)) if needs else []
+        target, others, w1 = choose_fixed_target(facts, farm, ctx.hints.prdlst_code, ctx.hints.prdlst_nm, standard)
+        routed, w2 = route_facts_fixed(facts, target, others)
+        return {"crop_targets": [target], "crop_facts": routed, "warnings": w1 + w2}
     standard = await _standard_prdlsts(get_deps(config)) if _needs_standard(facts, farm) else []
     targets, name_to_key, w1 = choose_targets(facts, farm, ctx.hints.prdlst_code, ctx.hints.prdlst_nm, standard)
     routed, w2 = route_facts(facts, targets, name_to_key)

@@ -17,9 +17,24 @@ from ..db import repo
 from ..db.models import DailyDiary
 from ..errors import ApiError
 from ..runtime import Runtime
-from ..schemas.daily import DailyDiaryCreateRequest, DailyRegenerateRequest
+from ..schemas.daily import DailyDiaryCreateRequest, DailyRegenerateRequest, crop_equal
 
 log = logging.getLogger(__name__)
+
+
+def stored_crop(dd: DailyDiary) -> dict[str, Any] | None:
+    """작물 고정 모드의 대상 작물 — `daily_diaries` 에 새 컬럼을 두지 않고(`create_all` 만 쓰므로 기존 DB 에
+    컬럼이 안 붙는다) `metadata_json["crop"]` 에 보관한다."""
+    md = dd.metadata_json
+    crop = md.get("crop") if isinstance(md, dict) else None
+    return dict(crop) if isinstance(crop, dict) else None
+
+
+def _with_crop(meta: dict[str, Any] | None, crop: dict[str, Any] | None) -> dict[str, Any] | None:
+    """metadata 에 crop 키를 심는다(새 dict — JSON 컬럼은 in-place 변경을 감지하지 않는다)."""
+    if crop is None:
+        return meta
+    return {**(meta or {}), "crop": dict(crop)}
 
 
 @dataclass
@@ -66,13 +81,21 @@ class DailyDiaryService:
         백엔드는 통화별 COMPLETED 콜백마다 **그 날짜의 전체 `call_ids`** 를 같은 `diary_id` 로 다시 보낸다.
         terminal 이면 새 생성 회차를 돌린다(`generation_run` 은 워커가 클레임할 때 +1).
         진행 중인 실행은 이미 `call_ids` 를 읽었으므로 목록을 바꾸지 않는다 — 다음 트리거나 보정 배치가 잡는다.
+
+        `crop`(작물 고정) 은 `diary_date` 처럼 불변이다 — 다른 작물이 오면 상태와 무관하게 422 (백엔드 diary_id 생성
+        규칙이 어긋났다는 신호). 생략하면 기존 값을 유지한다.
         """
+        crop = stored_crop(dd)
+        if req.crop is not None and (crop is None or not crop_equal(crop, req.crop)):
+            raise ApiError("CROP_MISMATCH",
+                           f"diary {dd.diary_id} crop is fixed to {crop} (immutable); got {req.crop.model_dump()} — "
+                           "use a different diary_id per crop", 422)
         if dd.gen_state == "RUNNING":
             return DailyTransition(dd, 200, note="generation in progress — re-POST after it finishes")
         await self._validate_calls(s, req.call_ids)
         dd.call_ids_json = list(req.call_ids)
         if req.metadata is not None:
-            dd.metadata_json = req.metadata
+            dd.metadata_json = _with_crop(req.metadata, crop)   # metadata 교체가 crop 을 지우지 않게
         if req.callback_url is not None:
             dd.callback_url = req.callback_url
         if req.farm_access_token:            # 자동 배치는 JWT 를 보내지 않는다 — 있을 때만 갱신
@@ -89,7 +112,7 @@ class DailyDiaryService:
             dd.gen_next_attempt_at = None
             note, wake = "regeneration queued", True
         await repo.add_event(s, dd.diary_id, "daily_retriggered",
-                             {"call_ids": list(req.call_ids), "gen_state": dd.gen_state})
+                             {"call_ids": list(req.call_ids), "gen_state": dd.gen_state, "crop": crop})
         await s.commit()
         await s.refresh(dd)
         await self._put_daily_json(dd)
@@ -102,16 +125,17 @@ class DailyDiaryService:
                 return await self._retrigger(s, dd, req)
 
             await self._validate_calls(s, req.call_ids)
+            crop = req.crop.model_dump() if req.crop is not None else None
             dd = DailyDiary(
                 diary_id=req.diary_id, diary_date=req.diary_date, call_ids_json=list(req.call_ids),
                 status="PROCESSING", gen_state="QUEUED",
-                metadata_json=req.metadata, farm_access_token=req.farm_access_token,
+                metadata_json=_with_crop(req.metadata, crop), farm_access_token=req.farm_access_token,
                 language=req.language or "ko", callback_url=req.callback_url,
                 s3_prefix=self.rt.s3.keys.daily_base(req.diary_id),
             )
             s.add(dd)
             await repo.add_event(s, req.diary_id, "daily_created",
-                                 {"diary_date": req.diary_date, "call_ids": list(req.call_ids)})
+                                 {"diary_date": req.diary_date, "call_ids": list(req.call_ids), "crop": crop})
             await s.commit()
             await s.refresh(dd)
             await self._put_daily_json(dd)
@@ -140,6 +164,7 @@ class DailyDiaryService:
         try:
             await self.rt.s3.put_json(self.rt.s3.keys.daily_meta_json(dd.diary_id), {
                 "diary_id": dd.diary_id, "diary_date": dd.diary_date, "call_ids": dd.call_ids_json,
+                "crop": stored_crop(dd),
                 "status": dd.status, "language": dd.language, "metadata": dd.metadata_json,
             })
         except Exception as e:  # noqa: BLE001 — 부수효과, 실패해도 흐름 유지

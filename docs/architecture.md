@@ -45,13 +45,18 @@ kafka-gateway ──POST /v1/calls ──▶ ⑧ agent ──GET s3://bucket/key
   미만은 `unknown`)을 전사에 되먹여 `segment.role` 을 채우고 `transcript/merged.json|.md` 를 **같은 키에
   다시 쓴다** — `GET /v1/calls/{id}/transcript` 가 곧바로 농가/컨설턴트를 준다. 콜백에도 `speaker_map` 을
   동봉한다(`CALLBACK_INCLUDE_SPEAKER_MAP`, 기본 on). daily 도 동일.
+  같은 되쓰기에서 **판정 작물 `crops[]`**(`apply_crops` — `result.diaries[]` 의 코드·이름·상태) 도 전사에 실린다(2026-09-16).
+  생성 전·EMPTY·FAILED 는 `[]`.
 - **통화 단순요약(`agents/summarize.py`)** — 일지 파이프라인과 분리된 LLM 패스(`build_summarizer`, 같은 `PIPELINE_IMPL` 스위치).
   일지가 실질 내용을 가질 때만(`has_diary_content`) 녹취문을 다시 읽어 주제/조치/후속 불릿을 만든다. 긴 통화는
   `chunk_turns` 로 구간 요약 후 통합 1회. 산출물은 `artifacts/summary.md|.json` + `result.summary`, 그리고 백엔드
   통화요약 콜백의 `content` 가 된다. 실패는 fail-open — 보고서 요약으로 폴백하고 warning 만 남긴다.
 - Daily job(`daily_job.run_daily_generate`): 세 번째 잡. 멤버 call 들의 TRANSCRIBED 오디오를 `merge_calls`
   (`services/transcripts.py` — started_at 순 이어붙임, file_index/offset 재베이스, speaker_key 전역 재부여) 로 합쳐
-  같은 파이프라인을 1회 실행. `result.report` 는 버린다(daily 는 일지만). 생성 세마포어를 call 생성과 **공유**하며
+  같은 파이프라인을 1회 실행. `result.report` 는 버린다(daily 는 일지만). **작물 고정 모드**: 요청 `crop` 은
+  `daily_diaries.metadata_json["crop"]` 에 보관(새 컬럼 없음 — `create_all` 만 쓰므로)하고 `build_daily_context` 가
+  `hints.prdlst_*` + `hints.crop_fixed=True` 로 넘겨 `select_crops` 가 그 작물 1건만 대상으로 잡는다(`docs/agent-flow.md` §2.5).
+  재-POST 에서 `crop` 은 불변(`CROP_MISMATCH`). 생성 세마포어를 call 생성과 **공유**하며
   call 클레임이 우선(`runner.py`: `daily_room = gen_room - len(call_ids)` — call 생성이 포화면 daily 는 대기).
   실패 시 60s 백오프 재큐(`generation_run` 은 성공 실행에만 증가 — 실패 시 롤백), `GEN_MAX_ATTEMPTS` 소진 → `FAILED/GENERATION_FAILED`.
 - 복구(`recovery.recover`): 기동 시 TRANSCRIBING→PENDING, RUNNING→QUEUED(call·daily 각각 — `daily_reset`), ENDED 통화 재평가. 스윕(`recovery.sweep`): 종료 후 1h 미종료 오디오 → FAILED/STT_TIMEOUT.

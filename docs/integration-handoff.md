@@ -279,7 +279,7 @@ Body 선택: `{"retranscribe": false, "reason": "...", "farm_access_token": "<�
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
-| GET | `/v1/calls/{id}/transcript` | 병합 전사 JSON. 세그먼트마다 `role`(농가/컨설턴트) 포함 — §3.6.1. 미준비 시 `404 NOT_READY` |
+| GET | `/v1/calls/{id}/transcript` | 병합 전사 JSON. 세그먼트마다 `role`(농가/컨설턴트) 포함 — §3.6.1. **판정 작물 `crops[]` 동봉** — §3.6.2. 미준비 시 `404 NOT_READY` |
 | GET | `/v1/calls/{id}/artifacts/report?format=md\|json&view=public\|internal` | 컨설팅 보고서 (기본 `text/markdown`). `view` 기본 `public`(전달용, 근거 제거), `internal`은 근거 포함 정본. `format=json`이면 `view` 무시, 그 외 값은 `400 INVALID_VIEW` |
 | GET | `/v1/calls/{id}/artifacts/diary/{prdlst_code}?format=md\|json&view=public\|internal` | 작물별 영농일지(`view` 규칙 동일). 미확정 작물은 `{prdlst_code}` 자리에 `unresolved`(다건이면 `unresolved-2` …) |
 | GET | `/v1/calls?status=&state=&limit=50&cursor=` | 운영/디버그용 목록 |
@@ -314,6 +314,30 @@ STT가 붙이는 화자 글자 `A`/`B`는 **그 녹음에서 먼저 말한 순�
 - `speaker_key`(`f0:A`)의 `f0`은 녹음 파일 인덱스입니다 — 파일이 여럿이면 `f0:A`와 `f1:A`가 **다른
   사람일 수 있으니** 반드시 `speaker_key` 단위로 매칭해 주세요.
 
+#### 3.6.2 판정 작물 — 전사에 `crops[]` 동봉 (2026-09-16)
+
+전사만 가져가셔도 그 통화가 **어떤 작물로 판정됐는지** 알 수 있도록, 생성이 끝나면 전사 JSON 에 `crops[]` 를
+같이 실어 드립니다. **기존 필드는 그대로이고 필드 하나가 추가**됩니다.
+
+```json
+// GET /v1/calls/{id}/transcript  (생성 완료 후)
+{"call_id": "…", "speaker_map": {…},
+ "crops": [{"prdlst_code": "0804MM", "prdlst_nm": "딸기", "status": "PARTIAL"},
+           {"prdlst_code": "1326MM", "prdlst_nm": "파프리카", "status": "PARTIAL"}],
+ "segments": [ … ]}
+```
+
+| 필드 | 값 |
+|---|---|
+| `crops[].prdlst_code` | 팜스올 품목코드. 확정 못 하면 `null` |
+| `crops[].prdlst_nm` | 작물명 |
+| `crops[].status` | 그 작물 일지의 상태 `OK` \| `PARTIAL` \| `EMPTY` \| `UNRESOLVED_CROP` |
+
+- **`GET /v1/calls/{id}` 의 `result.diaries[]` 와 순서·값이 항상 같습니다**(같은 결과에서 씁니다). 어느 쪽을 쓰셔도 됩니다.
+- 생성 **전**(STT 직후)에 조회하거나 `EMPTY`/`FAILED` 로 끝난 통화는 **빈 배열 `[]`** 입니다.
+- 날짜별 일지의 `GET /v1/daily-diaries/{diary_id}/transcript` 에도 같은 모양으로 들어갑니다.
+- 콜백에는 싣지 않습니다(§5.1 의 선택 필드 `diaries[]` 가 이미 같은 코드·이름·상태를 담습니다).
+
 ### 3.7 `POST /v1/daily-diaries` — 날짜별(멀티콜) 영농일지 트리거
 
 특정 날짜의 통화 여러 건을 합쳐 **하나의 날짜별 영농일지(작물별)** 를 생성합니다. 산출물은 일지뿐이며
@@ -327,18 +351,20 @@ STT가 붙이는 화자 글자 `A`/`B`는 **그 녹음에서 먼저 말한 순�
   "farm_access_token": "<농가 JWT>",
   "callback_url": "https://<backend>/agent-callback",
   "language": "ko",
-  "metadata": {"hints": {"prdlst_code": "0804MM"}}
+  "metadata": {"hints": {"prdlst_code": "0804MM"}},
+  "crop": {"prdlst_code": "0804MM", "prdlst_nm": "딸기"}
 }
 ```
 
 | 필드 | 타입 | 필수 | 설명 |
 |---|---|---|---|
-| `diary_id` | string | **필수** | `[A-Za-z0-9_.:-]{1,128}`. **멱등성 키** — 백엔드가 농가 복합 키/날짜에서 결정적으로 생성 (**확정 규칙**: `daily_{engnId}_{userId}_{yyyyMMdd}`, 예: `daily_18_u123_20260819`). 재전송이 안전해집니다 |
+| `diary_id` | string | **필수** | `[A-Za-z0-9_.:-]{1,128}`. **멱등성 키** — 백엔드가 농가 복합 키/날짜에서 결정적으로 생성 (**확정 규칙**: `daily_{engnId}_{userId}_{yyyyMMdd}`, 예: `daily_18_u123_20260819`; **작물 고정이면 `_{prdlstCode}` 를 덧붙여** `daily_18_u123_20260916_0804MM` — §3.7.1). 재전송이 안전해집니다 |
 | `diary_date` | string | **필수** | `yyyy-MM-dd`. 산출물 일지의 날짜는 이 값으로 고정됩니다 |
 | `call_ids` | array 1..50 | **필수** | 합칠 통화들(그 날짜의 **전체 목록** — 통화가 늘면 누적해서 전부 보내주세요). 중복 불가. **전부 terminal(`COMPLETED`/`EMPTY`)이어야 하고 1건 이상 `COMPLETED`여야 합니다.** 같은 농가의 통화만 묶는 것은 백엔드 책임이며, `call_id`↔작물 매핑은 보내실 필요 없습니다 |
 | `farm_access_token` | string | 선택 | **매 트리거·재생성마다 새로 보내주세요** — 통화 때 받은 JWT는 통화 terminal 시 저희 DB에서 삭제되어 재사용되지 않습니다. 생략하면 farmos 조회 없이 전사+힌트만으로 생성합니다. 이 토큰도 daily terminal 시 삭제됩니다 |
 | `callback_url` | string | 선택 | 날짜별 일지 완료를 알릴 agent-callback 수신 URL (§5.2). 통화 단위와 달리 **여기서는 실제로 사용됩니다** |
 | `language` / `metadata` | – | 선택 | §3.1과 동일한 의미(`metadata.hints` 포함) |
+| `crop` | object | 선택 | **작물 고정 모드**(§3.7.1) — `{prdlst_code?, prdlst_nm?}` 둘 중 하나 이상. 주면 자동 판정 없이 **이 작물 일지 1건만** 생성. 생략하면 기존 자동 판정 |
 
 **응답**: `201`(신규 — 생성 큐잉) / `200`(같은 `diary_id` 재-POST). 본문은 `DailyDiaryDetail`(§3.8).
 
@@ -354,6 +380,7 @@ STT가 붙이는 화자 글자 `A`/`B`는 **그 녹음에서 먼저 말한 순�
 - `metadata`·`callback_url`·`language` 는 재-POST 값으로 갱신됩니다. `farm_access_token` 은 **보내셨을
   때만** 갱신합니다(자동 배치처럼 생략하면 기존 값을 건드리지 않습니다).
 - `diary_date` 는 `diary_id` 에 이미 포함돼 있어 **불변**입니다 — 최초 생성값을 유지합니다.
+- `crop`(작물 고정) 도 **불변**입니다 — 다른 값이 오면 `422 CROP_MISMATCH`(§3.7.1), 생략하면 기존 값 유지.
 - 세 경우 모두 2xx이므로 백엔드는 "생성 요청 접수"로 처리하시면 됩니다.
 
 **동기 검증 실패**:
@@ -364,10 +391,52 @@ STT가 붙이는 화자 글자 `A`/`B`는 **그 녹음에서 먼저 말한 순�
 | 409 | `CALLS_NOT_READY` | terminal이 아닌(`NONE`/`PROCESSING`) 또는 `FAILED` call 포함 — `FAILED`는 먼저 해당 통화를 `/regenerate` 하세요 |
 | 422 | `NO_TRANSCRIBED_CALLS` | `COMPLETED` call이 하나도 없음 |
 | 422 | `FARM_MISMATCH` | call들의 `farm.farm_id` 또는 farmer 복합 키(`engn_id`+`user_id`)가 서로 다름 |
+| 422 | `CROP_MISMATCH` | 같은 `diary_id` 재-POST 의 `crop` 이 최초값과 다름, 또는 자동 모드 diary 에 `crop` 을 추가 (§3.7.1) |
+| 422 | – (FastAPI 리스트) | `crop` 이 `{}` 이거나 코드 형식 위반 등 스키마 검증 실패 |
 
 **병합 방식**: 통화를 `started_at` 순으로 이어붙입니다. 병합 전사의 시간축은 각 통화 길이의
 누적이며 **통화 사이 실제 공백은 표현되지 않습니다.** 전사의 `files[].call_id`로 원본 통화를 식별할 수
 있습니다.
+
+#### 3.7.1 작물 고정 모드 — `crop` (2026-09-16)
+
+농가가 앱에서 **작물과 날짜를 직접 고른** 뒤 "그 날짜 통화들로 이 작물 일지를 만들어 달라" 는 경우입니다.
+자동 판정(통화에서 언급된 작물마다 일지)을 하지 않고 **지정한 작물 일지 1건만** 만듭니다. 날짜는 기존처럼
+`diary_date` 로 고정됩니다.
+
+```json
+{
+  "diary_id": "daily_18_u123_20260916_0804MM",
+  "diary_date": "2026-09-16",
+  "call_ids": ["20260916_Qmf1D0X", "20260916_Rx2kP9Y"],
+  "farm_access_token": "<농가 JWT>",
+  "callback_url": "https://<backend>/agent-callback",
+  "crop": {"prdlst_code": "0804MM", "prdlst_nm": "딸기"}
+}
+```
+
+| 필드 | 규칙 |
+|---|---|
+| `crop.prdlst_code` | 팜스올 품목코드. `[A-Za-z0-9_.:-]{1,64}`. 있으면 이걸 우선 사용 |
+| `crop.prdlst_nm` | 작물명(1..64자). 코드가 없으면 이름으로 농가 등록 작물 → 표준 품목 순으로 코드를 찾습니다 |
+| 둘 다 없음 | `422`(스키마 검증) |
+
+- **`diary_id` 는 자동 배치와 다르게** 만들어 주세요 — 권장 `daily_{engnId}_{userId}_{yyyyMMdd}_{prdlstCode}`.
+  `diary_id` 는 ASCII 만 허용되므로 코드 없이 이름만 보내실 때는 ASCII 대체 토큰(예: `_nocode`)을 쓰세요.
+- **`crop` 은 불변**입니다. 같은 `diary_id` 에 다른 작물을 보내면 상태와 무관하게 `422 CROP_MISMATCH` 입니다
+  (작물이 바뀌면 새 `diary_id`). 자동 모드로 만든 `diary_id` 에 `crop` 을 붙여도 같은 오류입니다. `crop` 을 **생략**한
+  재-POST(예: 통화가 추가돼 `call_ids` 만 다시 보내는 경우)는 기존 작물을 유지합니다.
+- `metadata.hints.prdlst_code` 와 같이 오면 `crop` 이 우선합니다.
+- **통화에 다른 작물 얘기가 섞여 있으면 그 부분은 뺍니다.** 예: 딸기로 고정했는데 파프리카 병해 얘기가 있으면 파프리카
+  항목은 일지에서 제외하고 `generation.warnings` 에 `"파프리카 관련 항목 3건 제외(작물 고정: 딸기)"` 로 남깁니다.
+  작물이 특정되지 않은 내용(관수·환기 등)과 후속·조치는 고정 작물 일지에 들어갑니다.
+- 응답 `DailyDiaryDetail` 에 `crop` 이 그대로 되돌아오고(§3.8, 자동 모드는 `null`), `result.diaries` 는 **항상 1건**입니다.
+  `prdlst_code` 는 저희가 채운 코드입니다(못 찾으면 `null`, S3 키는 `unresolved`). 농가 등록 작물이 아니면 일지 메타 표에
+  `(미등록 작물)` 이 붙습니다.
+- **빈 결과 두 가지** — 둘 다 정상 종료입니다:
+  - 통화 내용이 전부 다른 작물이라 쓸 게 없으면 `status: COMPLETED` + `result.diaries[0].status: "EMPTY"`(빈 골격 마크다운).
+  - 통화가 잡담뿐이면 daily 자체가 `EMPTY`(`error.code = NO_CONTENT`).
+- 콜백(§5.2)·조회·산출물·`/regenerate` 는 자동 모드와 동일합니다.
 
 ### 3.8 날짜별 일지 — 조회 · 산출물 · 재생성
 
@@ -379,14 +448,15 @@ STT가 붙이는 화자 글자 `A`/`B`는 **그 녹음에서 먼저 말한 순�
 | GET | `/v1/daily-diaries?diary_date=&status=&limit=50&cursor=` | 목록 (커서 규칙은 §3.6과 동일) |
 | POST | `/v1/daily-diaries/{diary_id}/regenerate` | `{"farm_access_token": "<새 JWT>", "reason": "..."}` → `202` |
 
-- 응답 `DailyDiaryDetail`은 `CallDetail`(§3.5)과 유사하되 `call_ids`/`diary_date`가 추가되고,
-  `result`에 **`report`가 없습니다**(`diaries`만). `status`/`generation` 어휘는 통화와 동일합니다.
+- 응답 `DailyDiaryDetail`은 `CallDetail`(§3.5)과 유사하되 `call_ids`/`diary_date`/`crop`(작물 고정 모드의
+  요청값, 자동 모드는 `null` — §3.7.1)이 추가되고, `result`에 **`report`가 없습니다**(`diaries`만).
+  `status`/`generation` 어휘는 통화와 동일합니다.
   실제 스모크 응답 예시(통화 2건 병합, 축약):
 
 ```json
 {
   "diary_id": "daily-smoke-20260821", "diary_date": "2026-08-21", "status": "COMPLETED",
-  "call_ids": ["smoke-20260821-a", "smoke-20260821-b"],
+  "call_ids": ["smoke-20260821-a", "smoke-20260821-b"], "crop": null,
   "created_at": "2026-08-21T05:43:50Z", "updated_at": "2026-08-21T05:48:39Z",
   "metadata": null, "note": null,
   "generation": {"run": 3, "attempts": 1, "state": "IDLE", "model": "gemini-3.5-flash",
@@ -613,7 +683,8 @@ terminal 사유 (`status` + `error.code`):
   - **같은 날짜·같은 작물은 여러 통화를 합쳐 1건**으로 생성합니다(통화 2건 이상이어도 일지는 1건).
   - 각 건에 `prdlst_code`(팜스올 품목코드)와 `prdlst_nm`을 함께 담습니다.
   - 통화 1건에서 여러 작물이 언급돼도 작물별 결과로 분리하며, **작물과 `call_id`를 직접 연결하지
-    않습니다**. 모든 작물이 같은 `daily_diary_id`를 공유합니다.
+    않습니다**. 모든 작물이 같은 `daily_diary_id`를 공유합니다. (통화별 판정 작물은 통화 전사의 `crops[]` — §3.6.2)
+  - **작물 고정 모드**(§3.7.1)로 만든 daily 는 `diaries[]` 가 항상 1건(지정한 작물)입니다.
   - `farm_access_token`이 없으면 팜스올 작물목록을 못 읽어 `prdlst_code`가 `null`이 됩니다
     (S3 키는 `unresolved`, `unresolved-2` …). 이때는 마크다운만 갱신해 주세요.
 
@@ -692,6 +763,7 @@ agents/voicecall/daily/{diary_id}/artifacts/result.json     (report 없음)
 | 422 | `CALLS_NOT_FOUND` | daily 트리거의 `call_ids`에 미존재 통화 포함 |
 | 422 | `NO_TRANSCRIBED_CALLS` | daily 트리거에 `COMPLETED` 통화가 하나도 없음 |
 | 422 | `FARM_MISMATCH` | daily 트리거의 통화들이 서로 다른 농가 소속 — `farm.farm_id` 또는 farmer `(engn_id, user_id)` 복합 키 기준 |
+| 422 | `CROP_MISMATCH` | daily 재-POST 의 `crop`(작물 고정)이 최초값과 다름 / 자동 모드 diary 에 `crop` 추가 (§3.7.1) |
 | 422 | `INVALID_CURSOR` | 목록 `cursor` 형식 오류 (§3.6 — `next_cursor`를 그대로 사용하세요) |
 | 422 | `S3_OBJECT_NOT_FOUND` | 녹음 객체 없음 |
 | 422 | `S3_ACCESS_DENIED` | 녹음 읽기 권한 없음 (§6) |
@@ -734,6 +806,15 @@ curl -X POST $B/v1/daily-diaries -H "Authorization: Bearer $K" -H 'Content-Type:
 # 7) 폴링 → 결과
 curl "$B/v1/daily-diaries/daily_u1_20260819?inline=false" -H "Authorization: Bearer $K"
 curl "$B/v1/daily-diaries/daily_u1_20260819" -H "Authorization: Bearer $K"
+
+# 8) 작물 고정 일지 (농가가 고른 작물·날짜 — 자동 판정 없이 이 작물 1건만, §3.7.1)
+curl -X POST $B/v1/daily-diaries -H "Authorization: Bearer $K" -H 'Content-Type: application/json' -d '{
+  "diary_id": "daily_u1_20260819_0804MM", "diary_date": "2026-08-19",
+  "call_ids": ["c1", "c2"], "farm_access_token": "<새 JWT>",
+  "crop": {"prdlst_code": "0804MM", "prdlst_nm": "딸기"}}'
+
+# 9) 통화 전사 + 판정 작물 (§3.6.2 — crops[] 는 생성 완료 후 채워짐)
+curl "$B/v1/calls/c1/transcript" -H "Authorization: Bearer $K"
 ```
 
 ## 10. 연동 전 체크리스트
@@ -752,6 +833,7 @@ curl "$B/v1/daily-diaries/daily_u1_20260819" -H "Authorization: Bearer $K"
 - [ ] **`status="EMPTY"` 처리** — 템플릿 내용 대신 상태값으로 표시. 사유는 `empty_reason` (§5.1)
 - [ ] 통화요약 콜백의 **선택 필드 `speaker_map`** — 무시하거나 저장. 미지 필드를 거부하는 DTO면 알려 주세요 (§5.1)
 - [ ] 전사 화면에 화자를 표시하신다면 `segments[].role` 사용 — `unknown`은 "화자 A/B" 그대로 (§3.6.1)
+- [ ] 전사 JSON 의 새 필드 `crops[]`(판정 작물, §3.6.2) — 저장하거나 무시. 미지 필드를 거부하는 DTO 면 추가해 주세요
 - [ ] 에러 파서: `detail` 문자열(401) / 객체(도메인) / 리스트(422 검증) 모두 처리
 - [ ] terminal 후 추가 오디오 발생 시 `/regenerate` 호출 로직 (farmos 조회가 필요하면 body에 새 JWT — §3.4)
 
@@ -762,3 +844,9 @@ curl "$B/v1/daily-diaries/daily_u1_20260819" -H "Authorization: Bearer $K"
 - [ ] **트리거·재생성마다 새 농가 JWT 첨부** (통화 때 보낸 토큰은 재사용되지 않음)
 - [ ] 멤버 통화 전부 terminal 확인 후 트리거 (`CALLS_NOT_READY` 시 재시도/지연 처리)
 - [ ] daily 콜백 수신 라우팅: `daily_diary_id` 필드로 구분, `(daily_diary_id, generation_run)` 중복 제거
+
+작물 고정 일지(§3.7.1)를 쓰시는 경우 추가로:
+
+- [ ] `diary_id` 에 작물 코드 포함 — `daily_{engnId}_{userId}_{yyyyMMdd}_{prdlstCode}` (자동 배치 id 와 충돌 금지)
+- [ ] `crop` 은 불변 — 작물이 바뀌면 새 `diary_id`; `422 CROP_MISMATCH` 는 id 생성 버그로 취급
+- [ ] `result.diaries[0].status = "EMPTY"`(통화가 다른 작물 얘기뿐) 와 daily `EMPTY/NO_CONTENT`(잡담) 두 경우 화면 처리
