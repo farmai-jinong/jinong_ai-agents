@@ -436,7 +436,8 @@ STT가 붙이는 화자 글자 `A`/`B`는 **그 녹음에서 먼저 말한 순�
   `(미등록 작물)` 이 붙습니다.
 - **빈 결과 두 가지** — 둘 다 정상 종료입니다:
   - 통화 내용이 전부 다른 작물이라 쓸 게 없으면 `status: COMPLETED` + `result.diaries[0].status: "EMPTY"`(빈 골격 마크다운).
-  - 통화가 잡담뿐이면 daily 자체가 `EMPTY`(`error.code = NO_CONTENT`).
+  - 통화가 잡담뿐이거나 고정 작물 관련 내용이 전혀 없으면 daily 자체가 `EMPTY`(`error.code = NO_CONTENT`) — 이때도
+    `generation.warnings` 에 `"딸기 관련 항목 2건 제외(작물 고정: 파프리카)"` 같은 제외 사유가 남습니다.
 - 콜백(§5.2)·조회·산출물·`/regenerate` 는 자동 모드와 동일합니다.
 
 ### 3.8 날짜별 일지 — 조회 · 산출물 · 재생성

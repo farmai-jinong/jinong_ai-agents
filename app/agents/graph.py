@@ -178,5 +178,5 @@ class LangGraphPipeline:
         degraded = bool((out.get("facts_meta") or {}).get("error")) or any(
             e.node in ("build_report", "verify_diary") for e in (out.get("errors") or []))
         if all_empty and report_blank and not degraded:
-            raise PipelineEmpty("영농일지로 남길 실질 내용이 없음")
+            raise PipelineEmpty("영농일지로 남길 실질 내용이 없음", warnings=list(result.warnings or []))
         return result

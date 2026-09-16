@@ -217,3 +217,27 @@ async def test_daily_fixed_crop_hints_wiring_and_transcript_crops(client, app, s
         [(c["prdlst_code"], c["prdlst_nm"], c["status"]) for c in tr["crops"]]
     md = (await rt.s3.get_bytes(rt.settings.s3_bucket, "agents/voicecall/daily/daily_fixed/transcript/merged.md")).decode()
     assert "- 판정 작물: 토마토(0803MM, PARTIAL) · 콩(코드 없음, EMPTY)" in md
+
+
+async def test_daily_empty_keeps_pipeline_warnings(client, app, stt_mock, s3_env):
+    """PipelineEmpty 로 EMPTY 가 돼도 파이프라인 경고(작물 고정 타작물 제외 등)는 generation.warnings 에 남는다."""
+    from app.agents.interface import PipelineEmpty
+
+    rt = app.state.rt
+    await _complete_calls(client, app)
+
+    class EmptyWithWarnings:
+        async def run(self, transcript, ctx):
+            raise PipelineEmpty("영농일지로 남길 실질 내용이 없음", warnings=["딸기 관련 항목 2건 제외(작물 고정: 파프리카)"])
+
+    orig = rt.pipeline
+    rt.pipeline = EmptyWithWarnings()
+    try:
+        r = await client.post("/v1/daily-diaries", json={**DAILY, "diary_id": "daily_empty_w", "crop": {"prdlst_nm": "파프리카"}})
+        assert r.status_code == 201, r.text
+        await rt.worker.drain()
+    finally:
+        rt.pipeline = orig
+    body = (await client.get("/v1/daily-diaries/daily_empty_w")).json()
+    assert body["status"] == "EMPTY" and body["error"]["code"] == "NO_CONTENT"
+    assert body["generation"]["warnings"] == ["딸기 관련 항목 2건 제외(작물 고정: 파프리카)"]

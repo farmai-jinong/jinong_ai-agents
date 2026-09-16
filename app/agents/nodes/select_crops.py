@@ -185,11 +185,14 @@ def choose_fixed_target(facts: CallFacts, farm: FarmContext, code: str | None, n
         found = _match_crop(nm, crops)
     registered = True
     if found is not None:
-        t_code = found.prdlstCode or code
+        t_code, t_nm = found.prdlstCode or code, found.prdlstNm
         if t_code is None:   # hints 로 만든 농가 목록(코드 없음) — 표준 품목에서 코드만 보완
-            std = _match_standard(found.prdlstNm, standard)
+            std = _match_standard(t_nm, standard)
             t_code = std.prdlstCode if std is not None else None
-        target = CropTarget(prdlst_code=t_code, prdlst_nm=found.prdlstNm, reason="fixed")
+        elif not t_nm or t_nm == t_code:   # 코드만 받아 이름 자리에 코드가 들어간 경우 — 표준 품목에서 이름 보완
+            std = next((c for c in standard if c.prdlstCode and c.prdlstCode == t_code), None)
+            t_nm = std.prdlstNm if std is not None else (t_nm or t_code)
+        target = CropTarget(prdlst_code=t_code, prdlst_nm=t_nm, reason="fixed")
     else:
         std = None
         if code:
@@ -304,9 +307,12 @@ async def select_crops(state: PipelineState, config) -> dict:  # type: ignore[no
     ctx = state["ctx"]
     if ctx.hints.crop_fixed:
         # 고정 모드: 코드가 없고 등록 목록에서도 못 찾을 때만 표준 품목 전체를 가져온다
-        m = _match_crop(ctx.hints.prdlst_nm or "", farm.crops)
-        needs = not ctx.hints.prdlst_code and (m is None or not m.prdlstCode)
-        standard = await _standard_prdlsts(get_deps(config)) if needs else []
+        # 등록 목록에서 코드·이름이 모두 확정되면 표준 품목을 안 가져온다(1시간 캐시라 비용은 작다)
+        code, nm = ctx.hints.prdlst_code, ctx.hints.prdlst_nm or ""
+        m = _match_crop(nm, farm.crops) if nm and nm != code else None
+        by_code = next((c for c in farm.crops if code and c.prdlstCode == code), None)
+        resolved = (by_code is not None and by_code.prdlstNm and by_code.prdlstNm != code) or (m is not None and bool(m.prdlstCode))
+        standard = await _standard_prdlsts(get_deps(config)) if not resolved else []
         target, others, w1 = choose_fixed_target(facts, farm, ctx.hints.prdlst_code, ctx.hints.prdlst_nm, standard)
         routed, w2 = route_facts_fixed(facts, target, others, state.get("transcript"),
                                        aliases=[ctx.hints.prdlst_nm] if ctx.hints.prdlst_nm else None)

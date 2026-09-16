@@ -79,7 +79,7 @@
 | 경우 | 응답 |
 |---|---|
 | 통화 내용이 전부 다른 작물이라 쓸 게 없음 | `status: COMPLETED` + `result.diaries[0].status: "EMPTY"` (빈 골격 마크다운) |
-| 통화가 잡담뿐 | `status: EMPTY`, `error.code: NO_CONTENT` (일지 없음) |
+| 통화가 잡담뿐이거나 고정 작물 관련 내용이 전혀 없음 | `status: EMPTY`, `error.code: NO_CONTENT` (일지 없음). `generation.warnings` 에 제외 사유(`"딸기 관련 항목 2건 제외(작물 고정: 파프리카)"`)는 남습니다 |
 
 ## 2. 통화 전사에 판정 작물 동봉 — `crops[]`
 

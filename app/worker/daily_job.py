@@ -161,7 +161,7 @@ async def run_daily_generate(rt: Runtime, diary_id: str) -> None:
         result: PipelineResult = await asyncio.wait_for(rt.pipeline.run(transcript, ctx), settings.gen_timeout_sec)
     except PipelineEmpty as e:
         d = await _finalize_daily(rt, diary_id, status="EMPTY", error_code="NO_CONTENT", error_message=str(e) or None,
-                                  warnings=warnings)
+                                  warnings=warnings + list(getattr(e, "warnings", None) or []))
         await _daily_callback(rt, d)
         return
     except Exception as e:  # noqa: BLE001 — 타임아웃 포함

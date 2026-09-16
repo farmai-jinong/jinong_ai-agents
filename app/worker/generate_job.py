@@ -252,7 +252,7 @@ async def run_generate(rt: Runtime, call_id: str) -> None:
         result: PipelineResult = await asyncio.wait_for(rt.pipeline.run(transcript, ctx), settings.gen_timeout_sec)
     except PipelineEmpty as e:
         c = await _finalize(rt, call_id, status="EMPTY", error_code="NO_CONTENT", error_message=str(e) or None,
-                            warnings=warnings)
+                            warnings=warnings + list(getattr(e, "warnings", None) or []))
         await _notify_terminal(rt, c)
         return
     except Exception as e:  # noqa: BLE001 — 타임아웃 포함

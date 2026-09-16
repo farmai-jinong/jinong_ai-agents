@@ -302,3 +302,34 @@ def test_route_facts_fixed_uses_evidence_when_crop_is_null():
     assert [p.name for p in routed["딸기"].pests] == ["응애"] and w == []
     routed, w = route_facts_fixed(f, t, others, None)
     assert len(routed["딸기"].pests) == 2 and w == []
+
+
+def test_fixed_code_only_resolves_name_from_standard():
+    """코드만 받으면 daily_job 이 이름 자리에 코드를 넣어 보낸다 — 이름은 표준 품목에서 보완해야 진짜 작물 사실이 '타작물' 로 안 빠진다."""
+    farm = FarmContext(crops=[CropRef(prdlstCode="0804MM", prdlstNm="0804MM", reprsntPrdlstCnt=1)], source="hints", status="unavailable")
+    std = [CropRef(prdlstCode="0804MM", prdlstNm="딸기"), *STANDARD]
+    t, others, w = choose_fixed_target(facts(), farm, "0804MM", "0804MM", std)
+    assert (t.prdlst_code, t.prdlst_nm, t.registered) == ("0804MM", "딸기", True) and w == [] and others == []
+    t, _, _ = choose_fixed_target(facts(), farm, "0804MM", "0804MM", None)   # 표준 목록 못 받으면 코드가 이름
+    assert (t.prdlst_code, t.prdlst_nm) == ("0804MM", "0804MM")
+
+
+@pytest.mark.asyncio
+async def test_select_crops_fixed_fetches_standard_unless_farm_resolves_both():
+    f = facts()
+    # 등록 목록에 코드·이름 모두 있음 → 조회 없음
+    ap = _Ap()
+    ctx = CallContext(call_id="a", hints=CallHints(prdlst_code="0804MM", prdlst_nm="딸기", crop_fixed=True))
+    await select_crops({"facts": f, "farm": REGISTERED, "ctx": ctx}, _cfg(ap))
+    assert ap.calls == 0
+    # hints 로 만든 목록(이름 자리에 코드) → 조회
+    farm = FarmContext(crops=[CropRef(prdlstCode="0804MM", prdlstNm="0804MM")], source="hints", status="unavailable")
+    ap = _Ap()
+    ctx = CallContext(call_id="b", hints=CallHints(prdlst_code="0804MM", prdlst_nm="0804MM", crop_fixed=True))
+    await select_crops({"facts": f, "farm": farm, "ctx": ctx}, _cfg(ap))
+    assert ap.calls == 1
+    # 이름만, 등록 목록 코드 있음 → 조회 없음
+    ap = _Ap()
+    ctx = CallContext(call_id="c", hints=CallHints(prdlst_nm="파프리카", crop_fixed=True))
+    out = await select_crops({"facts": f, "farm": REGISTERED, "ctx": ctx}, _cfg(ap))
+    assert ap.calls == 0 and out["crop_targets"][0].prdlst_code == "1326MM"
