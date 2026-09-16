@@ -151,7 +151,7 @@ def test_fixed_crop_daily(client, completed_call, e2e):
     call_id = completed_call["call_id"]
     diaries = completed_call["detail"]["result"]["diaries"]
     fixed_nm = next((d["prdlst_nm"] for d in diaries if d["prdlst_nm"] == "딸기"), diaries[0]["prdlst_nm"])
-    other_nm = next((d["prdlst_nm"] for d in diaries if d["prdlst_nm"] != fixed_nm), None)
+    other_nm = next((d["prdlst_nm"] for d in diaries if d["prdlst_nm"] != fixed_nm and d["status"] != "EMPTY"), None)
     started = completed_call["detail"].get("started_at") or datetime.now(UTC).isoformat()
     diary_date = started[:10]
     diary_id = f"{call_id}-fixed"
@@ -170,7 +170,7 @@ def test_fixed_crop_daily(client, completed_call, e2e):
     assert only["prdlst_nm"] == fixed_nm and only["diary_date"] == diary_date, only
     assert only["status"] in ("OK", "PARTIAL", "EMPTY"), only
     warns = d["generation"]["warnings"]
-    if other_nm:
+    if other_nm:   # 자동 모드에서 실질 내용이 있던 다른 작물 → 고정 모드에서는 그 항목이 제외돼야 한다
         assert any("작물 고정" in w for w in warns), f"타작물({other_nm}) 제외 경고 없음: {warns}"
     tr = client.get(f"/v1/daily-diaries/{diary_id}/transcript").json()
     assert [(c["prdlst_nm"], c["status"]) for c in tr["crops"]] == [(only["prdlst_nm"], only["status"])], tr.get("crops")

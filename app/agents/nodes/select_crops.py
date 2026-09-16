@@ -16,8 +16,8 @@ import logging
 from collections import Counter
 
 from ..deps import get_deps
-from ..mapping.matcher import match
-from ..schemas import CallFacts, CropFacts, CropRef, CropTarget, FarmContext
+from ..mapping.matcher import match, normalize
+from ..schemas import CallFacts, CropFacts, CropRef, CropTarget, FarmContext, NormalizedTranscript
 from ..state import PipelineState
 
 log = logging.getLogger(__name__)
@@ -185,7 +185,11 @@ def choose_fixed_target(facts: CallFacts, farm: FarmContext, code: str | None, n
         found = _match_crop(nm, crops)
     registered = True
     if found is not None:
-        target = CropTarget(prdlst_code=found.prdlstCode or code, prdlst_nm=found.prdlstNm, reason="fixed")
+        t_code = found.prdlstCode or code
+        if t_code is None:   # hints 로 만든 농가 목록(코드 없음) — 표준 품목에서 코드만 보완
+            std = _match_standard(found.prdlstNm, standard)
+            t_code = std.prdlstCode if std is not None else None
+        target = CropTarget(prdlst_code=t_code, prdlst_nm=found.prdlstNm, reason="fixed")
     else:
         std = None
         if code:
@@ -216,27 +220,58 @@ def choose_fixed_target(facts: CallFacts, farm: FarmContext, code: str | None, n
     return target, others, warnings
 
 
-def route_facts_fixed(facts: CallFacts, target: CropTarget, others: list[CropRef]) -> tuple[dict[str, CropFacts], list[str]]:
-    """고정 작물 하나로 사실을 모은다. crop 이 다른 작물로 확인되는 사실은 제외(작물별 건수 경고), 미상·잡음은 포함."""
+def _other_crop_in_evidence(evidence: list[int], transcript: NormalizedTranscript | None,
+                            fixed_names: list[str], others: list[CropRef]) -> str | None:
+    """crop 이 비어 있는 사실의 근거 발화에 **다른 작물명만** 등장하면 그 작물명을 돌려준다(아니면 None).
+
+    extract 프롬프트는 사실의 `crop` 을 "농가 작물 목록의 이름 또는 null" 로만 채우므로, 목록에 없는 작물
+    (토큰 없이 hints 로만 만든 목록이면 고정 작물뿐)의 사실은 전부 crop=None 으로 온다. 그래서 근거 발화의
+    작물명을 직접 본다 — 고정 작물명도 같이 나오면 판단 보류(포함).
+    """
+    if transcript is None or not evidence or not others:
+        return None
+    text = "".join(normalize(t.text, "crop") for tid in evidence if (t := transcript.by_tid(tid)) is not None)
+    if not text or any(n and n in text for n in fixed_names):
+        return None
+    for o in others:
+        n = normalize(o.prdlstNm, "crop")
+        if n and n in text:
+            return o.prdlstNm
+    return None
+
+
+def route_facts_fixed(facts: CallFacts, target: CropTarget, others: list[CropRef],
+                      transcript: NormalizedTranscript | None = None,
+                      aliases: list[str] | None = None) -> tuple[dict[str, CropFacts], list[str]]:
+    """고정 작물 하나로 사실을 모은다. 다른 작물로 확인되는 사실은 제외(작물별 건수 경고), 미상·잡음은 포함.
+
+    "다른 작물" 판정: ① `crop` 이 있으면 [고정 + others] 에 매칭해 고정이 아니면 제외, ② `crop` 이 없으면 근거 발화에
+    다른 작물명만 등장할 때 제외(`_other_crop_in_evidence`). `aliases` = 고정 작물의 다른 표기(요청 이름 등).
+    """
     key = target.prdlst_code or target.prdlst_nm
     fixed_ref = CropRef(prdlstCode=target.prdlst_code, prdlstNm=target.prdlst_nm)
     union = [fixed_ref] + list(others)
+    fixed_names = [normalize(n, "crop") for n in [target.prdlst_nm, *(aliases or [])] if n]
     out = CropFacts()
     excluded: Counter[str] = Counter()
 
-    def keep(crop: str | None) -> bool:
+    def keep(crop: str | None, evidence: list[int]) -> bool:
         if not crop:
-            return True
+            other = _other_crop_in_evidence(evidence, transcript, fixed_names, others)
+            if other is None:
+                return True
+            excluded[other] += 1
+            return False
         hit = _match_crop(crop, union)
         if hit is None or _ref_key(hit) == key:
             return True
         excluded[hit.prdlstNm] += 1
         return False
 
-    out.farmworks = [f for f in facts.farmworks if keep(f.crop)]
-    out.observations = [o for o in facts.observations if keep(o.crop)]
-    out.pests = [p for p in facts.pests if keep(p.crop)]
-    out.products = [p for p in facts.products if keep(p.crop)]
+    out.farmworks = [f for f in facts.farmworks if keep(f.crop, f.evidence)]
+    out.observations = [o for o in facts.observations if keep(o.crop, o.evidence)]
+    out.pests = [p for p in facts.pests if keep(p.crop, p.evidence)]
+    out.products = [p for p in facts.products if keep(p.crop, p.evidence)]
     out.follow_ups = list(facts.follow_ups)
     out.actions = list(facts.actions)
     warnings = sorted(f"{nm} 관련 항목 {n}건 제외(작물 고정: {target.prdlst_nm})" for nm, n in excluded.items())
@@ -269,10 +304,12 @@ async def select_crops(state: PipelineState, config) -> dict:  # type: ignore[no
     ctx = state["ctx"]
     if ctx.hints.crop_fixed:
         # 고정 모드: 코드가 없고 등록 목록에서도 못 찾을 때만 표준 품목 전체를 가져온다
-        needs = not ctx.hints.prdlst_code and _match_crop(ctx.hints.prdlst_nm or "", farm.crops) is None
+        m = _match_crop(ctx.hints.prdlst_nm or "", farm.crops)
+        needs = not ctx.hints.prdlst_code and (m is None or not m.prdlstCode)
         standard = await _standard_prdlsts(get_deps(config)) if needs else []
         target, others, w1 = choose_fixed_target(facts, farm, ctx.hints.prdlst_code, ctx.hints.prdlst_nm, standard)
-        routed, w2 = route_facts_fixed(facts, target, others)
+        routed, w2 = route_facts_fixed(facts, target, others, state.get("transcript"),
+                                       aliases=[ctx.hints.prdlst_nm] if ctx.hints.prdlst_nm else None)
         return {"crop_targets": [target], "crop_facts": routed, "warnings": w1 + w2}
     standard = await _standard_prdlsts(get_deps(config)) if _needs_standard(facts, farm) else []
     targets, name_to_key, w1 = choose_targets(facts, farm, ctx.hints.prdlst_code, ctx.hints.prdlst_nm, standard)

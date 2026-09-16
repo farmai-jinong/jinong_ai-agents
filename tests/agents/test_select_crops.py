@@ -261,3 +261,44 @@ async def test_select_crops_fixed_mode_single_target_and_standard_fetch_policy()
     ctx = CallContext(call_id="d3", hints=CallHints(prdlst_code="0804MM"))
     out = await select_crops({"facts": f, "farm": REGISTERED, "ctx": ctx}, _cfg(ap))
     assert len(out["crop_targets"]) == 2
+
+
+def test_fixed_hint_only_farm_gets_code_from_standard():
+    """토큰 없이 hints 로만 만든 농가 목록(코드 없음) — 고정 작물 코드는 표준 품목에서 보완."""
+    farm = FarmContext(crops=[CropRef(prdlstNm="토마토", reprsntPrdlstCnt=1)], source="hints", status="unavailable")
+    t, _, w = choose_fixed_target(facts(), farm, None, "토마토", STANDARD)
+    assert (t.prdlst_code, t.prdlst_nm, t.registered) == ("0803MM", "토마토", True) and w == []
+    t, _, _ = choose_fixed_target(facts(), farm, None, "토마토", None)
+    assert (t.prdlst_code, t.prdlst_nm) == (None, "토마토")
+
+
+def _turns(*texts):
+    from app.agents.schemas import NormalizedTranscript, Turn
+    return NormalizedTranscript(turns=[Turn(tid=i, file_index=0, speaker_letter="A", speaker_key="f0:A", start_sec=i, end_sec=i + 1,
+                                            abs_start=i, abs_end=i + 1, text=t) for i, t in enumerate(texts)],
+                                n_files=1, est_tokens=10, duration_sec=float(len(texts)))
+
+
+def test_route_facts_fixed_uses_evidence_when_crop_is_null():
+    """extract 는 목록 밖 작물의 사실을 crop=None 으로 내므로, 근거 발화에 다른 작물명만 있으면 제외한다(스모크 녹음 재현)."""
+    tr = _turns("안녕하세요 아 파프리카 진딧물이 너무", "많이 생겨가지고 고민이 많습니다",
+                "그런데 또 딸기는 잿빛곰팡이가 너무 많이 퍼졌고 흰가루병도 오는 것 같아요", "환기는 잘 하고 계세요?")
+    f = facts(crops_mentioned=[CropMention(name_raw="파프리카", matched_name=None, evidence=[0]),
+                               CropMention(name_raw="딸기", matched_name="딸기", evidence=[2])],
+              pests=[PestFact(name="진딧물", kind="해충", status="발생", severity="심함", severity_raw=None, location=None, note=None, crop=None, evidence=[0, 1]),
+                     PestFact(name="잿빛곰팡이", kind="병", status="발생", severity="심함", severity_raw=None, location=None, note=None, crop=None, evidence=[2])],
+              observations=[ObservationFact(topic="환경", text="환기 양호", crop=None, evidence=[3])])
+    farm = FarmContext(crops=[CropRef(prdlstNm="딸기", reprsntPrdlstCnt=1)], source="hints", status="unavailable")
+    t, others, _ = choose_fixed_target(f, farm, None, "딸기", None)
+    assert [o.prdlstNm for o in others] == ["파프리카"]
+    routed, w = route_facts_fixed(f, t, others, tr, aliases=["딸기"])
+    assert [p.name for p in routed["딸기"].pests] == ["잿빛곰팡이"]      # 파프리카 진딧물 제외
+    assert [o.text for o in routed["딸기"].observations] == ["환기 양호"]   # 작물 언급 없는 근거 → 포함
+    assert w == ["파프리카 관련 항목 1건 제외(작물 고정: 딸기)"]
+    # 근거에 고정 작물도 같이 나오면 판단 보류(포함); transcript 없으면 crop=None 은 전부 포함
+    f2 = facts(pests=[PestFact(name="응애", kind="해충", status="발생", severity="경미", severity_raw=None, location=None, note=None, crop=None,
+                               evidence=[0, 2])])
+    routed, w = route_facts_fixed(f2, t, others, tr)
+    assert [p.name for p in routed["딸기"].pests] == ["응애"] and w == []
+    routed, w = route_facts_fixed(f, t, others, None)
+    assert len(routed["딸기"].pests) == 2 and w == []
