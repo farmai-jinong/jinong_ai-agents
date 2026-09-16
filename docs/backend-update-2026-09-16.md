@@ -113,6 +113,79 @@
 - [ ] 전사 DTO 에 `crops[]` 추가(또는 무시 허용)
 - [ ] 필요하면 전사 화면에 판정 작물 표시 — `result.diaries[]` 와 동일하니 어느 쪽을 써도 됨
 
-## 4. 운영 실측 (2026-09-16, prod :7003)
+## 4. 운영 실측 (2026-09-16, prod :7003, 커밋 `a02d949`)
 
-_(배포 후 채움)_
+배포 스모크가 쓰는 고정 실녹음(2026-09-11 통화, 딸기·파프리카 두 작물 언급 — "파프리카 진딧물이 너무 많이 생겨서…",
+"딸기는 잿빛곰팡이가 너무 많이 퍼졌고 흰가루병도…")으로 운영 서버에서 직접 돌린 결과입니다. 농가 JWT 없이(farmos 조회
+없이) 실행했습니다.
+
+### 4.1 통화 자동 판정 (기존 동작) + 전사 `crops[]`
+
+통화 `smoke-prod-20260916093034` → `COMPLETED`, 작물 2건 자동 판정.
+
+```json
+// GET /v1/calls/smoke-prod-20260916093034/transcript  (발췌)
+{"call_id": "smoke-prod-20260916093034",
+ "speaker_map": {"f0:A": "consultant", "f0:B": "farmer"},
+ "crops": [{"prdlst_code": "0804MM", "prdlst_nm": "딸기", "status": "EMPTY"},
+           {"prdlst_code": "1326MM", "prdlst_nm": "파프리카", "status": "PARTIAL"}],
+ "segments": [{"speaker_key": "f0:A", "role": "consultant", "abs_start": 5.279, "text": "아 파프리카 진딧물이 너무"}, "…"]}
+```
+
+`crops[]` 는 `GET /v1/calls/{id}` 의 `result.diaries[]` 와 동일했습니다(스모크 단언). 참고로 자동 모드에서는 이 통화의
+내용이 전부 첫 작물(파프리카) 일지에 실리고 딸기 일지는 `EMPTY` 로 나왔습니다 — 작물 고정 모드(4.2)가 이 경우를 정확히 가릅니다.
+
+### 4.2 작물 고정 일지 — 같은 통화로 3가지 요청
+
+| 요청 `crop` | `diary_id` | 결과 | `generation.warnings` | 소요 |
+|---|---|---|---|---|
+| `{"prdlst_nm": "딸기"}` | `smoke-prod-20260916093034-fixed` | `COMPLETED`, `diaries` 1건 `(0804MM, 딸기, PARTIAL)` — 코드는 저희가 표준 품목에서 채움 | `파프리카 관련 항목 1건 제외(작물 고정: 딸기)` | 15초 |
+| `{"prdlst_nm": "파프리카"}` | `…-fixed-B` | `COMPLETED`, 1건 `(1326MM, 파프리카, PARTIAL)` | `딸기 관련 항목 2건 제외(작물 고정: 파프리카)` | 15초 |
+| `{"prdlst_code": "0804MM"}` (코드만) | `…-fixed-C` | `COMPLETED`, 1건 `(0804MM, 딸기, PARTIAL)` — 이름은 저희가 채움 | `파프리카 관련 항목 1건 제외(작물 고정: 딸기)` | 16초 |
+
+(소요는 트리거 → terminal. 통화 전사는 이미 있으므로 STT 없이 LLM 4회, 약 9천 토큰.)
+
+딸기 고정 일지(public 본문, 발췌) — 파프리카 진딧물은 빠지고 딸기 내용만 남습니다:
+
+```markdown
+> 📝 **통화 요약** · 딸기 잿빛곰팡이 다량 발생 및 흰가루병 의심 증상 고민 상담
+> 💬 오늘도 수고 많으셨어요 🌱
+
+## 기타 기록사항
+[AI 초안·통화 기반]
+- 딸기에 잿빛곰팡이가 너무 많이 퍼진 상태임
+- 딸기에 흰가루병도 오는 것 같아 고민이 많음
+
+## 병해충
+- 잿빛곰팡이 — 발생단계: 확인 필요 [표준 목록 미매핑]
+- 흰가루병 — 발생단계: 확인 필요 [표준 목록 미매핑] ※ 의심 단계 — 실제 발생 여부 확인 필요
+…
+| 작물 | 딸기 |
+```
+
+파프리카 고정 일지의 병해충 절에는 진딧물만, 기타 기록사항에는 "파프리카에 진딧물이 너무 많이 생겨서 고민이 많은 상황임" 만 들어갔습니다.
+
+응답 `DailyDiaryDetail`(발췌):
+
+```json
+{"diary_id": "smoke-prod-20260916093034-fixed", "diary_date": "2026-09-16", "status": "COMPLETED",
+ "call_ids": ["smoke-prod-20260916093034"], "crop": {"prdlst_code": null, "prdlst_nm": "딸기"},
+ "generation": {"run": 1, "warnings": ["farmos 미사용(토큰·농가 복합 키 없음) — 힌트/전사만으로 생성",
+                                       "파프리카 관련 항목 1건 제외(작물 고정: 딸기)"]},
+ "result": {"diaries": [{"prdlst_code": "0804MM", "prdlst_nm": "딸기", "diary_date": "2026-09-16", "status": "PARTIAL", "…": "…"}]}}
+// GET …/daily-diaries/smoke-prod-20260916093034-fixed/transcript → "crops": [{"prdlst_code": "0804MM", "prdlst_nm": "딸기", "status": "PARTIAL"}]
+```
+
+### 4.3 불변 검사
+
+| 요청 | 응답 |
+|---|---|
+| `…-fixed-C`(0804MM 고정) 에 `{"prdlst_nm": "파프리카"}` 재-POST | `422 {"detail": {"code": "CROP_MISMATCH", "message": "diary … crop is fixed to {'prdlst_code': '0804MM', 'prdlst_nm': None} (immutable); got {…'파프리카'} — use a different diary_id per crop"}}` |
+| 자동 모드로 만든 `…-auto` 에 `{"prdlst_nm": "딸기"}` 재-POST | `422 CROP_MISMATCH` (`crop is fixed to None`) |
+
+### 4.4 배포·검증
+
+- dev(:7013) → prod(:7003) 순으로 반영, 각 배포마다 `tests/smoke`(실녹음 E2E + 위 4.2 첫 행과 4.3 첫 행을 자동 단언하는
+  `test_fixed_crop_daily`) 통과. 4.2 의 나머지 두 행과 4.3 둘째 행은 운영에서 수동 실행.
+- 콜백은 `callback_url` 을 주지 않아 발사되지 않았습니다(통화 콜백 `callback_status: FAILED` 는 스모크 통화가 유효하지 않은
+  URL 을 쓰기 때문이며 이번 변경과 무관).
