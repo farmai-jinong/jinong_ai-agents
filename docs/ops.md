@@ -4,8 +4,20 @@
 포트: **7003**(loopback) — 7001 hatchery-serving, 7002 jinong-ai-gateway 와 나란히. 외부는 호스트 nginx(443) 로만.
 같은 호스트의 **dev 인스턴스**는 **7013** / `apps/jinong_ai-agents-dev` / `jinong-stt-report-generation-dev.jinongservice.co.kr` — §7.
 
-## 0. 현재 상태 (2026-09-10)
+## 0. 현재 상태 (2026-09-17)
 
+- 2026-09-17 통화요약 웹훅 도메인 전환(백엔드 통보): prod 인스턴스 `.env` 의 `SUMMARY_CALLBACK_URL` 을
+  `https://data.jinongservice.co.kr/voicetalk/public/call-summary-callback` 로. agent-callback 은 통화 시작 body 의
+  `callback_url` 을 그대로 쓰므로 우리 쪽 변경 없음. dev 인스턴스는 `dev.` 유지. `/v1/upstream/health` `config` 에
+  `summary_callback_url` 을 추가해 스모크(`tests/smoke/profiles.py`)가 도메인 드리프트를 잡는다. 적용 절차:
+
+  ```bash
+  ssh jinong_aws_office 'sed -i "s#^SUMMARY_CALLBACK_URL=.*#SUMMARY_CALLBACK_URL=https://data.jinongservice.co.kr/voicetalk/public/call-summary-callback#" \
+    ~/apps/jinong_ai-agents/.env && grep ^SUMMARY_CALLBACK_URL ~/apps/jinong_ai-agents/.env'
+  git checkout prod && git merge dev && ./deploy/deploy.sh        # 재기동 + 스모크(프로필 대조)
+  ```
+  `FARMOS_BASE_URL`·`AP_BACKEND_BASE_URL` 은 백엔드 통보 범위 밖이라 그대로 — prod 통화의 농가 JWT 가 `data.` 발급이면
+  farmos 읽기(401) 로 드러나므로 스모크 E2E/`upstream/health.farmos` 로 확인 후 별도 전환.
 - 2026-09-10 영농일지 형식 변경(`fix/diary-format`, dev·prod 양쪽): 첫 줄 H1 `# 영농일지 — 작물 (날짜)` 제거,
   메타 표를 `## 근거 발화` 와 `## 참고` 사이(public 은 마지막 섹션 뒤·푸터 앞)로 이동. `##` 섹션 집합·순서는 그대로.
 - 2026-09-02 dev 인스턴스 분리(§7): 같은 호스트에 `jinong-ai-agents-dev`(`127.0.0.1:7013`, `apps/jinong_ai-agents-dev`,
@@ -42,7 +54,8 @@
 - 통화요약 콜백 전환 (2026-08-26): 통화 단위는 백엔드 통화요약 콜백으로 교체. `content` 는 **통화
   단순요약**(주제/조치/후속 불릿 3줄, `app/agents/summarize.py` 의 독립 LLM 패스 1콜 — 일지가 실질
   내용을 가질 때만 호출). 영농일지·보고서·전사는 종전대로 결과 API 로만 나간다 — `.env` 에 `SUMMARY_CALLBACK_URL` 필요(개발
-  `https://dev.jinongservice.co.kr/voicetalk/public/call-summary-callback`, 운영은 `data.` 도메인).
+  `https://dev.jinongservice.co.kr/voicetalk/public/call-summary-callback`, 운영은
+  `https://data.jinongservice.co.kr/voicetalk/public/call-summary-callback` — 2026-09-17 전환, §0 항목).
   비어 있으면 통화 단위 콜백은 발사되지 않는다. `SUMMARY_ENGINE_VERSION` 은 기본 `jinong-summary-v1`
   (전송 시 `/{모델명}` 이 붙음). 날짜별 일지 콜백(agent-callback)은 종전대로 요청 body 의
   `callback_url` 로 수신하며 변경 없음. 4xx(429 제외) 수신 시에는 재시도하지 않는다(로그에 응답 본문

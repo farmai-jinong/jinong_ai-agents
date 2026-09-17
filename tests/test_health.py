@@ -43,6 +43,7 @@ async def test_upstream_health_config_block(client, app):
     assert body["config"] == effective_config(st)
     assert body["config"]["api_markdown_view"] == "public" and body["config"]["s3_prefix"] == "agents/voicecall"
     assert body["config"]["summary_callback_set"] is False
+    assert body["config"]["summary_callback_url"] == ""
     # 비밀값은 어디에도 없어야 한다
     assert "secret-key-xyz" not in r.text and "farm_access_token" not in r.text
 

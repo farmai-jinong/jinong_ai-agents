@@ -72,7 +72,7 @@ async def upstream_health(request: Request) -> dict:
 
 
 def effective_config(st) -> dict:
-    """비밀 아닌 유효 설정 — 값이 아니라 '설정됐는지' 만 내는 항목(summary_callback_set)에 주의. 키·토큰·자격증명 경로는 금지."""
+    """비밀 아닌 유효 설정 — 키·토큰·자격증명 경로는 금지. summary_callback_url 은 백엔드 도메인(dev./data.) 드리프트 판정용."""
     return {
         "api_markdown_view": st.api_markdown_view,
         "s3_prefix": st.s3_prefix,
@@ -80,6 +80,7 @@ def effective_config(st) -> dict:
         "public_base_url": st.public_base_url,
         "callback_enabled": st.callback_enabled,
         "summary_callback_set": bool(st.summary_callback_url),
+        "summary_callback_url": st.summary_callback_url,
         "call_agent_callback_enabled": st.call_agent_callback_enabled,
         "callback_include_artifact_keys": st.callback_include_artifact_keys,
         "term_fix_enabled": st.term_fix_enabled,

@@ -550,9 +550,10 @@ terminal 사유 (`status` + `error.code`):
 
 ### 5.1 통화 단위 — 통화요약 콜백 (통화 단순요약 동봉)
 
-- **수신 URL**: 저희 쪽 전역 설정(`SUMMARY_CALLBACK_URL`)입니다. 개발
-  `https://dev.jinongservice.co.kr/voicetalk/public/call-summary-callback`, 운영 전환 시 `data.` 도메인
-  URL을 알려주시면 저희가 바꿉니다. (통화별 `callback_url`로 받지 않습니다.)
+- **수신 URL**: 저희 쪽 전역 설정(`SUMMARY_CALLBACK_URL`)입니다. 운영은
+  `https://data.jinongservice.co.kr/voicetalk/public/call-summary-callback`(2026-09-17 전환), 개발 인스턴스는
+  `https://dev.jinongservice.co.kr/voicetalk/public/call-summary-callback`. 주소가 또 바뀌면 알려주시면 저희가
+  바꿉니다. (통화별 `callback_url`로 받지 않습니다 — agent-callback 만 요청 body 의 `callback_url` 로 회신합니다.)
 - **`content`는 통화 내용의 단순요약**입니다 — 주제/조치/후속 불릿 3줄, 대체로 100자 안팎.
   통화이력 화면에 한 줄로 붙이기 좋은 분량입니다.
 - **영농일지·컨설팅 보고서 마크다운은 콜백에 싣지 않습니다.** 일지와 전사본은 종전대로
