@@ -11,8 +11,9 @@ ignore = ["E501", "B008", "B904", "UP037", "UP047"]
 asyncio_mode = "auto"
 # 기본 `pytest -q` 는 네트워크 없음. 실제 LLM 통합은 `pytest -m llm` 으로만(.env 의 provider 자격증명 사용).
 # 배포된 서버 스모크(tests/smoke, SMOKE_URL 대상)는 `pytest -m smoke` 로만 — scripts/verify_deploy.sh 가 실행한다.
-addopts = "-m 'not llm and not smoke'"
+addopts = "-m 'not llm and not smoke and not backend_db'"
 markers = [
+  "backend_db: live read-only queries against the backend PostgreSQL (BACKEND_DB_URL) — opt-in via `pytest -m backend_db tests/integration`",
   "llm: real LLM required — opt-in via `pytest -m llm` (needs LLM_API_KEY or gemini credentials)",
   "smoke: runs against a deployed server (SMOKE_URL/SMOKE_ENV) — opt-in via `pytest -m smoke tests/smoke`",
 ]

@@ -12,6 +12,7 @@ kafka-gateway ──POST /v1/calls ──▶ ⑧ agent ──GET s3://bucket/key
               ──POST …/end    ──▶   │       ──LLM (gemini: Vertex AI / openai / jinong: ⑥ gateway vLLM — env 전환)
               ──POST /v1/daily-diaries ▶│   ──GET /m/diary/* (farmos, 농가 JWT, 읽기 전용)
                                         │   ──GET /voicetalk/public/research/* (AP 백엔드, X-API-Key, 읽기 전용)
+                                        │   ──SELECT voicetalk.*/smartfarm.* (백엔드 PostgreSQL 사설 IP, 읽기 전용 세션; dev 만, STT·재생성 시)
               ◀─GET /v1/calls/{id}──┘       ──PUT agents/voicecall/{call_id}/… · …/daily/{diary_id}/… (S3 산출물)
 ```
 
@@ -60,6 +61,14 @@ kafka-gateway ──POST /v1/calls ──▶ ⑧ agent ──GET s3://bucket/key
   call 클레임이 우선(`runner.py`: `daily_room = gen_room - len(call_ids)` — call 생성이 포화면 daily 는 대기).
   실패 시 60s 백오프 재큐(`generation_run` 은 성공 실행에만 증가 — 실패 시 롤백), `GEN_MAX_ATTEMPTS` 소진 → `FAILED/GENERATION_FAILED`.
 - 복구(`recovery.recover`): 기동 시 TRANSCRIBING→PENDING, RUNNING→QUEUED(call·daily 각각 — `daily_reset`), ENDED 통화 재평가. 스윕(`recovery.sweep`): 종료 후 1h 미종료 오디오 → FAILED/STT_TIMEOUT.
+- **백엔드 DB 갱신(`services/backend_sync.py`, dev 전용 `BACKEND_DB_URL`, 2026-09-22)** — 통화 시작 payload 스냅샷 대신
+  백엔드 PostgreSQL(`clients/backend_db.py`, 읽기 전용 세션)을 읽어 `participants_json`(역할 = `tb_user.user_job_secode`
+  `001001004` → 컨설턴트, 이름 = `user_nm`)·`num_speakers`(비었을 때만)·`metadata_json.hints`(`farmer_engn_id/user_id`,
+  `farmer_crops` = 백엔드 `findUserPrdlstList` 재현)를 갱신한다. 시점은 **STT 잡 시작**(`reason=stt`)과 **재생성(run ≥ 2,
+  `reason=regenerate`; daily 재-POST/`/regenerate` 포함)** 뿐 — 첫 생성(run 1)은 현행 그대로. 재생성이면 `CallContext.prefer_backend_db`
+  로 파이프라인 `load_farm_context` 가 DB 를 1순위 출처(`source=backend_db`)로 본다. `farm_json`·토큰은 불변. 결과는
+  `job_events`(`backend_refresh`/`daily_backend_refresh`)와 `metadata_json["backend_refresh"]`(GET 응답 `metadata`)에 남고
+  실패는 fail-open(스냅샷 유지). 통화 행이 없어도 hints 의 농가 복합 키로 등록 작물은 읽는다.
 
 ## 저장소
 

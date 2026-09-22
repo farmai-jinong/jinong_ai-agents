@@ -97,7 +97,7 @@ async def render_diary_node(state: CropDiaryState, config) -> dict:  # type: ign
         status = "EMPTY"
     else:
         status = "OK"
-        if state.get("refs_status") in ("unavailable", "partial", "disabled") and (farm is None or farm.source != "farmos"):
+        if state.get("refs_status") in ("unavailable", "partial", "disabled") and (farm is None or farm.source not in ("farmos", "backend_db")):
             status = "PARTIAL"
             warnings.append("farmos 표준 코드 매핑 없이 생성됨(prefill 불가)")
         elif state.get("refs_status") == "partial":

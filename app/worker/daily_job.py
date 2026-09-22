@@ -19,6 +19,7 @@ from ..db.models import Call, CallAudio, DailyArtifact, DailyDiary, utcnow
 from ..runtime import Runtime
 from ..schemas.pipeline import CallContext, CallHints, Participant, PipelineResult
 from ..services.artifacts import artifact_keys, persist_daily_result
+from ..services.backend_sync import refresh_daily
 from ..services.daily import stored_crop
 from ..services.results import utc
 from ..services.transcripts import apply_crops, apply_speaker_map, merge_calls, transcript_markdown
@@ -26,7 +27,7 @@ from ..services.transcripts import apply_crops, apply_speaker_map, merge_calls, 
 log = logging.getLogger(__name__)
 
 
-def build_daily_context(dd: DailyDiary, calls: list[Call]) -> CallContext:
+def build_daily_context(dd: DailyDiary, calls: list[Call], *, prefer_backend_db: bool = False) -> CallContext:
     ordered = sorted(calls, key=lambda c: (c.started_at is None,
                                            c.started_at.timestamp() if c.started_at else 0.0, c.call_id))
     hints_raw: dict[str, Any] = {}
@@ -58,6 +59,7 @@ def build_daily_context(dd: DailyDiary, calls: list[Call]) -> CallContext:
         participants=participants, farm=farm, metadata=metadata,
         farm_access_token=dd.farm_access_token,
         language=dd.language or "ko", generation_run=dd.generation_run, hints=hints,
+        prefer_backend_db=prefer_backend_db,
     )
 
 
@@ -125,13 +127,19 @@ async def run_daily_generate(rt: Runtime, diary_id: str) -> None:
         await s.refresh(dd)
         call_ids = list(dd.call_ids_json or [])
         calls = await repo.get_calls_by_ids(s, call_ids)
+        # 재-POST/재생성(run ≥ 2) + BACKEND_DB_URL: 멤버 통화 참여자·등록 작물을 백엔드 DB 로 최신화(첫 생성은 현행 그대로)
+        regen_db = run_no > 1 and rt.backend_db is not None
+        if regen_db:
+            await refresh_daily(rt, s, dd, calls, reason="regenerate")
+            await s.commit()
+            await s.refresh(dd)
         per_call: list[tuple[Call, list[CallAudio]]] = []
         for c in calls:
             audios = await repo.list_audio(s, c.call_id)
             done = [a for a in audios if a.status in ("TRANSCRIBED", "FAILED")]
             if done:
                 per_call.append((c, done))
-        ctx = build_daily_context(dd, calls)
+        ctx = build_daily_context(dd, calls, prefer_backend_db=regen_db)
 
     log.info("[%s] daily generation start (run %d, attempt %d, %d calls)", diary_id, run_no, attempt, len(calls))
     warnings = [f"call {cid} missing" for cid in call_ids if cid not in {c.call_id for c in calls}]

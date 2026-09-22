@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .interface import CallSummarizer, DiaryReportPipeline, PipelineEmpty
 
@@ -16,8 +16,8 @@ __all__ = ["CallSummarizer", "DiaryReportPipeline", "PipelineEmpty", "build_pipe
            "build_summarizer"]
 
 
-def build_pipeline(settings: "Settings") -> DiaryReportPipeline:
-    """PIPELINE_IMPL 에 따라 구현을 고른다 (langgraph | fake)."""
+def build_pipeline(settings: "Settings", *, backend_db: Any = None) -> DiaryReportPipeline:
+    """PIPELINE_IMPL 에 따라 구현을 고른다 (langgraph | fake). `backend_db` 는 Runtime 이 만든 읽기 전용 클라이언트(공유)."""
     impl = (settings.pipeline_impl or "langgraph").lower()
     if impl == "fake":
         from .fake import FakePipeline
@@ -25,7 +25,7 @@ def build_pipeline(settings: "Settings") -> DiaryReportPipeline:
         return FakePipeline()
     from .graph import LangGraphPipeline
 
-    return LangGraphPipeline(settings)
+    return LangGraphPipeline(settings, backend_db=backend_db)
 
 
 def build_summarizer(settings: "Settings") -> CallSummarizer:

@@ -113,6 +113,14 @@ class Settings(BaseSettings):
     ap_backend_base_url: str = ""
     ap_backend_timeout: float = 10.0
 
+    # --- 백엔드 PostgreSQL 직접 조회 (dev 전용, 읽기 전용) ------------------------
+    # 통화 참여자·농가 등록 작물을 통화 시작 payload 스냅샷 대신 백엔드 DB 에서 읽는다 — STT 잡 시작과 **재생성(run ≥ 2)**
+    # 에서만. 첫 생성(run 1)은 무관. 비우면 비활성(prod). 연결 정보 SSOT 는 Hatchery_serving/.env(사설 IP 172.31.1.109).
+    # 계정이 superuser 라 읽기 전용은 우리 세션(default_transaction_read_only=on)으로만 보장 — SELECT 외 금지.
+    backend_db_url: str = ""           # postgresql+asyncpg://user:pw@host:port/db — 비밀, 로그·응답에 절대 노출 금지
+    backend_db_timeout: float = 5.0
+    backend_db_pool_size: int = 2
+
     # --- callback (선택) -----------------------------------------------------
     callback_enabled: bool = False
     callback_api_key: str = ""
@@ -186,6 +194,10 @@ class Settings(BaseSettings):
     @property
     def db_url(self) -> str:
         return f"sqlite+aiosqlite:///{self.db_path}"
+
+    @property
+    def backend_db_enabled(self) -> bool:
+        return bool(self.backend_db_url.strip())
 
 
 @lru_cache

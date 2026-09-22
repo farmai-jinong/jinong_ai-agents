@@ -45,9 +45,44 @@ def _from_hints(ctx) -> FarmContext:  # type: ignore[no-untyped-def]
     return FarmContext(crops=crops, source="hints" if crops else "none", status="unavailable" if crops else "disabled")
 
 
+async def _from_backend_db(deps, ctx) -> dict | None:  # type: ignore[no-untyped-def]
+    """재생성(ctx.prefer_backend_db) 전용 1순위 — 백엔드 DB 의 등록 작물. 비었거나 실패하면 None(기존 순서로 계속)."""
+    key = farmer_key(ctx)
+    if key is None:
+        return {"warnings": ["backend_db 미사용(농가 복합 키 없음) — 기존 순서로 조회"]}
+    try:
+        rows = await deps.backend_db.farm_crops(*key)
+    except Exception as e:  # noqa: BLE001
+        log.warning("backend_db farm_crops failed: %s", e)
+        return {"warnings": [f"backend_db 작물 조회 실패({type(e).__name__}) — 기존 순서로 조회"]}
+    crops = [CropRef(prdlstCode=r.get("prdlstCode"), prdlstNm=str(r.get("prdlstNm") or ""),
+                     reprsntPrdlstCnt=r.get("reprsntPrdlstCnt"), use=r.get("use"))
+             for r in rows if r.get("prdlstNm")]
+    if not crops:
+        return {"warnings": [f"backend_db 등록 작물 없음(engn:{key[0]}) — 기존 순서로 조회"]}
+    if ctx.farm_access_token and deps.farmos_factory:
+        return {"farm": FarmContext(crops=crops, source="backend_db", status="ok")}
+    return {"farm": FarmContext(crops=crops, source="backend_db", status="partial"),
+            "warnings": ["backend_db 작물 목록으로 코드 확정 — 토큰 없음(prefill 불가)"]}
+
+
 async def load_farm_context(state: PipelineState, config) -> dict:  # type: ignore[no-untyped-def]
     deps = get_deps(config)
     ctx = state["ctx"]
+    pre_warnings: list[str] = []
+    if ctx.prefer_backend_db and deps.backend_db is not None:
+        out = await _from_backend_db(deps, ctx)
+        if out and "farm" in out:
+            return out
+        pre_warnings = list((out or {}).get("warnings") or [])
+    out = await _load_farm_context_default(deps, ctx)
+    if pre_warnings:
+        out["warnings"] = pre_warnings + list(out.get("warnings") or [])
+    return out
+
+
+async def _load_farm_context_default(deps, ctx) -> dict:  # type: ignore[no-untyped-def]
+    """현행 순서 — farmos JWT → AP research API → hints → none."""
     if not deps.farmos_factory or not ctx.farm_access_token:
         return await _without_token(deps, ctx)
     try:

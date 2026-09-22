@@ -26,6 +26,12 @@ class ApBackendLike(Protocol):
     # async def prdlsts(self) -> list[dict[str, Any]]: ...
 
 
+class BackendDbLike(Protocol):
+    """백엔드 PostgreSQL 읽기 전용(dev 전용, `BACKEND_DB_URL`) — 농가 등록 작물·표준 품목을 API 없이 준다."""
+    async def farm_crops(self, engn_id: str, user_id: str) -> list[dict[str, Any]]: ...
+    async def prdlsts(self) -> list[dict[str, Any]]: ...
+
+
 def _utcnow() -> datetime:
     return datetime.now(UTC)
 
@@ -36,6 +42,7 @@ class Deps:
     llm: Any                                  # BaseChatModel (ChatOpenAI 또는 Fake)
     farmos_factory: FarmosFactory | None       # None → farmos 비활성
     ap_backend: ApBackendLike | None = None    # None → 토큰 없을 때 hints 로 강등(기존 동작)
+    backend_db: BackendDbLike | None = None    # None → 비활성. ctx.prefer_backend_db 일 때만 작물 출처 1순위
     clock: Callable[[], datetime] = _utcnow
     prompt_version: str = "1"
     dump_dir: str | None = None

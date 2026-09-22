@@ -48,6 +48,9 @@ class CallContext(BaseModel):
     language: str = "ko"
     generation_run: int = 1
     hints: CallHints = Field(default_factory=CallHints)
+    # 재생성(run ≥ 2) + BACKEND_DB_URL 활성일 때만 워커가 켠다 — `load_farm_context` 가 백엔드 DB 를 최우선 출처로 본다.
+    # 첫 생성(run 1)은 항상 False(현행 순서: farmos JWT → AP research API → hints).
+    prefer_backend_db: bool = False
 
     def name_of(self, role: str) -> str | None:
         for p in self.participants:

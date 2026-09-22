@@ -179,3 +179,52 @@ def test_fixed_crop_daily(client, completed_call, e2e):
     assert r.status_code == 422 and r.json()["detail"]["code"] == "CROP_MISMATCH", r.text
     print(f"[smoke] fixed-crop daily={diary_id} crop={fixed_nm} code={only['prdlst_code']} status={only['status']} "
           f"elapsed={time.monotonic() - t0:.0f}s warnings={warns}")
+
+
+# 실측 테스트 농가(백엔드 DB engn 1 / test7 — 등록 품종 4종). 실제 call_id 재현 POST 는 금지(dev 콜백이 공용 DB 를 덮어쓴다).
+DB_FARMER_HINTS = {"farmer_engn_id": "1", "farmer_user_id": "test7"}
+
+
+def test_regenerate_refreshes_from_backend_db(client, completed_call, e2e):
+    """재생성(run 2) 시 백엔드 DB 갱신 — 스모크 call_id 는 DB 에 없으니 참여자는 유지(found=false), 등록 작물은 hints 의
+    농가 복합 키로 읽어 hints.farmer_crops 를 채우고 파이프라인이 backend_db 출처로 돈다. 비활성 프로필이면 흔적이 없어야 한다.
+
+    LLM 1회 추가(STT 재실행 없음). 첫 생성(run 1)이 DB 를 보지 않았음도 같이 확인한다.
+    """
+    call_id = completed_call["call_id"]
+    enabled = bool(e2e["profile"]["config"].get("backend_db_enabled"))
+    before = completed_call["detail"]
+    assert before["generation"]["run"] == 1
+    md0 = before.get("metadata") or {}
+    if enabled:
+        assert md0.get("backend_refresh", {}).get("reason") == "stt", md0      # STT 시점 1회(통화 행 없음 → 스냅샷 유지)
+        assert md0["backend_refresh"]["found"] is False
+    else:
+        assert "backend_refresh" not in md0, md0
+    # terminal 업서트로 hints 에 농가 복합 키만 추가(참가자/토큰 불변) → 재생성
+    r = client.post("/v1/calls", json={"call_id": call_id, "metadata": {"hints": dict(DB_FARMER_HINTS)}})
+    assert r.status_code == 200, r.text
+    r = client.post(f"/v1/calls/{call_id}/regenerate", json={"reason": "smoke backend_db"})
+    assert r.status_code == 202, r.text
+    deadline = time.monotonic() + 10 * 60
+    d = None
+    while time.monotonic() < deadline:
+        d = client.get(f"/v1/calls/{call_id}", params={"inline": "false"}).json()
+        if d["status"] in ("COMPLETED", "EMPTY", "FAILED") and d["generation"]["run"] == 2:
+            break
+        time.sleep(POLL_SEC)
+    assert d and d["status"] == "COMPLETED" and d["generation"]["run"] == 2, d and (d["status"], d.get("error"), d["generation"])
+    md = d["metadata"] or {}
+    parts = [(p["role"], p["user_id"]) for p in d["participants"]]
+    assert parts == [("farmer", "smoke-farmer"), ("consultant", "smoke-cons")], parts     # 참여자 스냅샷 유지
+    if not enabled:
+        assert "backend_refresh" not in md and "farmer_crops" not in (md.get("hints") or {}), md
+        return
+    br = md["backend_refresh"]
+    assert br["reason"] == "regenerate" and br["found"] is False and br["crops"] >= 1, br
+    codes = {c["prdlstCode"] for c in md["hints"]["farmer_crops"]}
+    assert {"0803MM", "0804MM"} <= codes, codes
+    warns = d["generation"]["warnings"]
+    assert any("backend_db 작물 목록으로 코드 확정" in w for w in warns), warns     # 토큰 purge 상태 → partial 경로
+    assert completed_call["token"] not in client.get(f"/v1/calls/{call_id}").text
+    print(f"[smoke] regenerate backend_db call={call_id} crops={sorted(codes)} changed={br['changed']}")

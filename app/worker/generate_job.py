@@ -15,13 +15,14 @@ from ..db.models import Artifact, Call, utcnow
 from ..runtime import Runtime
 from ..schemas.pipeline import CallContext, CallHints, CallSummaryResult, DiaryArtifact, Participant, PipelineResult
 from ..services.artifacts import artifact_keys, persist_result
+from ..services.backend_sync import refresh_call
 from ..services.results import utc
 from ..services.transcripts import apply_crops, apply_speaker_map, merge_transcripts, transcript_markdown
 
 log = logging.getLogger(__name__)
 
 
-def build_context(call: Call) -> CallContext:
+def build_context(call: Call, *, prefer_backend_db: bool = False) -> CallContext:
     hints_raw: dict[str, Any] = {}
     if isinstance(call.metadata_json, dict) and isinstance(call.metadata_json.get("hints"), dict):
         hints_raw = call.metadata_json["hints"]
@@ -32,6 +33,7 @@ def build_context(call: Call) -> CallContext:
         participants=[Participant(**p) for p in (call.participants_json or [])],
         farm=call.farm_json, metadata=call.metadata_json, farm_access_token=call.farm_access_token,
         language=call.language or "ko", generation_run=call.generation_run, hints=hints,
+        prefer_backend_db=prefer_backend_db,
     )
 
 
@@ -211,8 +213,15 @@ async def run_generate(rt: Runtime, call_id: str) -> None:
         await repo.add_event(s, call_id, "gen_started", {"run": run_no, "attempt": attempt})
         await s.commit()
         await s.refresh(call)
+        # 재생성(run ≥ 2) + BACKEND_DB_URL: 참여자·등록 작물을 백엔드 DB 로 최신화하고 파이프라인도 DB 를 1순위로 본다.
+        # 첫 생성(run 1)은 현행 그대로(payload 스냅샷 + farmos JWT → AP research API → hints).
+        regen_db = run_no > 1 and rt.backend_db is not None
+        if regen_db:
+            await refresh_call(rt, s, call, reason="regenerate")
+            await s.commit()
+            await s.refresh(call)
         audios = await repo.list_audio(s, call_id)
-        ctx = build_context(call)
+        ctx = build_context(call, prefer_backend_db=regen_db)
 
     log.info("[%s] generation start (run %d, attempt %d, %d audio)", call_id, run_no, attempt, len(audios))
     done = [a for a in audios if a.status in ("TRANSCRIBED", "FAILED")]

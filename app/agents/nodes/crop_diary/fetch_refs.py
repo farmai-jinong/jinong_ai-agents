@@ -18,7 +18,7 @@ async def fetch_refs(state: CropDiaryState, config) -> dict:  # type: ignore[no-
     target = state["target"]
     farm = state.get("farm")
     if (not deps.farmos_factory or not ctx.farm_access_token or not target.prdlst_code
-            or not farm or farm.source != "farmos"):
+            or not farm or farm.source not in ("farmos", "backend_db")):
         return {"refs": None, "refs_status": "disabled"}
     try:
         client = deps.farmos_factory(ctx.farm_access_token)

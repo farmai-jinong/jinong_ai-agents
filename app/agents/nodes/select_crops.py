@@ -282,16 +282,22 @@ def route_facts_fixed(facts: CallFacts, target: CropTarget, others: list[CropRef
 
 
 async def _standard_prdlsts(deps) -> list[CropRef]:  # type: ignore[no-untyped-def]
-    """AP 백엔드 표준 품목 전체 — 클라이언트에 `prdlsts` 가 없거나 실패하면 빈 목록(코드 없이 진행)."""
-    fn = getattr(deps.ap_backend, "prdlsts", None) if deps.ap_backend is not None else None
-    if fn is None:
-        return []
-    try:
-        rows = await fn()
-    except Exception as e:  # noqa: BLE001
-        log.warning("ap-backend prdlsts failed: %s", e)
-        return []
-    return [CropRef(prdlstCode=r.get("prdlstCode"), prdlstNm=str(r.get("prdlstNm") or "")) for r in rows if r.get("prdlstNm")]
+    """표준 품목 전체 — 백엔드 DB(있으면) → AP 백엔드 순. 둘 다 없거나 실패하면 빈 목록(코드 없이 진행).
+
+    참조 데이터라 출처에 따른 내용 차이가 없다(같은 `tb_stdr_prdlst`) — DB 가 있으면 API 를 아낀다.
+    """
+    sources = [("backend_db", deps.backend_db), ("ap-backend", deps.ap_backend)]
+    for name, client in sources:
+        fn = getattr(client, "prdlsts", None) if client is not None else None
+        if fn is None:
+            continue
+        try:
+            rows = await fn()
+        except Exception as e:  # noqa: BLE001
+            log.warning("%s prdlsts failed: %s", name, e)
+            continue
+        return [CropRef(prdlstCode=r.get("prdlstCode"), prdlstNm=str(r.get("prdlstNm") or "")) for r in rows if r.get("prdlstNm")]
+    return []
 
 
 def _needs_standard(facts: CallFacts, farm: FarmContext) -> bool:

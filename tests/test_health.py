@@ -44,6 +44,7 @@ async def test_upstream_health_config_block(client, app):
     assert body["config"]["api_markdown_view"] == "public" and body["config"]["s3_prefix"] == "agents/voicecall"
     assert body["config"]["summary_callback_set"] is False
     assert body["config"]["summary_callback_url"] == ""
+    assert body["config"]["backend_db_enabled"] is False and "backend_db" not in body
     # 비밀값은 어디에도 없어야 한다
     assert "secret-key-xyz" not in r.text and "farm_access_token" not in r.text
 
@@ -52,3 +53,30 @@ def test_effective_config_has_no_secret_keys(settings):
     cfg = effective_config(settings)
     for k in cfg:
         assert not re.search(r"(^|_)(api_key|secret|token|password|credentials?)($|_)", k), k
+
+
+async def test_upstream_health_backend_db_probe_when_enabled(client, app):
+    """BACKEND_DB_URL 활성 시 `backend_db` 블록(ok/read_only/url) — URL 은 비밀번호 없는 host:port/db 만."""
+    from app.clients.backend_db import safe_url
+
+    class FakeDb:
+        async def probe(self):
+            return {"ok": True, "read_only": True, "latency_ms": 3,
+                    "url": safe_url("postgresql+asyncpg://u:pw-secret@172.31.1.109:25432/postgres")}
+
+        async def close(self):
+            pass
+
+    rt = app.state.rt
+    rt.backend_db = FakeDb()
+    rt.settings.backend_db_url = "postgresql+asyncpg://u:pw-secret@172.31.1.109:25432/postgres"
+    rt.settings.llm_provider, rt.settings.llm_api_key = "openai", "k"
+    with respx.mock(assert_all_called=False) as router:
+        router.get(f"{STT_URL}/healthz").mock(return_value=httpx.Response(200))
+        router.get("https://llm.test/v1/models").mock(return_value=httpx.Response(200, json={"data": []}))
+        router.get("https://farmos.test/m/diary/user/prdlsts/list").mock(return_value=httpx.Response(401))
+        r = await client.get("/v1/upstream/health")
+    body = r.json()
+    assert body["backend_db"] == {"ok": True, "read_only": True, "latency_ms": 3, "url": "172.31.1.109:25432/postgres"}
+    assert body["config"]["backend_db_enabled"] is True
+    assert "pw-secret" not in r.text

@@ -10,6 +10,7 @@ from ..clients.stt import SttError, backoff_delay
 from ..db import repo
 from ..db.models import utcnow
 from ..runtime import Runtime
+from ..services.backend_sync import refresh_call
 
 log = logging.getLogger(__name__)
 
@@ -23,6 +24,9 @@ async def run_stt(rt: Runtime, audio_id: int) -> bool:
             return False
         call = await repo.get_call(s, a.call_id)
         call_id, bucket, key = a.call_id, a.bucket, a.key
+        if call is not None and rt.backend_db is not None:      # dev 전용: 참여자·등록 작물을 백엔드 DB 로 최신화(fail-open)
+            await refresh_call(rt, s, call, reason="stt")
+            await s.commit()
         num_speakers = call.num_speakers if call else None
         if not num_speakers and call and call.participants_json:
             num_speakers = len(call.participants_json) or None

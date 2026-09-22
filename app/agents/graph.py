@@ -154,12 +154,13 @@ def default_ap_backend(settings: Settings) -> ApBackendClient | None:
 class LangGraphPipeline:
     """워커가 쓰는 파사드. `deps` 를 직접 주면(테스트/CLI) 그대로 사용."""
 
-    def __init__(self, settings: Settings, deps: Deps | None = None, *, use_farmos: bool = True) -> None:
+    def __init__(self, settings: Settings, deps: Deps | None = None, *, use_farmos: bool = True,
+                 backend_db: Any = None) -> None:
         self.settings = settings
         if deps is None:
             deps = Deps(settings=settings, llm=make_chat_model(settings),
                         farmos_factory=default_farmos_factory(settings) if use_farmos else None,
-                        ap_backend=default_ap_backend(settings),
+                        ap_backend=default_ap_backend(settings), backend_db=backend_db,
                         prompt_version=PROMPT_VERSION, dump_dir=settings.prompt_dump_dir or None)
         self.deps = deps
         self.graph = build_graph()

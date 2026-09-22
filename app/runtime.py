@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from .clients.backend_db import BackendDbClient
 from .clients.storage import StorageClient, build_storage
 from .clients.stt import SttClient
 from .config import Settings
@@ -27,6 +28,7 @@ class Runtime:
     pipeline: "DiaryReportPipeline"
     summarizer: "CallSummarizer | None" = None   # 통화 단순요약(콜백 content) — 일지 파이프라인과 독립
     worker: "Worker | None" = None
+    backend_db: "BackendDbClient | None" = None  # 백엔드 PostgreSQL 읽기 전용(dev 전용, BACKEND_DB_URL) — 워커·파이프라인 공유
     extra: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -34,13 +36,18 @@ class Runtime:
               summarizer: "CallSummarizer | None" = None) -> "Runtime":
         from .agents import build_pipeline, build_summarizer
 
+        backend_db = None
+        if settings.backend_db_enabled:
+            backend_db = BackendDbClient(settings.backend_db_url, timeout=settings.backend_db_timeout,
+                                         pool_size=settings.backend_db_pool_size)
         return cls(
             settings=settings,
             db=Database(settings.db_url),
             s3=build_storage(settings),
             stt=SttClient(settings),
-            pipeline=pipeline or build_pipeline(settings),
+            pipeline=pipeline or build_pipeline(settings, backend_db=backend_db),
             summarizer=summarizer or build_summarizer(settings),
+            backend_db=backend_db,
         )
 
     async def startup(self, *, start_worker: bool = True) -> None:
@@ -56,4 +63,6 @@ class Runtime:
         if self.worker is not None:
             await self.worker.stop()
         await self.stt.shutdown()
+        if self.backend_db is not None:
+            await self.backend_db.close()
         await self.db.close()

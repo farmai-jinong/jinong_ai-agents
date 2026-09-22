@@ -38,6 +38,11 @@ def test_upstream_reachable_and_config_matches_profile(client, smoke_env):
     assert not bad, f"업스트림 도달 실패: {bad}"
     if "ap_backend" in b:
         assert b["ap_backend"].get("ok"), b["ap_backend"]
+    # 백엔드 DB 직접 조회(dev 전용): 켜져 있으면 프로브가 읽기 전용 세션으로 응답해야 하고, URL 에 자격증명이 없어야 한다
+    assert ("backend_db" in b) == bool(b["config"].get("backend_db_enabled")), b.get("backend_db")
+    if "backend_db" in b:
+        assert b["backend_db"].get("ok") and b["backend_db"].get("read_only") is True, b["backend_db"]
+        assert "@" not in b["backend_db"].get("url", ""), b["backend_db"]
 
     prof = smoke_env["profile"]
     drift = {}

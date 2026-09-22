@@ -19,6 +19,8 @@ PROFILES: dict[str, dict] = {
             "public_base_url": "https://jinong-stt-report-generation-dev.jinongservice.co.kr",
             # dev 인스턴스는 백엔드 dev. 를 계속 본다
             "summary_callback_url": "https://dev.jinongservice.co.kr/voicetalk/public/call-summary-callback",
+            # 2026-09-22 백엔드 PostgreSQL 직접 조회(읽기 전용, 사설 IP) — dev 만. prod 는 비움(ops.md §7)
+            "backend_db_enabled": True,
         },
     },
     "prod": {
@@ -35,6 +37,7 @@ PROFILES: dict[str, dict] = {
             "public_base_url": "https://jinong-stt-report-generation.jinongservice.co.kr",
             # 2026-09-17 백엔드 통보: 통화요약 웹훅 dev. → data. 전환. agent-callback 은 요청 body 의 callback_url 이라 무관.
             "summary_callback_url": "https://data.jinongservice.co.kr/voicetalk/public/call-summary-callback",
+            "backend_db_enabled": False,
         },
     },
     # 로컬 셀프테스트(STORAGE_IMPL=local ./scripts/run_local.sh) — 스위트 자체를 검증하는 용도, fake 파이프라인만 고정

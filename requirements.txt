@@ -6,6 +6,7 @@ pydantic-settings>=2.4
 httpx>=0.27
 sqlalchemy[asyncio]>=2.0
 aiosqlite>=0.20
+asyncpg>=0.29                    # BACKEND_DB_URL (백엔드 PostgreSQL 읽기 전용, dev 전용)
 boto3>=1.34
 langgraph>=0.3
 langchain-core>=0.3

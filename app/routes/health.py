@@ -1,4 +1,4 @@
-"""헬스 — /healthz(무인증, 업스트림 호출 없음) · /v1/upstream/health(인증, STT/LLM/S3/farmos 프로브 + 비밀 아닌 유효 설정).
+"""헬스 — /healthz(무인증, 업스트림 호출 없음) · /v1/upstream/health(인증, STT/LLM/S3/farmos/backend_db 프로브 + 비밀 아닌 유효 설정).
 
 `commit`/`config` 는 tests/smoke 가 배포본 일치·환경 드리프트(dev/prod .env)를 판정하는 근거다 — 비밀값은 절대 넣지 않는다."""
 
@@ -60,14 +60,21 @@ async def upstream_health(request: Request) -> dict:
                                    timeout=st.ap_backend_timeout) as c:
             return await c.probe()
 
-    stt_r, llm_r, s3_r, fo_r, ap_r = await asyncio.gather(
-        rt.stt.probe(), probe_llm(st), s3(), farmos(), ap_backend())
+    async def backend_db() -> dict | None:
+        if rt.backend_db is None:
+            return None
+        return await rt.backend_db.probe()
+
+    stt_r, llm_r, s3_r, fo_r, ap_r, bd_r = await asyncio.gather(
+        rt.stt.probe(), probe_llm(st), s3(), farmos(), ap_backend(), backend_db())
     out = {"stt": {**stt_r, "url": st.stt_base_url},
            "llm": {**llm_r, "model": st.llm_model, "provider": st.llm_provider},
            "s3": s3_r, "farmos": {**fo_r, "url": st.farmos_base_url}, "pipeline": st.pipeline_impl,
            "config": effective_config(st)}
     if ap_r is not None:
         out["ap_backend"] = ap_r
+    if bd_r is not None:
+        out["backend_db"] = bd_r          # {ok, read_only, latency_ms, url(비밀 없음)}
     return out
 
 
@@ -85,4 +92,6 @@ def effective_config(st) -> dict:
         "callback_include_artifact_keys": st.callback_include_artifact_keys,
         "term_fix_enabled": st.term_fix_enabled,
         "verify_diary_enabled": st.verify_diary_enabled,
+        # 백엔드 PostgreSQL 직접 조회(dev 전용) — URL 자체는 비밀이라 켜짐 여부만
+        "backend_db_enabled": st.backend_db_enabled,
     }

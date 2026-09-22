@@ -37,6 +37,12 @@ history line. Feature/eval branches fork from `dev`.
 - The agent **never writes to farmos** (no `PUT /m/diary`); it only reads with the farmer JWT from the call-start
   payload and returns a `prefill` (PutDiaryDTO shape) for the farmer to confirm in the app.
 - `farm_access_token` is never echoed in responses/logs; purged on terminal status.
+- **Backend PostgreSQL is read-only and dev-only** (`BACKEND_DB_URL`, 2026-09-22): `app/clients/backend_db.py` may issue
+  `SELECT` only (session `default_transaction_read_only=on`; the `jinong` account is a superuser so nothing else protects the
+  DB). Connection SSOT `~/dev/Hatchery_serving/.env`; from 지농서버 use the private IP `172.31.1.109` (public IP is office-only).
+  Used only at STT-job start and regeneration (run ≥ 2) — first generation keeps the payload snapshot. Never touch
+  `farm_json`/tokens from DB data. Backend dev/prod share one DB: **never replay a real `call_id` against the dev instance**
+  (its summary callback would overwrite the prod backend's row). prod `.env` leaves it empty.
 - Docs and commit messages in Korean. No commit attribution footer.
 - Single uvicorn worker (`--workers 1`): the poller/semaphores are process-local.
 - **배포 후 검증은 코드로만**: `./deploy/deploy.sh` 가 게이트(ruff+pytest) → 배포 → `scripts/verify_deploy.sh`(`tests/smoke/`,
@@ -52,13 +58,13 @@ app/auth.py           Bearer/X-API-Key, comma-separated multi-key
 app/errors.py         install_error_handlers: {detail:{code,message}} 오류 형식
 app/runtime.py        Runtime(settings, db, s3, stt, pipeline, worker) on app.state.rt
 app/db/               SQLAlchemy 2 async + aiosqlite: models (calls/call_audio/artifacts/daily_diaries/daily_artifacts/job_events), repo (all SQL)
-app/clients/          s3 (boto3 via to_thread + Keys), storage (Protocol + build_storage: STORAGE_IMPL=s3|local), local_storage (로컬 개발용 파일시스템), stt (gateway diarize + retry classifier), farmos (read-only), ap_backend (AP 백엔드 research API — 농가 JWT 없이 작물·품목코드 조회, read-only), llm (factory: ChatOpenAI for openai/jinong, ChatGoogleGenerativeAI(vertexai) for gemini; probe), callback
-app/services/         calls (start/audio/end/regenerate transitions, idempotency), daily (날짜별 멀티콜 트리거/재생성 — `crop` 작물 고정 모드는 metadata_json["crop"] 에 보관·불변), transcripts (merge + merge_calls + apply_speaker_map/apply_crops: 생성 후 농가/컨설턴트 역할·판정 작물 `crops[]` 되먹임), artifacts (persist), results (views)
+app/clients/          s3 (boto3 via to_thread + Keys), storage (Protocol + build_storage: STORAGE_IMPL=s3|local), local_storage (로컬 개발용 파일시스템), stt (gateway diarize + retry classifier), farmos (read-only), ap_backend (AP 백엔드 research API — 농가 JWT 없이 작물·품목코드 조회, read-only), backend_db (백엔드 PostgreSQL 읽기 전용 — 통화 행·농가 등록 작물·표준 품목; dev 전용 BACKEND_DB_URL), llm (factory: ChatOpenAI for openai/jinong, ChatGoogleGenerativeAI(vertexai) for gemini; probe), callback
+app/services/         calls (start/audio/end/regenerate transitions, idempotency), backend_sync (STT 시작·재생성 시 백엔드 DB 로 참여자·등록 작물 힌트 갱신, fail-open, job_events `backend_refresh`), daily (날짜별 멀티콜 트리거/재생성 — `crop` 작물 고정 모드는 metadata_json["crop"] 에 보관·불변), transcripts (merge + merge_calls + apply_speaker_map/apply_crops: 생성 후 농가/컨설턴트 역할·판정 작물 `crops[]` 되먹임), artifacts (persist), results (views)
 app/worker/           runner (poll+wake, semaphores), stt_job, generate_job, daily_job (날짜별 집계 생성), recovery (startup reset, deadline sweep)
 app/routes/           health, calls (/v1/calls/*), daily (/v1/daily-diaries/* — 백엔드 트리거 날짜별 영농일지; `crop` 주면 작물·날짜 고정 1건 생성)
 app/agents/           LangGraph pipeline: interface.py (contract), fake.py, graph.py + state/schemas/llm/deps, nodes/mapping/prompts/render (crop subgraph ends with `verify_diary` — an independent LLM pass that demotes a hollow draft to EMPTY; render emits two variants from the same structured data — `internal` with evidence → S3 `artifacts/internal/`, `public` without evidence/codes/meta → API `markdown`, callback keys), summarize.py (call summary for the backend callback — independent of the diary pipeline), tools/ (fake_farmos·fake_llm·transcript), run.py (dry-run CLI), eval.py, voice_eval/ (실녹음 평가 하네스: STT 정확도 + 영농일지 LLM judge + 회귀 게이트, optimize/ = 평가 결과로 프롬프트·매핑을 고치는 자가 개선 루프, term_fix/ = 용어 교정 채점·CLI), term_fix/ (STT 용어 오청 복구 런타임 — `correct_terms` 노드, `TERM_FIX_ENABLED` 기본 off, 카탈로그는 jinong_gpu 경로 참조)
 app/schemas/          calls (API), daily (daily-diaries API), transcript (MergedTranscript), pipeline (CallContext/PipelineResult contract)
-tests/                pytest-asyncio + respx (STT/farmos) + moto (S3), FakePipeline; tests/agents/ for the pipeline, tests/agents/testcases/voice/ (대본·정답·임계값 — 녹음은 리포지토리 밖); tests/smoke/ (배포 서버 스모크, `-m smoke`, profiles.py = 환경별 기대 .env)
+tests/                pytest-asyncio + respx (STT/farmos) + moto (S3), FakePipeline; tests/agents/ for the pipeline, tests/agents/testcases/voice/ (대본·정답·임계값 — 녹음은 리포지토리 밖); tests/smoke/ (배포 서버 스모크, `-m smoke`, profiles.py = 환경별 기대 .env); tests/integration/ (백엔드 DB 라이브 읽기 전용 검증, `-m backend_db`, BACKEND_DB_URL 필요)
 deploy/               deploy.sh (게이트 → rsync → remote compose(GIT_SHA) → healthz → verify_deploy.sh), smoke.env (E2E 고정 녹음 좌표), nginx vhost, letsencrypt cert/renew
 .github/workflows/    ci.yml — 푸시·PR 마다 ruff + pytest
 docs/                 api-reference.md (contract), architecture.md, agent-flow.md (노드별 판정 기준·프롬프트 출처), ops.md (runbook), integration-briefing.md (내부), integration-handoff.md (백엔드 전달용), eval-journal.md/.jsonl (자가 개선 루프 기록), proposals/ (구조 개선 제안서 — 자동 적용 안 함)

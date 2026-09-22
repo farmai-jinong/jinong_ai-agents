@@ -88,12 +88,15 @@ LLM 없음. **출처를 순서대로 강등**한다 (`nodes/farm_context.py`):
 
 | 순서 | 조건 | source | status |
 |---|---|---|---|
+| 0 | **재생성**(`ctx.prefer_backend_db`, dev `BACKEND_DB_URL`) + 농가 복합 키 → 백엔드 DB `farm_crops` 비어 있지 않음 | `backend_db` | 토큰 있으면 `ok`(prefill 조회 진행), 없으면 `partial` |
 | 1 | 농가 JWT 있음 → farmos `list_crops` 성공 | `farmos` | `ok` |
 | 2 | 토큰 없음 + AP 백엔드 URL·키 + 농가 복합 키(`engn_id`+`user_id`) | `ap_backend` | `partial` |
 | 3 | 위가 다 안 되면 `hints`(`farmer_crops` 또는 `prdlst_nm`/`prdlst_code`) | `hints` | `unavailable`/`disabled` |
 | 4 | 아무것도 없음 | `none` | `disabled` |
 
 **농가 식별은 `(engn_id, user_id)` 복합 키만 인정**한다 — `user_id` 단독 조회는 금지(백엔드 문서 §1).
+0번 경로는 첫 생성(run 1)에서는 절대 타지 않는다(워커가 재생성일 때만 `prefer_backend_db` 를 켠다); 비었거나 실패하면 경고를
+남기고 1번부터 기존 순서로 간다. 표준 품목(`_standard_prdlsts`)은 참조 데이터라 `backend_db` 가 있으면 항상 그쪽을 먼저 쓴다.
 2번 경로는 작물 코드까지는 확정하지만 방제대상·약제·농작업 팔레트를 못 받으므로 일지는 `PARTIAL` 로 남는다.
 
 ### 2.3 `assign_speaker_roles` — 누가 농가인가 ★

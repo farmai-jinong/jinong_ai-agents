@@ -83,6 +83,9 @@ agents        ──(2 직후부터) 게이트웨이 STT로 전사 (통화 중�
 - [ ] **`AGENT_API_KEY` 수령** — 우리가 발급(콤마 구분 다중 키 가능, 클라이언트별 발급/폐기). 전 요청 헤더 필수.
 - [ ] 방식 결정: **콜백 vs 폴링**(권장 폴링 주기 5s, `?inline=false`). 콜백이면 우리 쪽 `CALLBACK_ENABLED` 플립 일정 합의.
 - [ ] `call_id`는 kafka-gateway `callId` 그대로(`[A-Za-z0-9_.:-]{1,128}`) — 우리 쪽 기본키.
+- [ ] (dev 전용, 2026-09-22) **백엔드 PostgreSQL 읽기 전용 롤** 발급 요청 — 지금은 `jinong`(superuser) 계정으로 `SELECT` 만
+  하며 세션 읽기 전용 설정으로 자체 방어 중. `voicetalk.tb_voice_talk_history`·`smartfarm.tb_user/tb_frmhs/tb_frlnd/
+  tb_frlnd_prdlst/tb_stdr_prdlst` 에 SELECT 만 있는 롤이면 충분. 지농서버(172.31.10.137) → 172.31.1.109:25432 경로.
 - [ ] (daily 쓰는 경우) **`diary_id` 결정론적 생성 규칙 합의**(권장 `daily_{farmerId}_{yyyyMMdd}` — 멱등성 키)
   + 트리거 시점(마감 배치 vs 마지막 콜백) + 같은 농가 통화만 묶는 책임은 백엔드에 있음을 안내.
 

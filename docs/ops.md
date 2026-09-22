@@ -4,7 +4,15 @@
 포트: **7003**(loopback) — 7001 hatchery-serving, 7002 jinong-ai-gateway 와 나란히. 외부는 호스트 nginx(443) 로만.
 같은 호스트의 **dev 인스턴스**는 **7013** / `apps/jinong_ai-agents-dev` / `jinong-stt-report-generation-dev.jinongservice.co.kr` — §7.
 
-## 0. 현재 상태 (2026-09-17)
+## 0. 현재 상태 (2026-09-22)
+
+- 2026-09-22 **백엔드 PostgreSQL 직접 조회(dev 전용)**: STT 잡 시작·재생성(run ≥ 2)에서 통화 참여자·농가 등록 작물을 payload
+  스냅샷 대신 백엔드 DB 에서 읽는다(`docs/architecture.md` 워커 절, `BACKEND_DB_URL`). dev `.env` 에만 설정, prod 는 비움
+  (스모크 프로필 `backend_db_enabled` dev=true/prod=false). 연결 정보 SSOT 는 `~/dev/Hatchery_serving/.env`; 지농서버에서는
+  **사설 IP `172.31.1.109:25432`** 만 열린다(공인 IP 43.201.131.246 은 사무실 Mac 만). 계정 `jinong` 은 superuser — 읽기 전용은
+  우리 세션(`default_transaction_read_only=on`)이 유일한 방어선이라 `pytest -m backend_db tests/integration` 의 INSERT 실패
+  단언으로 확인한다. 백엔드 dev/prod 가 **같은 DB** 를 쓰므로 dev 인스턴스에 실제 call_id 를 재현 POST 하지 말 것(dev 요약
+  콜백이 prod 백엔드 `tb_voice_talk_ai_summary` 를 덮어쓴다). 백엔드팀에 읽기 전용 롤 요청 예정.
 
 - 2026-09-17 통화요약 웹훅 도메인 전환(백엔드 통보): prod 인스턴스 `.env` 의 `SUMMARY_CALLBACK_URL` 을
   `https://data.jinongservice.co.kr/voicetalk/public/call-summary-callback` 로. agent-callback 은 통화 시작 body 의
@@ -325,6 +333,7 @@ prod 와 나란히 두는 값:
 | `AGENT_API_KEY` | 기존 | 별도 발급 → 백엔드팀 dev 설정 |
 | 두 벌 산출물 노출(2026-09-07) | `API_MARKDOWN_VIEW=internal` + `CALLBACK_INCLUDE_ARTIFACT_KEYS=false` — 응답 `markdown`·콜백 payload 가 두 벌 이전과 동일(S3 에는 두 벌 저장, `s3_key_md_internal` 키만 추가) | 기본값(`public` / `true`) — 백엔드가 전환을 받으면 prod 에서 두 줄 제거 |
 | `STT_API_KEY`·MinIO 키·`CALLBACK_API_KEY`·SA 키·백엔드 URL | 기존 | **재사용**(게이트웨이 재기동 없이 시작; 게이트웨이 `GATEWAY_API_KEY` 에 dev 전용 키를 추가하면 그때 교체) |
+| `BACKEND_DB_URL`(백엔드 PostgreSQL 읽기 전용, 2026-09-22) | **비움**(비활성) | `postgresql+asyncpg://jinong:<pw>@172.31.1.109:25432/postgres` — 비밀번호는 Hatchery `.env` 값을 `urllib.parse.quote_plus` 로 인코딩. 확인: `/v1/upstream/health.backend_db.read_only == true` |
 
 ### 7.1 부트스트랩 (DNS 없이 가능)
 
