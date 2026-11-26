@@ -13,6 +13,10 @@ from .calls import CALL_ID_RE, DiaryView, ErrorView, GenerationView
 
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 CROP_CODE_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")   # diary_id 에 들어가야 하므로 같은 문자 집합
+# diary_id 는 백엔드가 `daily_{engnId}_{userId}_{yyyyMMdd}` 로 만들고 실농가 userId 는 한글 이름이다(예: `daily_18_양성연_20261125`).
+# 그래서 call_id 와 달리 유니코드 글자·숫자(\w)를 허용한다 — `/`·공백·`|`(목록 커서 구분자) 등은 여전히 거부.
+# 정규화하지 않는다: 콜백의 daily_diary_id 는 백엔드가 보낸 문자열과 바이트 단위로 같아야 한다.
+DIARY_ID_RE = re.compile(r"[\w.:-]{1,128}")   # fullmatch 로 쓴다(`$` 는 끝 개행을 통과시킨다)
 
 
 class DailyCropSpec(BaseModel):
@@ -74,8 +78,8 @@ class DailyDiaryCreateRequest(BaseModel):
     @field_validator("diary_id")
     @classmethod
     def _did(cls, v: str) -> str:
-        if not CALL_ID_RE.match(v):
-            raise ValueError("diary_id must match [A-Za-z0-9_.:-]{1,128}")
+        if not DIARY_ID_RE.fullmatch(v):
+            raise ValueError("diary_id must match [\\w.:-]{1,128} (unicode letters/digits, _ . : -)")
         return v
 
     @field_validator("diary_date")
