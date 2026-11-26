@@ -89,6 +89,26 @@ async def test_daily_callback(client, app, stt_mock):
     assert body["callback_status"] == "SENT"
 
 
+async def test_daily_callback_korean_diary_id(client, app, stt_mock):
+    """콜백의 daily_diary_id 는 백엔드가 보낸 한글 diary_id 와 문자 그대로 같아야 한다(백엔드가 이 값으로 행을 찾는다)."""
+    rt = app.state.rt
+    await _complete_calls(client, app)
+    did = "daily_18_양성연_20260820"
+    rt.settings.callback_enabled = True
+    try:
+        with respx.mock(assert_all_called=True) as router:
+            route = router.post("https://cb.test/hook").mock(return_value=httpx.Response(200))
+            r = await client.post("/v1/daily-diaries", json={**DAILY, "diary_id": did, "callback_url": "https://cb.test/hook"})
+            assert r.status_code == 201, r.text
+            await rt.worker.drain()
+    finally:
+        rt.settings.callback_enabled = False
+    import json
+    payload = json.loads(route.calls[0].request.content)
+    assert payload["daily_diary_id"] == did and payload["status"] == "COMPLETED"
+    assert payload["diaries"][0]["s3_key_md"].startswith(f"agents/voicecall/daily/{did}/")
+
+
 async def test_daily_retry_then_failed(client, app, stt_mock, monkeypatch):
     rt = app.state.rt
     await _complete_calls(client, app)

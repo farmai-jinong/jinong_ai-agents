@@ -281,3 +281,33 @@ async def test_crop_takes_precedence_over_hints(client, app, stt_mock):
     await app.state.rt.worker.drain()
     body = (await client.get(f"/v1/daily-diaries/{FIXED['diary_id']}")).json()
     assert [d["prdlst_code"] for d in body["result"]["diaries"]] == ["0803MM"]
+
+
+async def test_korean_farmer_diary_id(client, app, stt_mock):
+    """실농가 userId 는 한글 이름 — 백엔드 diary_id `daily_{engnId}_{userId}_{yyyyMMdd}` 가 그대로 통과해야 한다.
+    (2026-10-15~11-25 운영에서 한글 diary_id 13건이 전부 422 로 거절돼 날짜별 영농일지가 0건 생성됐다.)"""
+    await _complete_calls(client, app)
+    did = "daily_18_양성연_20260820"
+    r = await client.post("/v1/daily-diaries", json={**DAILY, "diary_id": did})
+    assert r.status_code == 201, r.text
+    assert r.json()["diary_id"] == did
+    await app.state.rt.worker.drain()
+
+    detail = (await client.get(f"/v1/daily-diaries/{did}")).json()
+    assert detail["status"] == "COMPLETED" and detail["diary_id"] == did
+    dk = detail["result"]["diaries"][0]
+    assert dk["s3_key_md"].startswith(f"agents/voicecall/daily/{did}/")
+    r = await client.get(f"/v1/daily-diaries/{did}/artifacts/diary/{dk['prdlst_code']}")
+    assert r.status_code == 200 and "## 주요 농작업" in r.text
+    assert (await client.get(f"/v1/daily-diaries/{did}/transcript")).status_code == 200
+
+    body = (await client.get("/v1/daily-diaries", params={"limit": 1})).json()   # 커서에 한글 id 가 실려도 왕복
+    assert body["items"][0]["diary_id"] == did and body["next_cursor"].endswith(f"|{did}")
+    assert (await client.get("/v1/daily-diaries", params={"limit": 1, "cursor": body["next_cursor"]})).status_code == 200
+
+
+async def test_diary_id_rejects_unsafe_chars(client, app, stt_mock):
+    await _complete_calls(client, app)
+    for bad in ("daily/18_x", "daily 18", "daily|18", "daily_18\n", "", "a" * 129, "daily_18_양성연/../x"):
+        r = await client.post("/v1/daily-diaries", json={**DAILY, "diary_id": bad})
+        assert r.status_code == 422, (bad, r.text)
